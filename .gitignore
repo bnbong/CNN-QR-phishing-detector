@@ -49,6 +49,7 @@ coverage.xml
 
 # Django stuff:
 *.log
+*.csv
 
 # Sphinx documentation
 docs/_build/
@@ -78,3 +79,13 @@ data/
 .DS_Store
 ._.DS_Store
 **/.DS_Store
+
+# AI output
+*.h5
+*.keras
+*.keras-v3.10
+*.keras-v3.11
+*.keras-v3.12
+*.keras-v3.13
+*.keras-v3.14
+*.keras-v3.15
