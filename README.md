@@ -21,7 +21,8 @@ QR 코드 이미지를 분석하여 해당 QR 코드에 링크된 사이트의 �
 ├── main.py
 ├── notebooks
 │   ├── predict.ipynb
-│   └── url-to-qr.ipynb
+│   ├── single-url-to-qr.ipynb
+│   └── urls-to-qr.ipynb
 ├── pdm.lock
 ├── pyproject.toml
 ├── requirements.txt
@@ -56,7 +57,7 @@ QR 코드 이미지를 분석하여 해당 QR 코드에 링크된 사이트의 �
 
 프로젝트 루트에 `data` 폴더를 생성합니다.
 
-### 1. notebooks/url-to-qr.ipynb
+### 1. notebooks/urls-to-qr.ipynb
 
 `data` 폴더 내에 피싱 / 정상 사이트 데이터셋이 담겨있는 xlsx 파일을 넣습니다.
 
