@@ -104,6 +104,13 @@ python main.py
 
 ## 학습된 모델 평가
 
+학습 데이터 양 : 45,373개 이미지 (피싱 : 22,686 / 정상 : 22,687)
+
+- 정확도 (Accuracy) : 0.8710
+- 정밀도 (Precision) : 0.8552
+- 재현율 (Recall) : 0.8934
+- F1 점수 (F1 Score) : 0.8739
+
 ### 1. Confusion Matrix
 
 ![Confusion Matrix](./evaluate_outputs/confusion_matrix.png)
