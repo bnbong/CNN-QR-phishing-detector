@@ -3,6 +3,11 @@
 *.jpg
 *.jpeg
 
+# 모델 평가 지표 이미지 파일 예외처리
+!evaluate_outputs/*.png
+!evaluate_outputs/*.jpg
+!evaluate_outputs/*.jpeg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

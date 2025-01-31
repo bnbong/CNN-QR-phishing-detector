@@ -20,6 +20,7 @@ QR 코드 이미지를 분석하여 해당 QR 코드에 링크된 사이트의 �
 │       └── phishing
 ├── main.py
 ├── notebooks
+│   ├── evaluate.ipynb
 │   ├── predict.ipynb
 │   ├── single-url-to-qr.ipynb
 │   └── urls-to-qr.ipynb
@@ -50,18 +51,14 @@ QR 코드 이미지를 분석하여 해당 QR 코드에 링크된 사이트의 �
 
 ## Stack
 
-- Python 3.12
-- TensorFlow 2.18.0 + keras
+- Python 3.10
+- TensorFlow 2.10.0 + keras (for Windows compatibility - [tensorflow GPU available](https://www.tensorflow.org/install/source_windows?hl=ko#gpu) 버전)
 
 ## 프로젝트 셋업
 
 프로젝트 루트에 `data` 폴더를 생성합니다.
 
-### 1. notebooks/urls-to-qr.ipynb
-
-`data` 폴더 내에 피싱 / 정상 사이트 데이터셋이 담겨있는 xlsx 파일을 넣습니다.
-
-### 2. notebooks/predict.ipynb
+### 0. 모델 딥러닝
 
 [링크](https://drive.google.com/file/d/1ufRmh9VVLdZafiXUiMFFzjg8870W9gdV/view?usp=sharing)에서 파싱된 이미지를 `data` 폴더 내에 압축해제 합니다.
 
@@ -71,4 +68,46 @@ QR 코드 이미지를 분석하여 해당 QR 코드에 링크된 사이트의 �
 python main.py
 ```
 
-학습된 모델은 프로젝트 루트에 `best_model.h5`로 저장됩니다.
+학습된 모델은 프로젝트 루트에 `*.h5` 파일로 저장됩니다.
+
+
+<details>
+<summary><b>주피터 노트북 모듈 사용법</b></summary>
+<div markdown="1">
+
+### 1. notebooks/urls-to-qr.ipynb
+
+`data` 폴더 내에 피싱 / 정상 사이트 데이터셋이 담겨있는 xlsx 파일을 넣습니다.
+
+주석으로 `change me` 표시가 되어 있는 옵션을 변경하여 사용합니다.
+
+### 2. notebooks/predict.ipynb
+
+단일 QR 이미지를 바탕으로 해당 QR 코드 이미지가 피싱 사이트인지 확인하는 모듈이며, 프로젝트 루트에 이미 학습된 모델의 체크포인트 파일이 존재해야 합니다.
+
+주석으로 `change me` 표시가 되어 있는 옵션을 변경하여 사용합니다.
+
+### 3. notebooks/evaluate.ipynb
+
+모델 평가 지표를 확인하는 모듈이며, 프로젝트 루트에 이미 학습된 모델의 체크포인트 파일이 존재해야 합니다.
+
+### 4. notebooks/single-url-to-qr.ipynb
+
+주석으로 `change me` 표시가 되어 있는 옵션을 변경하여 사용합니다.
+
+### 5. notebooks/urls-to-qr.ipynb
+
+주석으로 `change me` 표시가 되어 있는 옵션을 변경하여 사용합니다.
+
+</div>
+</details>
+
+## 학습된 모델 평가
+
+### 1. Confusion Matrix
+
+![Confusion Matrix](./evaluate_outputs/confusion_matrix.png)
+
+### 2. ROC Curve
+
+![ROC Curve](./evaluate_outputs/roc_curve.png)
