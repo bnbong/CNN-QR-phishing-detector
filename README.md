@@ -99,6 +99,18 @@ python main.py
 
 주석으로 `change me` 표시가 되어 있는 옵션을 변경하여 사용합니다.
 
+### 6. notebooks/visualizer.ipynb
+
+단일 QR 코드 이미지를 바탕으로 모델이 해당 QR 코드 이미지의 피싱 / 정상 사이트를 판별 할 때 어떤 피처를 참조했는지 Grad-CAM 시각화를 수행하는 모듈입니다.
+
+주석으로 `change me` 표시가 되어 있는 옵션을 변경하여 사용합니다.
+
+### 7. notebooks/visualizer_heatmap.ipynb
+
+여러 QR 코드 이미지를 바탕으로 모델이 참조한 피처를 누적하여 히트맵을 생성하는 모듈입니다.
+
+주석으로 `change me` 표시가 되어 있는 옵션을 변경하여 사용합니다.
+
 </div>
 </details>
 
@@ -118,3 +130,24 @@ python main.py
 ### 2. ROC Curve
 
 ![ROC Curve](./evaluate_outputs/roc_curve.png)
+
+## Grad-CAM 시각화 결과
+
+### 1. 단일 QR 코드 대상
+
+![Single QR Code Image](./evaluate_outputs/grad-cam_real_phishing.png)
+> Grad-CAM 시각화
+
+![Single QR Code Image - Guided](./evaluate_outputs/guided-grad-cam_real_phishing.png)
+> Guided Grad-CAM 시각화
+
+### 2. 다수 피싱 QR 코드 이미지 대상 히트맵
+
+![Multiple QR Code Images](./evaluate_outputs/heatmap_all.png)
+> 다수 피싱 QR 코드 이미지 대상 히트맵
+
+![Multiple QR Code Images - Threshold](./evaluate_outputs/heatmap_threshold.png)
+> 히트맵 중 특정 픽셀만 추출
+
+![Multiple QR Code Images - Merged](./evaluate_outputs/merged_heatmap.png)
+> 실제 QR 코드 이미지와 히트맵 합성 (배경 QR 코드 - Naver.com)
