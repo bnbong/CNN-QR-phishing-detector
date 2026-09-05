@@ -1,0 +1,4 @@
+condition_id,stratum,baseline,auroc,f1,acc
+norm-exact-data_only-fixed-small_cnn,v2,charngram_lr,0.9656873934745556,0.9067747539085119,0.9093468468468469
+norm-exact-data_only-fixed-small_cnn,v2,length_lr,0.5,0.6666666666666666,0.5
+norm-exact-data_only-fixed-small_cnn,v2,version_lr,0.5,0.6666666666666666,0.5

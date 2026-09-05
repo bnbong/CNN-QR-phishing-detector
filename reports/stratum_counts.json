@@ -1,0 +1,153 @@
+{
+  "generated_at": "2026-09-05T11:20:16.015326+00:00",
+  "rules": {
+    "primary_min_per_class": 1000,
+    "secondary_min_per_class": 300
+  },
+  "cells": [
+    {
+      "length_match": "exact",
+      "stratum": "v2",
+      "n_total": 12118,
+      "n_by_class": {
+        "1": 6059,
+        "0": 6059
+      },
+      "per_class_min": 6059,
+      "tier": "primary",
+      "n_in_stratum_before_match": 18718
+    },
+    {
+      "length_match": "exact",
+      "stratum": "v3",
+      "n_total": 9178,
+      "n_by_class": {
+        "1": 4589,
+        "0": 4589
+      },
+      "per_class_min": 4589,
+      "tier": "primary",
+      "n_in_stratum_before_match": 11996
+    },
+    {
+      "length_match": "exact",
+      "stratum": "v4",
+      "n_total": 2714,
+      "n_by_class": {
+        "1": 1357,
+        "0": 1357
+      },
+      "per_class_min": 1357,
+      "tier": "primary",
+      "n_in_stratum_before_match": 3930
+    },
+    {
+      "length_match": "exact",
+      "stratum": "v5plus",
+      "n_total": 532,
+      "n_by_class": {
+        "1": 266,
+        "0": 266
+      },
+      "per_class_min": 266,
+      "tier": "dropped",
+      "n_in_stratum_before_match": 4147
+    },
+    {
+      "length_match": "quantile",
+      "stratum": "v2",
+      "n_total": 12200,
+      "n_by_class": {
+        "1": 6100,
+        "0": 6100
+      },
+      "per_class_min": 6100,
+      "tier": "primary",
+      "n_in_stratum_before_match": 18718
+    },
+    {
+      "length_match": "quantile",
+      "stratum": "v3",
+      "n_total": 9230,
+      "n_by_class": {
+        "1": 4615,
+        "0": 4615
+      },
+      "per_class_min": 4615,
+      "tier": "primary",
+      "n_in_stratum_before_match": 11996
+    },
+    {
+      "length_match": "quantile",
+      "stratum": "v4",
+      "n_total": 2802,
+      "n_by_class": {
+        "1": 1401,
+        "0": 1401
+      },
+      "per_class_min": 1401,
+      "tier": "primary",
+      "n_in_stratum_before_match": 3930
+    },
+    {
+      "length_match": "quantile",
+      "stratum": "v5plus",
+      "n_total": 544,
+      "n_by_class": {
+        "1": 272,
+        "0": 272
+      },
+      "per_class_min": 272,
+      "tier": "dropped",
+      "n_in_stratum_before_match": 4147
+    },
+    {
+      "length_match": "none",
+      "stratum": "v2",
+      "n_total": 16627,
+      "n_by_class": {
+        "0": 10489,
+        "1": 6138
+      },
+      "per_class_min": 6138,
+      "tier": "primary",
+      "n_in_stratum_before_match": 18718
+    },
+    {
+      "length_match": "none",
+      "stratum": "v3",
+      "n_total": 11996,
+      "n_by_class": {
+        "0": 7350,
+        "1": 4646
+      },
+      "per_class_min": 4646,
+      "tier": "primary",
+      "n_in_stratum_before_match": 11996
+    },
+    {
+      "length_match": "none",
+      "stratum": "v4",
+      "n_total": 3930,
+      "n_by_class": {
+        "1": 2526,
+        "0": 1404
+      },
+      "per_class_min": 1404,
+      "tier": "primary",
+      "n_in_stratum_before_match": 3930
+    },
+    {
+      "length_match": "none",
+      "stratum": "v5plus",
+      "n_total": 4147,
+      "n_by_class": {
+        "1": 3875,
+        "0": 272
+      },
+      "per_class_min": 272,
+      "tier": "dropped",
+      "n_in_stratum_before_match": 4147
+    }
+  ]
+}

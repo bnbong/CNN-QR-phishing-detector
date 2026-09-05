@@ -1,12 +1,15 @@
+backups/data/
+docs/
+
 # 예시 이미지
 *.png
 *.jpg
 *.jpeg
 
 # 모델 평가 지표 이미지 파일 예외처리
-!evaluate_outputs/*.png
-!evaluate_outputs/*.jpg
-!evaluate_outputs/*.jpeg
+!backups/evaluate_outputs/*.png
+!backups/evaluate_outputs/*.jpg
+!backups/evaluate_outputs/*.jpeg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -99,3 +102,18 @@ data/
 *.keras-v3.13
 *.keras-v3.14
 *.keras-v3.15
+
+# uv / 가상환경
+.venv/
+
+# 실험 산출물
+artifacts/
+*.npz
+
+# 데이터 (backups/data 규칙은 위에 유지)
+data/*.csv
+data/*.xlsx
+
+# 리포트 산출물은 커밋한다 (위 *.csv / *.png 규칙 예외)
+!reports/*.csv
+!reports/*.png

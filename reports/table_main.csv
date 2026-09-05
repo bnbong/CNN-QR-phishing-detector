@@ -1,0 +1,2 @@
+condition_id,phase,stratum,tier,n_total,auroc_mean,auroc_sd,auroc_ci_lo,auroc_ci_hi,f1_mean,acc_mean,text_upper_bound_auroc,below_text_upper_bound
+norm-exact-data_only-fixed-small_cnn,P1,v2,primary,12118,0.8281769945621297,0.0,0.7899240635431981,0.8624773989114161,0.7535596933187295,0.7466216216216216,0.9656873934745556,True

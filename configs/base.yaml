@@ -1,0 +1,41 @@
+seed_list: [0, 1, 2, 3, 4]
+data:
+  csv_path: "data/webphish.csv"
+  category_col: "Category"
+  url_col: "Data"
+  positive_label: "spam"
+qr:
+  ec: "L"                 # L|M|Q|H
+  optimize: 0             # 고정. 변경 금지
+  border: 0
+  mask_mode: "fixed"      # fixed|auto|off
+  mask_pattern: 0
+  pad_mode: "spec"        # spec|random
+condition:
+  url_mode: "norm"        # raw|norm
+  length_match: "exact"   # exact|quantile|none
+  length_bucket: 1
+  features: "data_only"   # data_only|all
+  path_filter: false      # true면 path_depth>=1만
+  shuffle_positions: false
+strata: ["v2", "v3", "v4", "v5plus"]
+stratum_rules:
+  primary_min_per_class: 1000
+  secondary_min_per_class: 300
+split:
+  ratios: [0.70, 0.15, 0.15]
+  max_group_frac: 0.05
+model:
+  arch: "small_cnn"       # small_cnn|bit_mlp|linear_probe
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  batch_size: 256
+  max_epochs: 60
+  patience: 8             # val AUROC 기준
+  class_weight: "balanced"
+  amp: true
+eval:
+  n_bootstrap: 2000
+  primary_metric: "auroc"
+output_dir: "artifacts"
+reports_dir: "reports"
