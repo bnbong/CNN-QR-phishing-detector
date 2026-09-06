@@ -202,6 +202,12 @@ def _prepare_frame(cfg: Any, stratum: str, seed: int) -> tuple[pd.DataFrame, dic
 
     if "version" not in df.columns:
         df = df.assign(version=[natural_version(u, ec) for u in df["url"]])
+    # 해당 EC의 v40 용량을 넘는 URL은 어느 층에도 배정할 수 없다(version=None).
+    # 층 필터보다 먼저 떨어내야 int() 변환에서 터지지 않는다.
+    n_before_capacity = int(len(df))
+    # pandas가 None을 NaN으로 승격시키므로 notna로 거른다.
+    df = df[df["version"].notna()].reset_index(drop=True)
+    diag["n_dropped_capacity"] = n_before_capacity - int(len(df))
     df = df[[version_in_spec(int(v), stratum) for v in df["version"]]].reset_index(drop=True)
     diag["n_in_stratum"] = int(len(df))
     if len(df) == 0:

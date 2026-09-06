@@ -466,3 +466,45 @@ def test_train_raises_when_val_has_single_class():
             amp=False,
             device=torch.device("cpu"),
         )
+
+
+def test_prepare_frame_drops_over_capacity_rows(tmp_path, monkeypatch) -> None:
+    """EC=M의 v40 용량을 넘는 URL은 층 필터 전에 떨어지고 diag에 기록된다."""
+    import csv
+    import shutil
+    from pathlib import Path
+
+    from qrphish.config import load_config
+    from qrphish.runner import _prepare_frame, apply_overrides
+
+    rng = random.Random(0)
+    alpha = "abcdefghijklmnopqrstuvwxyz0123456789"
+    rows = [["Category", "Data"]]
+    for i in range(200):
+        host = "".join(rng.choice(alpha) for _ in range(rng.randint(5, 9)))
+        path = "".join(rng.choice(alpha) for _ in range(rng.randint(15, 25)))
+        rows.append(["spam" if i % 2 else "ham", f"http://www.{host}.com/{path}"[:50]])
+    # EC=M(v40 최대 2,331바이트)에 들어가지 않는 초장문 URL 두 개.
+    for i, label in enumerate(("spam", "ham")):
+        rows.append([label, f"http://over{i}.example.com/" + "a" * 2624])
+    csv_path = tmp_path / "webphish.csv"
+    with csv_path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+
+    repo = Path(__file__).resolve().parents[1]
+    shutil.copytree(repo / "configs", tmp_path / "configs", dirs_exist_ok=True)
+    monkeypatch.chdir(tmp_path)
+
+    cfg = apply_overrides(
+        load_config("configs/base.yaml"),
+        {"data.csv_path": str(csv_path), "qr.ec": "M", "seed_list": [0]},
+    )
+    df, diag = _prepare_frame(cfg, "v3", seed=0)
+    assert diag["n_dropped_capacity"] == 2
+    assert len(df) > 0
+    assert all(v is not None for v in df["version"])
+
+    # EC=L에서는 같은 URL이 v40에 들어가므로 하나도 떨어지지 않는다.
+    cfg_l = apply_overrides(cfg, {"qr.ec": "L"})
+    _, diag_l = _prepare_frame(cfg_l, "v3", seed=0)
+    assert diag_l["n_dropped_capacity"] == 0

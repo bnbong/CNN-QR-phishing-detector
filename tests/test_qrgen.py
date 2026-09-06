@@ -7,8 +7,10 @@ import qrcode
 from qrcode import base, util
 
 from qrphish.qrgen import (
+    ERROR_CORRECT_H,
     ERROR_CORRECT_L,
     ERROR_CORRECT_M,
+    ERROR_CORRECT_Q,
     build_data,
     create_data_randpad,
     create_data_spec,
@@ -90,6 +92,22 @@ class TestEncode:
             assert natural_version(url, ERROR_CORRECT_M) == encode(
                 url, ec=ERROR_CORRECT_M
             ).version
+
+    def test_natural_version_none_when_over_capacity(self):
+        """EC=M/Q/H의 v40 용량(2,331/1,663/1,273바이트)을 넘으면 None.
+
+        EC=L의 v40 데이터 용량은 2,953바이트라 2,900바이트는 아직 들어간다.
+        """
+        url = "https://example.com/" + "a" * (2900 - len("https://example.com/"))
+        assert len(url_bytes(url)) == 2900
+        assert natural_version(url, ERROR_CORRECT_L) == 40
+        for ec in (ERROR_CORRECT_M, ERROR_CORRECT_Q, ERROR_CORRECT_H):
+            assert natural_version(url, ec) is None
+
+    def test_encode_over_capacity_raises_value_error(self):
+        url = "https://example.com/" + "a" * 3000
+        with pytest.raises(ValueError, match="v40"):
+            encode(url, ec=ERROR_CORRECT_M)
 
     def test_explicit_version_overrides(self):
         art = encode("https://a.example.com/", version=6)

@@ -191,6 +191,8 @@ def build_stratum(
     work = df.copy()
     if "version" not in work.columns:
         work["version"] = [natural_version(u, ec) for u in work["url"]]
+    # version=None: 해당 EC의 v40 용량 초과라 QR로 인코딩할 수 없는 행.
+    work = work[work["version"].notna()].reset_index(drop=True)
     work = work[[version_in_spec(int(v), version_spec) for v in work["version"]]].reset_index(
         drop=True
     )

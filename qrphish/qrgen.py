@@ -37,6 +37,7 @@ __all__ = [
     "QRArtifact",
     "encode",
     "natural_version",
+    "fits_in_qr",
     "build_data",
     "create_data_spec",
     "create_data_randpad",
@@ -155,8 +156,26 @@ def create_data_randpad(version: int, ec: int, url: str, seed: int) -> list[int]
     return build_data(version, ec, url, randpad_seed=seed)[0]
 
 
-def natural_version(url: str, ec: int = ERROR_CORRECT_L) -> int:
-    """격자 생성 없이 best_fit 버전만 구한다 (층 배정용)."""
+def _required_bits(url: str, version: int) -> int:
+    """해당 버전의 문자 카운트 필드 폭 기준으로 필요한 비트 수 (모드 4비트 포함)."""
+    return 4 + util.length_in_bits(util.MODE_8BIT_BYTE, version) + 8 * len(url_bytes(url))
+
+
+def fits_in_qr(url: str, ec: int = ERROR_CORRECT_L) -> bool:
+    """URL이 해당 EC의 최대 버전(v40)에 들어가는지."""
+    return _required_bits(url, 40) <= util.BIT_LIMIT_TABLE[ec][40]
+
+
+def natural_version(url: str, ec: int = ERROR_CORRECT_L) -> int | None:
+    """격자 생성 없이 best_fit 버전만 구한다 (층 배정용).
+
+    Returns:
+        1~40 버전. 해당 EC의 v40 용량(비트)을 넘겨 어느 버전에도 들어가지
+        않으면 예외 대신 ``None``. 호출부는 None 행을 걸러내야 한다.
+        (예: EC=M의 v40 데이터 용량은 2,331바이트라 그보다 긴 URL은 None.)
+    """
+    if not fits_in_qr(url, ec):
+        return None
     qr = qrcode.QRCode(version=None, error_correction=ec, border=0)
     qr.data_list = [_byte_qrdata(url)]
     qr.data_cache = None
@@ -183,6 +202,7 @@ def encode(
 
     Raises:
         qrcode.exceptions.DataOverflowError: 지정 버전에 URL이 들어가지 않을 때.
+        ValueError: ``version=None`` 인데 URL이 해당 EC의 v40 용량도 넘을 때.
     """
     qr = qrcode.QRCode(
         version=version,
@@ -198,6 +218,11 @@ def encode(
     qr.data_cache = None
 
     if version is None:
+        if not fits_in_qr(url, ec):
+            raise ValueError(
+                f"URL이 EC={ec}의 최대 버전(v40) 용량을 넘는다 "
+                f"({len(url_bytes(url))} bytes). natural_version()은 이 경우 None을 반환한다."
+            )
         qr.best_fit()
     ver = int(qr.version)
 
