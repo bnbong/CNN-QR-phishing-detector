@@ -1,8 +1,9 @@
 # 실험 매트릭스 (스펙 7절)
 # 각 항목은 base.yaml에 점 표기 오버라이드를 적용한 뒤 조건 id를 만든다.
 #   id 규칙: {url_mode}-{length_match}-{features}-{mask_mode}-{arch}[-{extra}]
-# text_upper_bound: true면 같은 split에서 char n-gram LR을 함께 돌려
-# "CNN이 텍스트 상한선을 넘지 않는가" sanity check를 채운다(스펙 0절).
+# decoded_text_reference: true면 같은 split에서 char n-gram LR(디코딩 텍스트 참조
+# 기준, 강한 텍스트 베이스라인)을 함께 돌려 CNN과의 부호 있는 갭을 기록한다.
+# 상한선이 아니므로 CNN이 넘어도 누출이 아니다. (옛 키 이름 text_upper_bound는 폐기)
 
 P1:
   - name: main_cnn                     # 주 결과
@@ -16,7 +17,7 @@ P1:
       qr.mask_mode: fixed
       qr.mask_pattern: 0
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: [version_lr, length_lr, bytehist_lr]
 
   - name: main_mlp                     # 공간 귀납편향 필요성
@@ -27,7 +28,7 @@ P1:
       condition.features: data_only
       qr.mask_mode: fixed
       model.arch: bit_mlp
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: []
 
   - name: shuffle_pos                  # H4
@@ -39,7 +40,7 @@ P1:
       condition.shuffle_positions: true
       qr.mask_mode: fixed
       model.arch: small_cnn
-    text_upper_bound: false
+    decoded_text_reference: false
     baselines: []
 
   - name: shuffle_pos_mlp              # H4 대조 (MLP는 불변이어야 한다)
@@ -51,7 +52,7 @@ P1:
       condition.shuffle_positions: true
       qr.mask_mode: fixed
       model.arch: bit_mlp
-    text_upper_bound: false
+    decoded_text_reference: false
     baselines: []
 
   - name: label_shuffle                # 영가설 바닥
@@ -63,7 +64,7 @@ P1:
       condition.features: data_only
       qr.mask_mode: fixed
       model.arch: small_cnn
-    text_upper_bound: false
+    decoded_text_reference: false
     baselines: []
 
 P2:
@@ -75,7 +76,7 @@ P2:
       condition.features: data_only
       qr.mask_mode: fixed
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: [length_lr, version_lr]
 
   - name: length_quantile
@@ -86,7 +87,7 @@ P2:
       condition.features: data_only
       qr.mask_mode: fixed
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: [length_lr]
 
   - name: url_raw
@@ -97,7 +98,7 @@ P2:
       condition.features: data_only
       qr.mask_mode: fixed
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: []
 
   - name: feat_all
@@ -107,7 +108,7 @@ P2:
       condition.features: all
       qr.mask_mode: fixed
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: []
 
   - name: mask_auto                    # + 마스크 인덱스 LR로 프록시 강도 정량화
@@ -117,7 +118,7 @@ P2:
       condition.features: data_only
       qr.mask_mode: auto
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: [maskindex_lr]
 
   - name: mask_off                     # 해석 주력(비규격 격자)
@@ -127,7 +128,7 @@ P2:
       condition.features: data_only
       qr.mask_mode: "off"
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: []
 
   - name: pad_rand                     # 인과 절제: L-none 위에서 실행
@@ -138,7 +139,7 @@ P2:
       qr.mask_mode: fixed
       qr.pad_mode: random
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: []
 
   - name: path_plus                    # 가장 정직한 조건. 표본이 남으면 본문 표로
@@ -149,7 +150,7 @@ P2:
       condition.path_filter: true
       qr.mask_mode: fixed
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: [length_lr]
 
   - name: ec_m                         # v3 층 한정 강건성 확인
@@ -161,5 +162,5 @@ P2:
       qr.ec: M
       qr.mask_mode: fixed
       model.arch: small_cnn
-    text_upper_bound: true
+    decoded_text_reference: true
     baselines: []

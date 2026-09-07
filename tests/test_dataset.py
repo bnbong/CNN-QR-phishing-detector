@@ -287,7 +287,13 @@ def test_runner_end_to_end(tmp_path, monkeypatch) -> None:
     pytest.importorskip("qrphish.splits", reason="워커 A의 splits 미구현")
 
     from qrphish.config import load_config
-    from qrphish.runner import aggregate_reports, apply_overrides, run_matrix, run_p0
+    from qrphish.runner import (
+        SCHEMA_VERSION,
+        aggregate_reports,
+        apply_overrides,
+        run_matrix,
+        run_p0,
+    )
 
     rng = random.Random(0)
     alpha = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -328,7 +334,7 @@ def test_runner_end_to_end(tmp_path, monkeypatch) -> None:
 
     matrix = {"P1": [
         {"name": "main_cnn", "overrides": {"model.arch": "small_cnn"},
-         "text_upper_bound": True, "baselines": ["length_lr"]}
+         "decoded_text_reference": True, "baselines": ["length_lr"]}
     ]}
     mpath = tmp_path / "mini_matrix.yaml"
     mpath.write_text(json.dumps(matrix))  # JSON은 YAML의 부분집합이다
@@ -336,13 +342,21 @@ def test_runner_end_to_end(tmp_path, monkeypatch) -> None:
     res = run_matrix(cfg, "P1", mpath)
     assert len(res) == 1
     r = res[0]
-    assert r["schema_version"] == 1
+    assert r["schema_version"] == SCHEMA_VERSION
     for key in ("condition_id", "stratum", "tier", "config", "provenance", "data",
                 "per_seed", "aggregate", "sanity", "explain"):
         assert key in r
     assert r["data"]["n_total"] == sum(
         r["data"][k] for k in ("n_train", "n_val", "n_test")
     )
+    # 텍스트 참조 기준은 상한선이 아니므로 누출 판정 필드를 두지 않는다
+    assert "below_text_upper_bound" not in r["sanity"]
+    assert set(r["sanity"]) == {"label_shuffle_auroc"}
+    for key in ("auroc_pooled", "auroc_pooled_ci", "decoded_text_reference_auroc",
+                "gap_to_decoded_text"):
+        assert key in r["aggregate"]
+    assert "auroc_ci_pooled" not in r["aggregate"]
+    assert "preds_test" in r["per_seed"][0]
     assert "length_lr" in r["per_seed"][0]["baselines"]
     assert "charngram_lr" in r["per_seed"][0]["baselines"]
 
@@ -353,6 +367,8 @@ def test_runner_end_to_end(tmp_path, monkeypatch) -> None:
     assert tables["main"].exists()
     df = pd.read_csv(tables["main"])
     assert len(df) == 1 and df.loc[0, "condition_id"] == r["condition_id"]
+    assert "decoded_text_reference_auroc" in df.columns
+    assert "below_text_upper_bound" not in df.columns
 
 
 # --- Codex 리뷰 후속 회귀 테스트 -------------------------------------------

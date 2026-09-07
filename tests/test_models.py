@@ -69,3 +69,25 @@ def test_build_model_dispatch() -> None:
     assert isinstance(build_model("linear_probe", n, mask), LinearProbe)
     with pytest.raises(ValueError):
         build_model("nope", n, mask)
+
+
+def test_ckpt_dataset_spec_prefers_snapshot_and_rejects_mismatch(tmp_path) -> None:
+    """체크포인트의 조건 스냅샷이 현재 cfg를 이긴다 (코덱스 리뷰 4)."""
+    import pytest
+
+    from qrphish.runner import _ckpt_dataset_spec
+
+    cfg = {
+        "condition": {"features": "data_only"},
+        "qr": {"mask_mode": "fixed"},
+    }
+    path = tmp_path / "model.pt"
+    # 스냅샷이 없는 옛 체크포인트는 현재 cfg로 되돌아간다.
+    assert _ckpt_dataset_spec(cfg, {"arch": "small_cnn"}, path) == ("data_only", "fixed")
+    # 일치하는 스냅샷은 그대로 통과한다.
+    ok = {"condition": {"features": "data_only"}, "qr": {"mask_mode": "fixed"}}
+    assert _ckpt_dataset_spec(cfg, ok, path) == ("data_only", "fixed")
+    # 불일치는 조용히 넘어가지 않고 하드 실패한다.
+    bad = {"condition": {"features": "all"}, "qr": {"mask_mode": "off"}}
+    with pytest.raises(ValueError, match="조건 스냅샷"):
+        _ckpt_dataset_spec(cfg, bad, path)

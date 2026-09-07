@@ -1,4 +1,4 @@
-"""상한선/하한선 베이스라인 (스펙 0절 3층 구조).
+"""참조 기준/하한선 베이스라인 (스펙 0절 3층 구조).
 
 전부 동일 인터페이스:
     ``fit_predict(urls, y, split, meta=None, seed=0) -> (p_val, p_test)``
@@ -45,7 +45,11 @@ def _fit_lr(Xtr, ytr, Xva, Xte, seed: int, C: float = 1.0):
 
 
 def charngram_lr(urls, y, split, meta=None, seed: int = 0):
-    """상한선: char_wb 1~5-gram TF-IDF + LR. CNN이 넘을 수 없어야 하는 천장."""
+    """디코딩 텍스트 참조 기준: char_wb 1~5-gram TF-IDF + LR.
+
+    디코딩된 URL을 직접 쓰는 **강한 텍스트 베이스라인**이지 Bayes 최적 분류기가 아니다.
+    따라서 천장이 아니며, CNN이 이를 넘더라도 누출의 증거가 되지 않는다.
+    """
     urls = np.asarray(urls, dtype=object)
     y = np.asarray(y)
     tr, va, te = _masks(split)
@@ -103,13 +107,13 @@ def maskindex_lr(urls, y, split, meta=None, seed: int = 0):
 
 
 def charcnn(urls, y, split, meta=None, seed: int = 0):
-    """상한선(선택 사항): 문자 임베딩 CNN.
+    """디코딩 텍스트 참조 기준(선택 사항): 문자 임베딩 CNN.
 
     스펙 13절 열린질문 4에 따라 1단계에서는 구현하지 않는다. char n-gram LR만으로
-    상한선 논증이 성립하며, 필요해지면 이 함수만 채우면 된다.
+    참조 기준 논증이 성립하며, 필요해지면 이 함수만 채우면 된다.
     """
     raise NotImplementedError(
-        "char-CNN 상한선은 선택 사항이라 1단계에서 구현하지 않는다 (스펙 13절 Q4)."
+        "char-CNN 참조 기준은 선택 사항이라 1단계에서 구현하지 않는다 (스펙 13절 Q4)."
     )
 
 

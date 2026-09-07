@@ -66,6 +66,76 @@ def report(config: str = _CONFIG) -> None:
         typer.echo(f"{k}: {p}")
 
 
+@app.command()
+def motifs(
+    config: str = _CONFIG,
+    stratum: str = typer.Option(None, "--stratum", "-s", help="지정하면 그 층만"),
+) -> None:
+    """Bag-of-QR-patches (review_01 B). 학습 없이 CPU에서 돈다."""
+    from qrphish.runner import run_motifs
+
+    res = run_motifs(_load(config), [stratum] if stratum else None)
+    for st, r in res.items():
+        reps = r.get("representations", {})
+        typer.echo(f"{st}: " + ", ".join(f"{k}={v['auroc_pooled']:.3f}" for k, v in reps.items()))
+
+
+@app.command()
+def occlusion(
+    config: str = _CONFIG,
+    stratum: str = typer.Option(None, "--stratum", "-s"),
+    top_k: int = typer.Option(10, "--top-k"),
+) -> None:
+    """인과 motif 절제 (review_01 C). run_motifs 결과가 먼저 있어야 한다."""
+    from qrphish.runner import run_occlusion
+
+    res = run_occlusion(_load(config), [stratum] if stratum else None, top_k=top_k)
+    for st, r in res.items():
+        agg = r.get("aggregate", {})
+        typer.echo(
+            f"{st}: 원본 {agg.get('auroc_original'):.3f} / "
+            + ", ".join(
+                f"{c}={agg[c]['d_auroc']:+.3f}"
+                for c in ("phishing_motif", "benign_motif", "random")
+                if c in agg
+            )
+        )
+
+
+@app.command()
+def probes(
+    config: str = _CONFIG,
+    stratum: str = typer.Option(None, "--stratum", "-s"),
+) -> None:
+    """어휘 프로브 (review_01 D). 저장된 체크포인트만 읽는다."""
+    from qrphish.runner import run_probes
+
+    res = run_probes(_load(config), [stratum] if stratum else None)
+    for st, r in res.items():
+        summ = r.get("summary", {})
+        typer.echo(f"{st}: 유의 {summ.get('n_significant')} / {summ.get('n_targets')}")
+
+
+@app.command()
+def hypotheses(
+    config: str = _CONFIG,
+    matrix: str = typer.Option("configs/matrix.yaml", "--matrix", "-m"),
+) -> None:
+    """H1~H4 부트스트랩 검정 + Holm 보정 → reports/hypotheses.json."""
+    from qrphish.runner import run_hypothesis_tests
+
+    res = run_hypothesis_tests(_load(config), matrix_path=matrix)
+    for t in res["tests"]:
+        if "error" in t:
+            typer.echo(f"{t['hypothesis']} {t['stratum']}: {t['error']}")
+            continue
+        typer.echo(
+            f"{t['hypothesis']} {t['stratum']}: est={t['estimate']:+.3f} "
+            f"p_holm={t.get('p_holm')} reject={t.get('reject')}"
+        )
+    typer.echo(f"-> {res['path']}")
+
+
 def main() -> None:
     app()
 

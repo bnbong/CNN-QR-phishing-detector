@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import json
 import subprocess
+import traceback
 from dataclasses import is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,7 +32,20 @@ from qrphish.dataset import (
     stratum_tier,
     version_in_spec,
 )
-from qrphish.evaluate import metrics_from_probs, pick_threshold, predict_probs
+from qrphish.evaluate import (
+    auroc as auroc_fn,
+)
+from qrphish.evaluate import (
+    bootstrap_p_value,
+    cluster_bootstrap,
+    holm,
+    metrics_from_probs,
+    paired_cluster_bootstrap,
+    percentile_ci,
+    pick_threshold,
+    predict_probs,
+    unpaired_delta_bootstrap,
+)
 from qrphish.models import build_model
 from qrphish.train import pick_device, set_seed, train_model
 
@@ -40,11 +54,20 @@ __all__ = [
     "run_p0",
     "run_matrix",
     "run_explain",
+    "run_probes",
+    "run_occlusion",
+    "compare_conditions",
+    "run_hypothesis_tests",
     "aggregate_reports",
+    "run_motifs",
     "load_matrix",
 ]
 
-SCHEMA_VERSION = 1
+# v2: text_upper_bound* 필드 폐기(decoded_text_reference*·gap_to_decoded_text로 대체),
+#     auroc_ci_pooled → auroc_pooled/auroc_pooled_ci(시드 통합 클러스터 부트스트랩).
+SCHEMA_VERSION = 2
+# 참조 기준(char n-gram LR)의 test 예측 파일. H2 쌍체 검정에 쓴다.
+CHARNGRAM_PREDS = "preds_test_charngram.npz"
 # P0가 훑는 (length_match, length_bucket) 격자. 스펙 1.1의 폭을 그대로 쓴다.
 P0_LENGTH_GRID = (("exact", 1), ("quantile", 5), ("none", 1))
 
@@ -412,6 +435,60 @@ def _loaders(ds_all: QRGridDataset, split: np.ndarray, batch_size: int):
     return (tr, itr), (va, iva), (te, ite)
 
 
+def _decoded_text_reference(entry: dict) -> bool:
+    """matrix 항목의 ``decoded_text_reference`` 플래그.
+
+    옛 이름 ``text_upper_bound``는 "CNN이 넘으면 누출"이라는 잘못된 함의를 담고 있어
+    폐기했다. char n-gram LR은 강한 텍스트 베이스라인일 뿐 Bayes 최적 분류기가 아니다.
+    하위 호환은 두지 않고 하드 실패시킨다.
+    """
+    if "text_upper_bound" in entry:
+        raise ValueError(
+            "matrix 항목의 'text_upper_bound' 키는 폐기되었다. "
+            "'decoded_text_reference'로 개명할 것 (하위 호환 없음)."
+        )
+    return bool(entry.get("decoded_text_reference", True))
+
+
+def _load_seed_preds(
+    cfg: Any, cid: str, stratum: str, seed: int, filename: str = "preds_test.npz"
+) -> dict[str, np.ndarray] | None:
+    """``preds_test.npz``(test 예측 y/p/group/url)를 읽는다. 없으면 None.
+
+    ``filename``으로 참조 기준의 예측(``preds_test_charngram.npz``)도 같은 경로에서 읽는다.
+    """
+    path = _out_root(cfg) / cid / stratum / f"seed{seed}" / filename
+    if not path.exists():
+        return None
+    with np.load(path, allow_pickle=False) as z:
+        return {k: z[k] for k in ("y", "p", "group", "url")}
+
+
+def _pool_preds(
+    cfg: Any, cid: str, stratum: str, seeds, filename: str = "preds_test.npz"
+) -> dict[str, np.ndarray] | None:
+    """5시드의 test 예측을 하나로 잇는다.
+
+    시드마다 split이 다르므로 ``(seed, row)``를 개별 표본으로 취급하고, 클러스터 키는
+    시드와 무관한 eTLD+1 그룹 id를 그대로 쓴다(같은 그룹은 어느 시드에서 나왔든 상관).
+    """
+    loaded = [
+        (int(s), _load_seed_preds(cfg, cid, stratum, int(s), filename)) for s in seeds
+    ]
+    parts: list[tuple[int, dict[str, np.ndarray]]] = [
+        (s, d) for s, d in loaded if d is not None and d["y"].size
+    ]
+    if not parts:
+        return None
+    return {
+        "y": np.concatenate([d["y"] for _, d in parts]),
+        "p": np.concatenate([d["p"] for _, d in parts]),
+        "group": np.concatenate([d["group"].astype(str) for _, d in parts]),
+        "url": np.concatenate([d["url"].astype(str) for _, d in parts]),
+        "seed": np.concatenate([np.full(d["y"].size, int(s)) for s, d in parts]),
+    }
+
+
 def _run_one_seed(cfg: Any, stratum: str, seed: int, cond_dir: Path, entry: dict) -> dict:
     """한 (층, 시드) 실행 → per_seed 항목."""
     cond = _get(cfg, "condition")
@@ -478,8 +555,18 @@ def _run_one_seed(cfg: Any, stratum: str, seed: int, cond_dir: Path, entry: dict
         seed=seed,
         device=device,
     )
-    torch.save({"state_dict": model.state_dict(), "n": ds.n, "arch": str(_get(mcfg, "arch"))},
-               seed_dir / "model.pt")
+    # 조건 스냅샷을 함께 남긴다. 로드할 때 현재 cfg의 features/mask_mode로 데이터셋을
+    # 재구성하면 다른 조건의 체크포인트를 조용히 잘못 읽을 수 있다.
+    torch.save(
+        {
+            "state_dict": model.state_dict(),
+            "n": ds.n,
+            "arch": str(_get(mcfg, "arch")),
+            "condition": _cfg_snapshot(cond),
+            "qr": _cfg_snapshot(qr),
+        },
+        seed_dir / "model.pt",
+    )
 
     n_boot = int(_get(ecfg, "n_bootstrap", 2000))
     y_te, p_te = predict_probs(model, te_loader, device=device)
@@ -487,9 +574,20 @@ def _run_one_seed(cfg: Any, stratum: str, seed: int, cond_dir: Path, entry: dict
                               threshold=tres.threshold)
     y_va, p_va = predict_probs(model, va_loader, device=device)
 
+    # 쌍체 부트스트랩·풀링 CI를 위해 test 예측을 남긴다. url은 두 조건이 같은 split의
+    # 같은 행을 보고 있는지(쌍체 가능 여부) 검증하는 키다.
+    np.savez_compressed(
+        seed_dir / "preds_test.npz",
+        y=np.asarray(y_te, dtype=np.int64),
+        p=np.asarray(p_te, dtype=np.float64),
+        group=np.asarray(groups[ite], dtype=object).astype(str),
+        url=meta["url"].to_numpy()[ite].astype(str),
+    )
+
     out = {
         "seed": seed,
         "best_epoch": tres.best_epoch,
+        "preds_test": f"seed{seed}/preds_test.npz",
         "threshold": tres.threshold,
         "test": {k: test[k] for k in ("auroc", "auprc", "f1", "acc", "auroc_ci", "f1_ci")},
         "val": {"auroc": tres.best_val_auroc},
@@ -501,7 +599,7 @@ def _run_one_seed(cfg: Any, stratum: str, seed: int, cond_dir: Path, entry: dict
 
     # 베이스라인(같은 split 인덱스에서 실행)
     base_names = list(entry.get("baselines", []))
-    if entry.get("text_upper_bound", True) and "charngram_lr" not in base_names:
+    if _decoded_text_reference(entry) and "charngram_lr" not in base_names:
         base_names = ["charngram_lr", *base_names]
     urls = meta["url"].to_numpy()
     # 베이스라인도 CNN과 같은 라벨을 봐야 비교가 성립한다(label_shuffle 포함).
@@ -514,6 +612,16 @@ def _run_one_seed(cfg: Any, stratum: str, seed: int, cond_dir: Path, entry: dict
             base_out[name] = metrics_from_probs(
                 y_all[ite], pt, groups[ite], n_boot=min(n_boot, 500), seed=seed, threshold=thr
             )
+            if name == "charngram_lr":
+                # H2(참조 기준 − CNN)를 쌍체로 검정하려면 참조 기준의 test 예측도
+                # 필요하다. CNN과 같은 split·같은 행이므로 url 키로 대응이 확인된다.
+                np.savez_compressed(
+                    seed_dir / CHARNGRAM_PREDS,
+                    y=np.asarray(y_all[ite], dtype=np.int64),
+                    p=np.asarray(pt, dtype=np.float64),
+                    group=np.asarray(groups[ite], dtype=object).astype(str),
+                    url=meta["url"].to_numpy()[ite].astype(str),
+                )
         except NotImplementedError as exc:
             base_out[name] = {"skipped": str(exc)}
     out["baselines"] = base_out
@@ -548,8 +656,26 @@ def run_matrix(cfg: Any, phase: str, matrix_path: Path | str = "configs/matrix.y
                 results.append(json.loads(rpath.read_text(encoding="utf-8")))
                 continue
             print(f"[run ] {phase} {cid}/{stratum}")
-            per_seed = [_run_one_seed(cfg_e, stratum, s, cond_dir, entry) for s in seeds]
-            res = _assemble_results(cfg_e, cid, stratum, phase, entry, per_seed)
+            # 한 조건·층이 터져도 매트릭스 전체가 죽으면 안 된다(3~4시간 실행에서 가장
+            # 나쁜 결과다). 시드 단위로 잡고, 층 조립까지 실패하면 error results.json을
+            # 남기고 다음 층으로 간다.
+            per_seed = []
+            for s in seeds:
+                try:
+                    per_seed.append(_run_one_seed(cfg_e, stratum, s, cond_dir, entry))
+                except Exception as exc:
+                    print(f"[ERROR] {phase} {cid}/{stratum} seed{s}: {exc!r}")
+                    traceback.print_exc()
+                    per_seed.append({"seed": s, "error": repr(exc)})
+            try:
+                res = _assemble_results(cfg_e, cid, stratum, phase, entry, per_seed)
+            except Exception as exc:
+                print(f"[ERROR] {phase} {cid}/{stratum} 집계 실패: {exc!r}")
+                traceback.print_exc()
+                res = _error_results(cfg_e, cid, stratum, phase, per_seed, repr(exc))
+            if all("error" in s for s in per_seed):
+                res["error"] = "모든 시드 실패"
+                print(f"[ERROR] {phase} {cid}/{stratum}: 모든 시드 실패 — results.json에 기록하고 진행")
             rpath.parent.mkdir(parents=True, exist_ok=True)
             rpath.write_text(json.dumps(res, ensure_ascii=False, indent=2, default=str),
                              encoding="utf-8")
@@ -563,17 +689,30 @@ def _assemble_results(cfg, cid, stratum, phase, entry, per_seed) -> dict:
     aur = np.array([s["test"]["auroc"] for s in ok], dtype=float) if ok else np.array([])
     f1 = np.array([s["test"]["f1"] for s in ok], dtype=float) if ok else np.array([])
     acc = np.array([s["test"]["acc"] for s in ok], dtype=float) if ok else np.array([])
-    los = [s["test"]["auroc_ci"][0] for s in ok]
-    his = [s["test"]["auroc_ci"][1] for s in ok]
 
-    # sanity: CNN이 텍스트 상한선을 넘으면 누출이다(스펙 0절)
-    text_ub = [
+    # 디코딩 텍스트 참조 기준(강한 텍스트 베이스라인). 상한선이 아니므로 넘어도 누출이
+    # 아니다. 부호 있는 갭(참조 − CNN)만 보고한다.
+    text_ref = [
         s["baselines"]["charngram_lr"]["auroc"]
         for s in ok
         if "auroc" in s.get("baselines", {}).get("charngram_lr", {})
     ]
-    text_mean = float(np.nanmean(text_ub)) if text_ub else float("nan")
+    text_mean = float(np.nanmean(text_ref)) if text_ref else float("nan")
     auroc_mean = float(np.nanmean(aur)) if aur.size else float("nan")
+
+    # 5시드 test 예측을 모두 모아 그룹 클러스터 부트스트랩으로 CI 하나를 만든다.
+    # (시드별 CI의 하한/상한을 평균내던 옛 auroc_ci_pooled는 정식 CI가 아니라 폐기했다.)
+    seeds = list(_get(cfg, "seed_list", [0]))
+    n_boot = int(_get(_get(cfg, "eval"), "n_bootstrap", 2000))
+    pooled = _pool_preds(cfg, cid, stratum, seeds)
+    if pooled is None:
+        auroc_pooled, pooled_ci = float("nan"), [float("nan"), float("nan")]
+    else:
+        cb = cluster_bootstrap(
+            pooled["y"], pooled["p"], pooled["group"], auroc_fn, n_boot=n_boot, seed=0
+        )
+        auroc_pooled = cb["point"]
+        pooled_ci = [cb["lo"], cb["hi"]]
 
     first = ok[0] if ok else {}
     return {
@@ -595,18 +734,40 @@ def _assemble_results(cfg, cid, stratum, phase, entry, per_seed) -> dict:
         "aggregate": {
             "auroc_mean": auroc_mean,
             "auroc_sd_across_seeds": float(np.nanstd(aur, ddof=1)) if aur.size > 1 else 0.0,
-            "auroc_ci_pooled": [
-                float(np.nanmean(los)) if los else float("nan"),
-                float(np.nanmean(his)) if his else float("nan"),
-            ],
+            "auroc_pooled": auroc_pooled,
+            "auroc_pooled_ci": pooled_ci,
             "f1_mean": float(np.nanmean(f1)) if f1.size else float("nan"),
             "acc_mean": float(np.nanmean(acc)) if acc.size else float("nan"),
-            "text_upper_bound_auroc": text_mean,
+            "decoded_text_reference_auroc": text_mean,
+            "gap_to_decoded_text": float(text_mean - auroc_mean),
         },
         "sanity": {
-            "below_text_upper_bound": bool(np.isnan(text_mean) or auroc_mean <= text_mean + 1e-9),
             "label_shuffle_auroc": auroc_mean if entry.get("label_shuffle") else None,
         },
+        "explain": {"cam_mass_by_kind": {}},
+    }
+
+
+def _error_results(cfg, cid, stratum, phase, per_seed, error: str) -> dict:
+    """집계까지 실패한 조건·층의 최소 results.json. 스키마 키를 비워서라도 유지한다."""
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "condition_id": cid,
+        "phase": phase,
+        "stratum": stratum,
+        "tier": "unknown",
+        "error": error,
+        "config": _cfg_snapshot(cfg),
+        "provenance": {
+            "git_sha": git_sha(),
+            "qrphish_version": _pkg_version_safe(),
+            "torch": torch.__version__,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+        "data": {},
+        "per_seed": per_seed,
+        "aggregate": {},
+        "sanity": {"label_shuffle_auroc": None},
         "explain": {"cam_mass_by_kind": {}},
     }
 
@@ -636,80 +797,609 @@ def _data_block(cfg, cid, stratum) -> dict:
 
 
 # ------------------------------------------------------------------------ explain
-def run_explain(cfg: Any, condition_id_str: str, stratum: str | None = None,
-                max_samples: int = 128) -> dict:
-    """P3 — 저장된 best 모델에 Grad-CAM을 돌려 kind별 CAM 질량과 문자 기여도를 낸다."""
-    from qrphish.explain import attribute_by_kind, attribute_to_chars, gradcam
+# 2차 실험(review_01)의 새 phase들이 읽는 주 조건. 체크포인트는 Colab 실행 산출물이다.
+MAIN_CONDITION = "norm-exact-data_only-fixed-small_cnn"
+
+
+def _seed_dir(cfg: Any, cid: str, stratum: str, seed: int) -> Path:
+    return _out_root(cfg) / cid / stratum / f"seed{seed}"
+
+
+def _ckpt_dataset_spec(cfg: Any, ckpt: dict, path: Path) -> tuple[str, str]:
+    """체크포인트의 조건 스냅샷에서 ``(features, mask_mode)``를 읽는다.
+
+    스냅샷이 있으면 그것이 진실이다. 현재 cfg로 데이터셋을 재구성하면 다른 조건의
+    체크포인트를 조용히 잘못 읽는다. 현재 cfg와 어긋나면 하드 실패시킨다. 스냅샷이 없는
+    옛 체크포인트는 경고 없이 현재 cfg를 쓰되, 그 사실이 여기 한 곳에만 있게 한다.
+    """
+    cond, qr = _get(cfg, "condition"), _get(cfg, "qr")
+    cfg_features = str(_get(cond, "features", "data_only"))
+    cfg_mask = str(_get(qr, "mask_mode", "fixed"))
+    snap_c, snap_q = ckpt.get("condition"), ckpt.get("qr")
+    if not isinstance(snap_c, dict) or not isinstance(snap_q, dict):
+        return cfg_features, cfg_mask
+    features = str(snap_c.get("features", cfg_features))
+    mask_mode = str(snap_q.get("mask_mode", cfg_mask))
+    if (features, mask_mode) != (cfg_features, cfg_mask):
+        raise ValueError(
+            f"체크포인트의 조건 스냅샷이 현재 config와 다르다: {path}\n"
+            f"  체크포인트: features={features}, mask_mode={mask_mode}\n"
+            f"  현재 config: features={cfg_features}, mask_mode={cfg_mask}\n"
+            "같은 조건의 config로 다시 부르거나, 해당 조건을 다시 학습할 것."
+        )
+    return features, mask_mode
+
+
+def _load_trained(cfg: Any, cid: str, stratum: str, seed: int):
+    """저장된 체크포인트 -> ``(model, dataset, arr, meta)``. 없으면 명확한 에러.
+
+    체크포인트는 :func:`_run_one_seed`가 남긴 ``model.pt``
+    (``{"state_dict", "n", "arch"}``)다. 새 phase들은 절대 새로 학습하지 않는다.
+    """
+    sd = _seed_dir(cfg, cid, stratum, seed)
+    ckpt_path = sd / "model.pt"
+    if not ckpt_path.exists():
+        raise FileNotFoundError(
+            f"체크포인트가 없다: {ckpt_path}\n"
+            "P1 매트릭스(run_matrix)를 먼저 돌리거나, Colab에서 만든 artifacts를 "
+            f"cfg.output_dir({_out_root(cfg)}) 아래로 가져와라."
+        )
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    arr = load_stratum_arrays(sd)
+    meta = pd.read_parquet(sd / "meta.parquet")
+    features, mask_mode = _ckpt_dataset_spec(cfg, ckpt, ckpt_path)
+    ds = QRGridDataset(
+        arr["X_packed"], arr["y"], int(arr["n"]), arr["versions"], int(arr["ec"]),
+        features=features,
+        mask_mode=mask_mode,
+    )
+    model = build_model(ckpt["arch"], ds.n, ds.canonical_data_mask)
+    model.load_state_dict(ckpt["state_dict"])
+    model.eval()
+    return model, ds, arr, meta
+
+
+def _ckpt_arch(cfg: Any, cid: str, stratum: str, seed: int) -> str:
+    """체크포인트에 기록된 arch 이름. 무작위 초기화 대조가 같은 구조를 쓰게 한다."""
+    ckpt = torch.load(
+        _seed_dir(cfg, cid, stratum, seed) / "model.pt", map_location="cpu", weights_only=False
+    )
+    return str(ckpt["arch"])
+
+
+def _available_seeds(cfg: Any, cid: str, stratum: str) -> list[int]:
+    root = _out_root(cfg) / cid / stratum
+    if not root.exists():
+        return []
+    out = []
+    for p in sorted(root.glob("seed*")):
+        if (p / "model.pt").exists():
+            out.append(int(p.name[4:]))
+    return out
+
+
+def _explain_one_seed(
+    cfg: Any, cid: str, stratum: str, seed: int, per_class: int, use_ig: bool, ig_steps: int,
+) -> dict:
+    """한 시드의 Grad-CAM 요약. 클래스 균형 표본 + 부호 있는 타깃 + enrichment."""
+    from qrphish.explain import (
+        attribute_by_kind,
+        attribute_to_chars,
+        balanced_sample,
+        cam_correlation,
+        enrichment_by_kind,
+        gradcam_signed,
+        ig_logit_gap,
+        integrated_gradients,
+        mass_fraction_by_kind,
+        random_attribution_enrichment,
+        randomized_model_cam,
+        signed_target,
+    )
     from qrphish.mapping import provenance
     from qrphish.qrgen import encode
 
+    model, ds, arr, meta = _load_trained(cfg, cid, stratum, seed)
+    if not hasattr(model, "last_conv_block"):
+        return {"seed": seed, "error": "Grad-CAM은 conv 모델(small_cnn)에만 적용한다"}
+    target = model.last_conv_block
+
+    ec = int(arr["ec"])
+    y_all = np.asarray(arr["y"], dtype=np.int64)
+    test_rows = np.nonzero(arr["split"].astype(int) == 2)[0]
+    # 앞쪽 N개 고정 표본은 클래스 구성이 통제되지 않는다(review_01 핵심 문제 3).
+    idx = balanced_sample(y_all, test_rows, per_class=per_class, seed=seed)
+
+    mass: dict[str, list[float]] = {}
+    enr: dict[str, list[float]] = {}
+    enr_rand: dict[str, list[float]] = {}
+    enr_ig: dict[str, list[float]] = {}
+    legacy: dict[str, list[float]] = {}
+    char_curves: dict[int, list[np.ndarray]] = {0: [], 1: []}
+    sanity: list[float] = []
+    ig_err: list[float] = []
+    cam_sum = None
+    n_by_class = {0: 0, 1: 0}
+
+    for k, i in enumerate(idx):
+        i = int(i)
+        x, _ = ds[i]
+        label = int(y_all[i])
+        n_by_class[label] += 1
+        sgn = signed_target(label)
+        cam = gradcam_signed(model, x, target, sign=sgn)
+        cam_sum = cam if cam_sum is None else cam_sum + cam
+        url = str(meta["url"].iloc[i])
+        art = encode(url, ec=ec, mask_pattern=int(meta["mask_used"].iloc[i]))
+        prov = provenance(url, art)
+        n_art = art.modules.shape[0]
+        off = (ds.n - n_art) // 2
+        cam_c = cam[off : off + n_art, off : off + n_art]
+
+        for kk, v in attribute_by_kind(cam_c, prov).items():
+            legacy.setdefault(kk, []).append(v)
+        for kk, v in mass_fraction_by_kind(cam_c, prov).items():
+            mass.setdefault(kk, []).append(v)
+        for kk, v in enrichment_by_kind(cam_c, prov).items():
+            enr.setdefault(kk, []).append(v)
+        for kk, v in random_attribution_enrichment(cam_c.shape, prov, seed=seed * 97 + k).items():
+            enr_rand.setdefault(kk, []).append(v)
+
+        if use_ig:
+            attr = integrated_gradients(model, x, baseline=0.0, steps=ig_steps, sign=sgn)
+            gap = ig_logit_gap(model, x, baseline=0.0, sign=sgn)
+            denom = max(abs(gap), 1e-9)
+            ig_err.append(abs(float(attr.sum()) - gap) / denom)
+            # 값 채널 기여도만 격자로 접는다(마스크 채널은 층 내 상수).
+            ig_map = attr[0][off : off + n_art, off : off + n_art]
+            for kk, v in enrichment_by_kind(ig_map, prov).items():
+                enr_ig.setdefault(kk, []).append(v)
+
+        # sanity check는 비싸므로 앞쪽 8개 표본에서만 한다.
+        if k < 8:
+            rnd_cam = randomized_model_cam(model, x, sign=sgn, seed=seed * 31 + k)
+            sanity.append(cam_correlation(cam, rnd_cam))
+
+        ch = attribute_to_chars(cam_c, prov, url)
+        if ch.size:
+            grid = np.interp(np.linspace(0, 1, 50), np.linspace(0, 1, ch.size), ch)
+            char_curves[label].append(grid)
+
+    def _mean(d: dict[str, list[float]]) -> dict[str, float]:
+        return {k: float(np.nanmean(v)) for k, v in d.items() if v}
+
+    out: dict[str, Any] = {
+        "seed": seed,
+        "n_samples": int(idx.size),
+        "n_by_class": {str(k): int(v) for k, v in n_by_class.items()},
+        "cam_mass_by_kind": _mean(legacy),
+        "cam_mass_fraction": _mean(mass),
+        "cam_enrichment": _mean(enr),
+        "random_attribution_enrichment": _mean(enr_rand),
+        "sanity_randomized_cam_corr": float(np.mean(sanity)) if sanity else float("nan"),
+        "char_position_curve": {
+            str(k): (np.mean(v, axis=0).tolist() if v else []) for k, v in char_curves.items()
+        },
+    }
+    if use_ig:
+        out["ig_enrichment"] = _mean(enr_ig)
+        out["ig_completeness_rel_error"] = float(np.mean(ig_err)) if ig_err else float("nan")
+    out["_mean_cam"] = (cam_sum / max(idx.size, 1)) if cam_sum is not None else None
+    return out
+
+
+def _avg_dicts(rows: list[dict], key: str) -> dict[str, float]:
+    """``rows``의 ``row[key]`` dict들을 키별 NaN 무시 평균으로 합친다."""
+    keys: set[str] = set()
+    for d in rows:
+        keys |= set(d.get(key, {}))
+    return {
+        k: float(np.nanmean([d[key][k] for d in rows if k in d.get(key, {})]))
+        for k in sorted(keys)
+    }
+
+
+def run_explain(
+    cfg: Any,
+    condition_id_str: str = MAIN_CONDITION,
+    stratum: str | None = None,
+    max_samples: int = 128,
+    per_class: int = 64,
+    use_ig: bool = False,
+    ig_steps: int = 32,
+) -> dict:
+    """P3 — Grad-CAM을 **보조 분석**으로 재구성한다 (review_01 핵심 문제 3·4).
+
+    바뀐 점:
+      - 5시드 전부, test에서 **클래스별 균형 무작위 표본**(기본 클래스당 64).
+      - phishing은 ``+logit``, benign은 ``-logit``을 타깃으로 잡는다.
+      - CAM 질량 분수를 영역 면적 분수로 나눈 **enrichment**를 보고한다.
+        균일 난수 attribution 기준선(기대값 1)을 함께 낸다.
+      - 모델 파라미터 무작위화 sanity check와 (옵션) signed Integrated Gradients.
+
+    ``max_samples``는 하위 호환을 위해 남긴 인자로, ``per_class``가 주어지지 않은
+    호출에서 클래스당 ``max_samples // 2``로 해석된다. 출력 스키마는 기존
+    ``cam_mass_by_kind``/``char_position_curve``/``n_samples``를 그대로 유지한 채
+    키를 추가하기만 한다.
+    """
+    if per_class is None:
+        per_class = max(int(max_samples) // 2, 1)
     cond_dir = _out_root(cfg) / condition_id_str
+    if not cond_dir.exists():
+        raise FileNotFoundError(f"조건 디렉터리가 없다: {cond_dir}")
     strata = [stratum] if stratum else [p.name for p in sorted(cond_dir.iterdir()) if p.is_dir()]
+    seeds_cfg = [int(s) for s in _get(cfg, "seed_list", [0])]
+
     out: dict[str, Any] = {}
     for st in strata:
-        seed_dirs = sorted((cond_dir / st).glob("seed*"))
-        if not seed_dirs:
+        avail = [s for s in _available_seeds(cfg, condition_id_str, st) if s in set(seeds_cfg)]
+        if not avail:
             continue
-        sd = seed_dirs[0]
-        ckpt = torch.load(sd / "model.pt", map_location="cpu", weights_only=False)
-        arr = load_stratum_arrays(sd)
-        meta = pd.read_parquet(sd / "meta.parquet")
-        cond = _get(cfg, "condition")
-        qr = _get(cfg, "qr")
-        ds = QRGridDataset(
-            arr["X_packed"], arr["y"], int(arr["n"]), arr["versions"], int(arr["ec"]),
-            features=str(_get(cond, "features", "data_only")),
-            mask_mode=str(_get(qr, "mask_mode", "fixed")),
-        )
-        model = build_model(ckpt["arch"], ds.n, ds.canonical_data_mask)
-        model.load_state_dict(ckpt["state_dict"])
-        model.eval()
-        target = getattr(model, "last_conv_block", None)
-        if target is None:
-            out[st] = {"error": "Grad-CAM은 conv 모델(small_cnn)에만 적용한다"}
+        per_seed = []
+        for s in avail:
+            try:
+                per_seed.append(
+                    _explain_one_seed(cfg, condition_id_str, st, s, per_class, use_ig, ig_steps)
+                )
+            except Exception as exc:
+                print(f"[ERROR] explain {st} seed{s}: {exc!r}")
+                traceback.print_exc()
+                per_seed.append({"seed": s, "error": repr(exc)})
+        ok = [d for d in per_seed if "error" not in d]
+        if not ok:
+            out[st] = {"error": per_seed[0].get("error", "no usable seed")}
             continue
 
-        ec = int(arr["ec"])
-        test_idx = np.nonzero(arr["split"].astype(int) == 2)[0][:max_samples]
-        acc_kind: dict[str, list[float]] = {}
-        char_curves: dict[int, list[np.ndarray]] = {0: [], 1: []}
-        cam_sum = None
-        for i in test_idx:
-            x, _ = ds[int(i)]
-            cam = gradcam(model, x, target)
-            cam_sum = cam if cam_sum is None else cam_sum + cam
-            url = str(meta["url"].iloc[int(i)])
-            art = encode(url, ec=ec, mask_pattern=int(meta["mask_used"].iloc[int(i)]))
-            prov = provenance(url, art)
-            n_art = art.modules.shape[0]
-            off = (ds.n - n_art) // 2
-            cam_c = cam[off : off + n_art, off : off + n_art]
-            for k, v in attribute_by_kind(cam_c, prov).items():
-                acc_kind.setdefault(k, []).append(v)
-            ch = attribute_to_chars(cam_c, prov, url)
-            if ch.size:
-                # 상대 위치로 정규화해 길이가 다른 URL을 평균낼 수 있게 한다
-                grid = np.interp(np.linspace(0, 1, 50), np.linspace(0, 1, ch.size), ch)
-                char_curves[int(meta["label"].iloc[int(i)])].append(grid)
-        res = {
-            "n_samples": int(len(test_idx)),
-            "cam_mass_by_kind": {k: float(np.mean(v)) for k, v in acc_kind.items()},
+        cams = [d.pop("_mean_cam") for d in per_seed if d.get("_mean_cam") is not None]
+
+        res: dict[str, Any] = {
+            # --- 기존 키(삭제 금지) ---
+            "n_samples": int(sum(d["n_samples"] for d in ok)),
+            "cam_mass_by_kind": _avg_dicts(ok, "cam_mass_by_kind"),
             "char_position_curve": {
-                str(k): (np.mean(v, axis=0).tolist() if v else []) for k, v in char_curves.items()
+                str(c): (
+                    np.mean(
+                        [d["char_position_curve"][str(c)] for d in ok
+                         if d["char_position_curve"].get(str(c))],
+                        axis=0,
+                    ).tolist()
+                    if any(d["char_position_curve"].get(str(c)) for d in ok)
+                    else []
+                )
+                for c in (0, 1)
             },
+            # --- 2차 실험에서 추가된 키 ---
+            "schema_version": SCHEMA_VERSION,
+            "seeds": [d["seed"] for d in ok],
+            "per_class_sample": int(per_class),
+            "signed_target": True,
+            "cam_mass_fraction": _avg_dicts(ok, "cam_mass_fraction"),
+            "cam_enrichment": _avg_dicts(ok, "cam_enrichment"),
+            "random_attribution_enrichment": _avg_dicts(ok, "random_attribution_enrichment"),
+            "sanity_randomized_cam_corr": float(
+                np.nanmean([d["sanity_randomized_cam_corr"] for d in ok])
+            ),
+            "per_seed": [{k: v for k, v in d.items() if k != "char_position_curve"} for d in ok],
+            "notes": [
+                "phishing=+logit, benign=-logit(부호 있는 클래스별 근거).",
+                "enrichment = CAM 질량 분수 / 영역 면적 분수. 1이면 면적만큼만 본 것.",
+                "Grad-CAM은 보조 시각화다. 인과 주장은 occlusion 결과로만 한다.",
+            ],
         }
+        if use_ig:
+            res["ig_enrichment"] = _avg_dicts(ok, "ig_enrichment")
+            res["ig_completeness_rel_error"] = float(
+                np.nanmean([d.get("ig_completeness_rel_error", np.nan) for d in ok])
+            )
+
         (cond_dir / st / "explain.json").write_text(
-            json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
         )
         rp = cond_dir / st / "results.json"
         if rp.exists():
             r = json.loads(rp.read_text(encoding="utf-8"))
-            r["explain"] = {"cam_mass_by_kind": res["cam_mass_by_kind"]}
+            r["explain"] = {
+                "cam_mass_by_kind": res["cam_mass_by_kind"],
+                "cam_enrichment": res["cam_enrichment"],
+                "sanity_randomized_cam_corr": res["sanity_randomized_cam_corr"],
+            }
             rp.write_text(json.dumps(r, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-        if cam_sum is not None:
-            np.save(cond_dir / st / "mean_cam.npy", cam_sum / max(len(test_idx), 1))
+        if cams:
+            np.save(cond_dir / st / "mean_cam.npy", np.mean(cams, axis=0))
         out[st] = res
+
+    # scripts/make_results_tables.py가 읽는 요약본. 층별로 병합해 덮어쓴다.
+    summary_path = _reports_dir(cfg) / "explain_summary.json"
+    merged = {}
+    if summary_path.exists():
+        merged = json.loads(summary_path.read_text(encoding="utf-8"))
+    merged.update(out)
+    summary_path.write_text(
+        json.dumps(merged, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
     return out
+
+
+# ------------------------------------------------------------------- comparisons
+def _paired_dir(cfg: Any) -> Path:
+    d = _reports_dir(cfg) / "paired"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _matrix_condition_ids(cfg: Any, matrix_path: Path | str) -> dict[str, str]:
+    """matrix 항목 이름 → 조건 id. 가설 검정이 조건 id를 문자열로 박지 않게 한다."""
+    matrix = load_matrix(matrix_path)
+    out: dict[str, str] = {}
+    for phase_entries in matrix.values():
+        for entry in phase_entries or []:
+            cfg_e = apply_overrides(cfg, entry.get("overrides"))
+            out[str(entry.get("name"))] = condition_id(cfg_e, entry.get("extra"))
+    return out
+
+
+def compare_conditions(
+    cfg: Any,
+    cond_a: str,
+    cond_b: str,
+    stratum: str,
+    n_boot: int | None = None,
+    alpha: float = 0.05,
+    alternative: str = "greater",
+    save: bool = True,
+) -> dict:
+    """두 조건의 ΔAUROC(a − b)를 부트스트랩으로 비교한다.
+
+    두 조건이 **같은 split을 공유**하면(같은 url_mode·length_match·seed → 같은 분할과
+    같은 test 행) 시드별 test 예측을 행 단위로 맞춰 **쌍체** 클러스터 부트스트랩을 쓴다.
+    공유하지 않으면(예: L-none vs L-exact) 표본 집합 자체가 다르므로 쌍체가 성립하지
+    않는다. 그 경우 ``paired=False``로 표시하고 비쌍체 차이만 보고한다.
+    """
+    seeds = list(_get(cfg, "seed_list", [0]))
+    n_boot = int(n_boot or _get(_get(cfg, "eval"), "n_bootstrap", 2000))
+    pa = _pool_preds(cfg, cond_a, stratum, seeds)
+    pb = _pool_preds(cfg, cond_b, stratum, seeds)
+    if pa is None or pb is None:
+        missing = [c for c, d in ((cond_a, pa), (cond_b, pb)) if d is None]
+        raise FileNotFoundError(
+            f"preds_test.npz가 없다: {missing} (stratum={stratum}). 해당 조건을 먼저 실행할 것."
+        )
+
+    paired = (
+        pa["url"].shape == pb["url"].shape
+        and bool(np.array_equal(pa["url"], pb["url"]))
+        and bool(np.array_equal(pa["seed"], pb["seed"]))
+        and bool(np.array_equal(pa["y"], pb["y"]))
+    )
+    if paired:
+        r = paired_cluster_bootstrap(
+            pa["y"], pa["p"], pb["p"], pa["group"], n_boot=n_boot, seed=0, alpha=alpha
+        )
+        caveat = "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다."
+        auroc_a = float(auroc_fn(pa["y"], pa["p"]))
+        auroc_b = float(auroc_fn(pb["y"], pb["p"]))
+    else:
+        r = unpaired_delta_bootstrap(
+            pa["y"], pa["p"], pa["group"], pb["y"], pb["p"], pb["group"],
+            n_boot=n_boot, seed=0, alpha=alpha,
+        )
+        caveat = (
+            "두 조건의 test 표본 집합이 다르다(표본 수·클래스 구성·URL 집합이 함께 변한다). "
+            "따라서 이 차이는 단일 개입의 효과가 아니며 쌍체 비교도 불가능하다."
+        )
+        auroc_a, auroc_b = float(r["point_a"]), float(r["point_b"])
+
+    out = {
+        "cond_a": cond_a,
+        "cond_b": cond_b,
+        "stratum": stratum,
+        "paired": bool(paired),
+        "n_pooled": int(pa["y"].size),
+        "auroc_a": auroc_a,
+        "auroc_b": auroc_b,
+        "delta_auroc": float(r["point"]),
+        "delta_ci": [float(r["lo"]), float(r["hi"])],
+        "p_value": bootstrap_p_value(r["samples"], alternative=alternative),
+        "alternative": alternative,
+        "n_boot": n_boot,
+        "n_valid": int(r["n_valid"]),
+        "caveat": caveat,
+    }
+    if save:
+        path = _paired_dir(cfg) / f"{cond_a}__vs__{cond_b}__{stratum}.json"
+        path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        out["path"] = str(path)
+    return out
+
+
+# H1~H4. matrix 항목 이름으로 조건을 지목한다(조건 id 문자열을 박지 않는다).
+HYPOTHESES: tuple[dict[str, Any], ...] = (
+    {
+        "id": "H1",
+        "statement": "길이·버전을 통제한 뒤에도 CNN AUROC가 라벨 셔플 바닥보다 높다.",
+        "kind": "compare",
+        "a": "main_cnn",
+        "b": "label_shuffle",
+    },
+    {
+        "id": "H2",
+        "statement": "디코딩 텍스트 참조 기준이 CNN보다 높다(갭이 남는다).",
+        "kind": "reference_gap",
+        "a": "main_cnn",
+    },
+    {
+        "id": "H3",
+        "statement": "길이 매칭을 풀면(L-none) CNN AUROC가 L-exact보다 높다.",
+        "kind": "compare",
+        "a": "length_none",
+        "b": "main_cnn",
+    },
+    {
+        "id": "H4",
+        "statement": "원래 모듈 배치가 위치 셔플보다 CNN에게 유리하다.",
+        "kind": "compare",
+        "a": "main_cnn",
+        "b": "shuffle_pos",
+    },
+)
+
+
+def run_hypothesis_tests(
+    cfg: Any,
+    strata: list[str] | None = None,
+    matrix_path: Path | str = "configs/matrix.yaml",
+    n_boot: int | None = None,
+    alpha: float = 0.05,
+) -> dict:
+    """H1~H4를 층별로 검정하고 Holm 보정을 적용해 ``reports/hypotheses.json``에 쓴다."""
+    ids = _matrix_condition_ids(cfg, matrix_path)
+    strata = strata or _surviving_strata(cfg)
+    n_boot = int(n_boot or _get(_get(cfg, "eval"), "n_bootstrap", 2000))
+    seeds = list(_get(cfg, "seed_list", [0]))
+
+    tests: list[dict[str, Any]] = []
+    for st in strata:
+        for h in HYPOTHESES:
+            rec: dict[str, Any] = {
+                "hypothesis": h["id"],
+                "stratum": st,
+                "statement": h["statement"],
+            }
+            try:
+                if h["kind"] == "compare":
+                    cmp = compare_conditions(
+                        cfg, ids[h["a"]], ids[h["b"]], st, n_boot=n_boot, alpha=alpha
+                    )
+                    rec.update(
+                        {
+                            "cond_a": cmp["cond_a"],
+                            "cond_b": cmp["cond_b"],
+                            "estimate": cmp["delta_auroc"],
+                            "ci": cmp["delta_ci"],
+                            "p_value": cmp["p_value"],
+                            "paired": cmp["paired"],
+                            "caveat": cmp["caveat"],
+                        }
+                    )
+                else:
+                    rec.update(_reference_gap_test(cfg, ids[h["a"]], st, n_boot, alpha, seeds))
+            except Exception as exc:
+                # 어떤 조건의 preds가 없거나(dropped 층·error 조건) 데이터가 모자라도
+                # 나머지 검정은 계속 돌려야 한다.
+                print(f"[ERROR] hypothesis {h['id']} {st}: {exc!r}")
+                rec["error"] = repr(exc)
+            tests.append(rec)
+
+    # 판정은 "95% 양측 백분위 CI가 0을 배제하는가"로 하고, Holm은 그와 동치인
+    # CI 역전 p값에 건다. descriptive_only(H2 폴백)는 family에서 뺀다.
+    for t in tests:
+        ci = t.get("ci")
+        t["ci_excludes_null"] = bool(
+            ci is not None
+            and np.isfinite(ci[0])
+            and np.isfinite(ci[1])
+            and (ci[0] > 0 or ci[1] < 0)
+        )
+    runnable = [
+        t
+        for t in tests
+        if "p_value" in t
+        and not t.get("descriptive_only")
+        and not np.isnan(t.get("p_value", float("nan")))
+    ]
+    adj = holm([t["p_value"] for t in runnable])
+    for t, a in zip(runnable, adj, strict=True):
+        t["p_holm"] = float(a)
+        t["reject"] = bool(a < alpha)
+    for t in tests:
+        t.setdefault("p_holm", None)
+        t.setdefault("reject", None)
+
+    out = {
+        "alpha": alpha,
+        "n_boot": n_boot,
+        "n_tests_in_family": len(runnable),
+        "correction": "holm",
+        "decision_rule": (
+            "판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. "
+            "p값은 그 CI를 역전시켜 정의했고(가장 작은 alpha에서 CI가 0을 배제), "
+            "Holm 보정은 이 p값에 건다. descriptive_only 항목은 family에서 제외한다."
+        ),
+        "generated_at": datetime.now(UTC).isoformat(),
+        "tests": tests,
+    }
+    path = _reports_dir(cfg) / "hypotheses.json"
+    path.write_text(json.dumps(out, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    out["path"] = str(path)
+    return out
+
+
+def _reference_gap_test(cfg, cid, stratum, n_boot, alpha, seeds) -> dict:
+    """H2 — 디코딩 텍스트 참조 기준 − CNN > 0.
+
+    참조 기준의 test 예측(``preds_test_charngram.npz``)이 있으면 CNN과 **같은 split의 같은
+    행**을 공유하므로 쌍체 클러스터 부트스트랩으로 검정한다. 옛 산출물처럼 예측이 저장되지
+    않았으면 참조 기준 AUROC를 상수로 두고 CNN 쪽만 흔드는 옛 방식으로 되돌아가되,
+    ``descriptive_only=True``로 표시해 **Holm family에서 제외**한다(참조 기준 자체의 표본
+    변동이 빠져 CI가 좁게 나오므로 검정으로 쓸 수 없다).
+    """
+    pooled = _pool_preds(cfg, cid, stratum, seeds)
+    if pooled is None:
+        raise FileNotFoundError(f"preds_test.npz가 없다: {cid}/{stratum}")
+    ref_pred = _pool_preds(cfg, cid, stratum, seeds, CHARNGRAM_PREDS)
+    caveat_base = (
+        "참조 기준은 강한 텍스트 베이스라인이지 Bayes 최적 분류기가 아니다. "
+        "CNN이 이를 넘더라도 누출의 증거가 아니다."
+    )
+    if (
+        ref_pred is not None
+        and ref_pred["y"].shape == pooled["y"].shape
+        and bool(np.array_equal(ref_pred["url"], pooled["url"]))
+        and bool(np.array_equal(ref_pred["y"], pooled["y"]))
+    ):
+        r = paired_cluster_bootstrap(
+            pooled["y"], ref_pred["p"], pooled["p"], pooled["group"],
+            n_boot=n_boot, seed=0, alpha=alpha,
+        )
+        return {
+            "cond_a": "charngram_lr (decoded-text reference)",
+            "cond_b": cid,
+            "estimate": float(r["point"]),
+            "ci": [float(r["lo"]), float(r["hi"])],
+            "p_value": bootstrap_p_value(r["samples"], alternative="greater"),
+            "paired": True,
+            "descriptive_only": False,
+            "caveat": caveat_base + " 참조 기준의 test 예측을 함께 흔든 쌍체 비교다.",
+        }
+
+    rp = _out_root(cfg) / cid / stratum / "results.json"
+    if not rp.exists():
+        raise FileNotFoundError(f"results.json이 없다: {rp}")
+    ref = json.loads(rp.read_text(encoding="utf-8")).get("aggregate", {}).get(
+        "decoded_text_reference_auroc"
+    )
+    if ref is None or (isinstance(ref, float) and np.isnan(ref)):
+        raise KeyError(f"{cid}/{stratum}에 decoded_text_reference_auroc이 없다")
+    cb = cluster_bootstrap(
+        pooled["y"], pooled["p"], pooled["group"], auroc_fn, n_boot=n_boot, seed=0, alpha=alpha
+    )
+    samples = float(ref) - cb["samples"]
+    lo, hi, _ = percentile_ci(samples, alpha)
+    return {
+        "cond_a": "charngram_lr (decoded-text reference)",
+        "cond_b": cid,
+        "estimate": float(ref) - cb["point"],
+        "ci": [lo, hi],
+        "p_value": float("nan"),
+        "paired": False,
+        "descriptive_only": True,
+        "caveat": (
+            caveat_base
+            + " 참조 기준의 test 예측이 저장되지 않아 AUROC를 상수로 두었다. "
+            "참조 기준 자체의 표본 변동이 빠져 CI가 좁으므로 기술 통계(descriptive gap)로만 "
+            "읽고 Holm family에서 제외했다. 재실행하면 쌍체 검정으로 승격된다."
+        ),
+    }
 
 
 # ---------------------------------------------------------------------- aggregate
@@ -730,12 +1420,14 @@ def aggregate_reports(cfg: Any) -> dict[str, Path]:
                 "n_total": r.get("data", {}).get("n_total"),
                 "auroc_mean": agg.get("auroc_mean"),
                 "auroc_sd": agg.get("auroc_sd_across_seeds"),
-                "auroc_ci_lo": (agg.get("auroc_ci_pooled") or [None, None])[0],
-                "auroc_ci_hi": (agg.get("auroc_ci_pooled") or [None, None])[1],
+                "auroc_pooled": agg.get("auroc_pooled"),
+                "auroc_ci_lo": (agg.get("auroc_pooled_ci") or [None, None])[0],
+                "auroc_ci_hi": (agg.get("auroc_pooled_ci") or [None, None])[1],
                 "f1_mean": agg.get("f1_mean"),
                 "acc_mean": agg.get("acc_mean"),
-                "text_upper_bound_auroc": agg.get("text_upper_bound_auroc"),
-                "below_text_upper_bound": r.get("sanity", {}).get("below_text_upper_bound"),
+                "decoded_text_reference_auroc": agg.get("decoded_text_reference_auroc"),
+                "gap_to_decoded_text": agg.get("gap_to_decoded_text"),
+                "label_shuffle_auroc": r.get("sanity", {}).get("label_shuffle_auroc"),
             }
         )
         for ps in r.get("per_seed", []):
@@ -771,4 +1463,669 @@ def aggregate_reports(cfg: Any) -> dict[str, Path]:
             p = reports / f"table_{str(phase).lower()}.csv"
             sub.to_csv(p, index=False)
             out[str(phase)] = p
+    return out
+
+
+# --------------------------------------------------------------------------- motifs
+# 리뷰 review_01 "B. Visual motif 실험" — Q1(공통 국소 시각 motif가 있는가)을 직접 측정한다.
+# 주 조건(norm-exact-data_only-fixed)의 split을 그대로 재현하되 CNN은 학습하지 않는다.
+MOTIF_STRATA = ("v3", "v2", "v4")
+# (키, 창 크기, 피라미드 여부)
+MOTIF_REPRESENTATIONS = (("patch2", 2, False), ("patch3", 3, False), ("pyramid3", 3, True))
+# enrichment CI 부트스트랩 횟수. motif 축(3x3 = 512종) 전체를 흔들어야 해서 지표 CI(2000)
+# 보다 낮춰 잡았다. enrichment.json의 ci_n_boot에 그대로 기록된다.
+ENRICHMENT_CI_BOOT = 500
+
+
+def _phase_dir(cfg: Any, phase: str, cid: str, stratum: str) -> Path:
+    """``reports/{phase}/{condition_id}/{stratum}/``.
+
+    조건 id를 경로에 넣지 않으면 서로 다른 조건(예: raw vs norm, mask-auto)의 산출물이
+    같은 층 폴더에서 덮어써진다. 옛 ``reports/{phase}/{stratum}/`` 경로는 쓰지 않는다.
+    """
+    d = _reports_dir(cfg) / phase / cid / stratum
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _motif_condition_id(cfg: Any) -> str:
+    """motif 실험이 재현하는 조건 이름. arch는 붙지 않는다(모델을 학습하지 않는다)."""
+    cond = _get(cfg, "condition")
+    qr = _get(cfg, "qr")
+    return "-".join(
+        [
+            str(_get(cond, "url_mode", "norm")),
+            str(_get(cond, "length_match", "exact")),
+            str(_get(cond, "features", "data_only")),
+            str(_get(qr, "mask_mode", "fixed")),
+        ]
+    )
+
+
+def _motif_grid(url: str, cfg: Any, n_max: int) -> tuple[np.ndarray, int, int]:
+    """URL -> (중앙 정렬된 (n_max,n_max) bool 격자, version, mask_used)."""
+    from qrphish.dataset import _center_pad
+    from qrphish.qrgen import encode
+
+    qr = _get(cfg, "qr")
+    ec = ec_const(_get(qr, "ec", "L"))
+    mask_mode = str(_get(qr, "mask_mode", "fixed"))
+    mp = None if mask_mode == "auto" else int(_get(qr, "mask_pattern", 0) or 0)
+    art = encode(url, ec=ec, mask_pattern=mp, version=None)
+    mods = np.asarray(art.modules, dtype=bool)
+    return _center_pad(mods, n_max), int(art.version), int(art.mask_pattern)
+
+
+def _motif_features(
+    cfg: Any, df: pd.DataFrame, cache: dict, n_max: int
+) -> tuple[dict[str, np.ndarray], float]:
+    """df의 URL들에 대해 표현별 히스토그램 행렬과 평균 창 개수를 만든다.
+
+    ``cache``는 URL -> 표현별 벡터 dict. 시드마다 split만 달라지고 격자는 같으므로
+    5시드 전체에서 URL당 한 번만 인코딩·히스토그램 계산을 한다.
+    """
+    from qrphish.dataset import data_mask_for
+    from qrphish.motifs import (
+        extract_patch_ids,
+        patch_histogram,
+        spatial_pyramid_histogram,
+    )
+
+    ec = ec_const(_get(_get(cfg, "qr"), "ec", "L"))
+    dm_cache: dict[int, np.ndarray] = {}
+    rows: dict[str, list[np.ndarray]] = {k: [] for k, _, _ in MOTIF_REPRESENTATIONS}
+    n_windows: list[int] = []
+    for url in df["url"].tolist():
+        got = cache.get(url)
+        if got is None:
+            grid, version, mask_used = _motif_grid(url, cfg, n_max)
+            dm = dm_cache.get(version)
+            if dm is None:
+                dm = data_mask_for(version, ec, n_max)
+                dm_cache[version] = dm
+            got = {
+                "patch2": patch_histogram(grid, dm, 2, mask_pattern=mask_used),
+                "patch3": patch_histogram(grid, dm, 3, mask_pattern=mask_used),
+                "pyramid3": spatial_pyramid_histogram(grid, dm, 3, mask_pattern=mask_used),
+                "n_windows3": np.int32(extract_patch_ids(grid, dm, 3).size),
+            }
+            cache[url] = got
+        for k, _, _ in MOTIF_REPRESENTATIONS:
+            rows[k].append(got[k])
+        n_windows.append(int(got["n_windows3"]))
+    X = {k: np.stack(v).astype(np.float32) for k, v in rows.items()}
+    return X, (float(np.mean(n_windows)) if n_windows else 0.0)
+
+
+def _motif_one_seed(cfg: Any, stratum: str, seed: int, cache: dict) -> dict:
+    """한 (층, 시드): split 재현 -> 표현별 LR -> test 지표 + train/test enrichment."""
+    from qrphish.dataset import SPLIT_CODE
+    from qrphish.motifs import bag_of_patches_lr, motif_enrichment
+
+    df, diag = _prepare_frame(cfg, stratum, seed)
+    if len(df) == 0:
+        return {"seed": seed, "error": "empty stratum after matching"}
+    if "version" not in df.columns:
+        raise ValueError("_prepare_frame이 version 컬럼을 주지 않았다")
+    n_max = int(4 * int(df["version"].max()) + 17)
+
+    X, n_windows_mean = _motif_features(cfg, df, cache, n_max)
+    y = df["label"].to_numpy(dtype=np.int64)
+    groups = df["group"].astype(str).to_numpy()
+    split = np.asarray(
+        [SPLIT_CODE[s] if isinstance(s, str) else int(s) for s in df["split"].tolist()],
+        dtype=np.int64,
+    )
+    tr, va, te = split == 0, split == 1, split == 2
+
+    # 라벨 셔플 대조: test는 원 라벨로 두고 train/val 라벨만 섞는다. 러너의 기존 규약
+    # (`label_shuffle_rows=(split != 2)`)과 같다 — val까지 섞어야 C 선택으로 신호가
+    # 새어 들어오지 않는다.
+    rng = np.random.default_rng(1000 + seed)
+    y_shuf = y.copy()
+    nz = np.flatnonzero(~te)
+    y_shuf[nz] = y_shuf[nz][rng.permutation(nz.size)]
+
+    n_boot = min(int(_get(_get(cfg, "eval"), "n_bootstrap", 2000)), 1000)
+    out: dict[str, Any] = {
+        "seed": seed,
+        "n_total": int(len(df)),
+        "n_train": int(tr.sum()),
+        "n_val": int(va.sum()),
+        "n_test": int(te.sum()),
+        "n_windows_mean": n_windows_mean,
+        "n_after_match": diag.get("n_after_match"),
+        "representations": {},
+        "preds": {},
+        "enrichment_inputs": {},
+    }
+    for key, _size, _pyr in MOTIF_REPRESENTATIONS:
+        Xk = X[key]
+        for suffix, labels in (("", y), ("_labelshuffle", y_shuf)):
+            fit = bag_of_patches_lr(
+                Xk[tr], labels[tr], Xk[te], seed, X_hist_val=Xk[va], y_val=labels[va]
+            )
+            thr = pick_threshold(labels[va], fit["p_val"])
+            met = metrics_from_probs(
+                y[te], fit["p_test"], groups[te], n_boot=n_boot, seed=seed, threshold=thr
+            )
+            out["representations"][key + suffix] = {
+                "auroc": met["auroc"],
+                "auprc": met["auprc"],
+                "f1": met["f1"],
+                "acc": met["acc"],
+                "auroc_ci": met["auroc_ci"],
+                "C": fit["C"],
+                "dim": int(Xk.shape[1]),
+            }
+            # 시드 통합 CI는 5시드 test 예측을 풀링해서 만든다(CNN 쪽 auroc_pooled와 같은 방식).
+            # 라벨 셔플 행도 예측을 남겨 같은 절차로 바닥선 CI를 낸다.
+            out["preds"][key + suffix] = {
+                "y": y[te],
+                "p": np.asarray(fit["p_test"], dtype=np.float64),
+                "group": groups[te],
+            }
+
+    out["enrichment"] = {}
+    for size, key in ((3, "patch3"), (2, "patch2")):
+        tr_enr = motif_enrichment(
+            X[key][tr], y[tr], groups[tr], size=size, n_boot=n_boot, seed=seed
+        )
+        te_enr = motif_enrichment(X[key][te], y[te], groups[te], size=size, n_boot=0, seed=seed)
+        out["enrichment"][size] = {"train": tr_enr, "test": te_enr["log_odds"]}
+        # 시드 통합 enrichment CI용 train 원자료. run_motifs가 (seed, row)로 이어 붙인다.
+        out["enrichment_inputs"][size] = {
+            "H": X[key][tr],
+            "y": y[tr],
+            "groups": groups[tr],
+        }
+    return out
+
+
+def _motif_aggregate(per_seed: list[dict], key: str, n_boot: int = 1000) -> dict:
+    """시드 평균 + **5시드 test 예측 풀링** 그룹 클러스터 부트스트랩 CI.
+
+    ``_assemble_results``의 CNN 쪽 ``auroc_pooled``/``auroc_pooled_ci``와 같은 절차다.
+    시드마다 split이 달라 ``(seed, row)``를 개별 표본으로 두고, 클러스터 키는 시드와
+    무관한 eTLD+1 그룹을 그대로 쓴다. 시드별 CI 경계를 평균하던 옛 ``auroc_ci_pooled``는
+    정식 CI가 아니라 폐기했다.
+    """
+    ok = [s for s in per_seed if "error" not in s]
+    a = np.array([s["representations"][key]["auroc"] for s in ok], dtype=float)
+    parts = [s["preds"][key] for s in ok if key in s.get("preds", {})]
+    if parts:
+        cb = cluster_bootstrap(
+            np.concatenate([d["y"] for d in parts]),
+            np.concatenate([d["p"] for d in parts]),
+            np.concatenate([d["group"] for d in parts]),
+            auroc_fn,
+            n_boot=n_boot,
+            seed=0,
+        )
+        auroc_pooled, pooled_ci = cb["point"], [cb["lo"], cb["hi"]]
+        n_pooled = int(sum(d["y"].size for d in parts))
+    else:
+        auroc_pooled, pooled_ci, n_pooled = float("nan"), [float("nan"), float("nan")], 0
+    return {
+        "auroc_mean": float(np.nanmean(a)) if a.size else float("nan"),
+        "auroc_sd_across_seeds": float(np.nanstd(a, ddof=1)) if a.size > 1 else 0.0,
+        "auroc_pooled": auroc_pooled,
+        "auroc_pooled_ci": pooled_ci,
+        "n_pooled": n_pooled,
+        "f1_mean": float(np.nanmean([s["representations"][key]["f1"] for s in ok])) if ok else float("nan"),
+        "acc_mean": float(np.nanmean([s["representations"][key]["acc"] for s in ok])) if ok else float("nan"),
+        "dim": int(ok[0]["representations"][key]["dim"]) if ok else 0,
+    }
+
+
+def run_motifs(cfg: Any, strata: list[str] | None = None) -> dict:
+    """Bag-of-QR-patches 실험 (리뷰 review_01 B). 모델 학습 없이 CPU에서 돈다.
+
+    층별로 2x2 / 3x3 / 3x3 spatial pyramid 세 표현 x LR을 5시드로 돌려
+    ``reports/motifs/{stratum}/results.json``에, motif 오즈비를
+    ``reports/motifs/{stratum}/enrichment.json``에 저장한다. split은 주 조건
+    ``norm-exact-data_only-fixed``의 :func:`_prepare_frame`을 같은 시드로 다시 불러
+    재현하므로 CNN 실험과 정확히 같은 train/val/test 분할을 쓴다.
+    """
+    import time
+
+    from qrphish.motifs import combine_seed_enrichments, motif_enrichment
+
+    seeds = list(_get(cfg, "seed_list", [0]))
+    n_boot_pool = int(_get(_get(cfg, "eval"), "n_bootstrap", 2000))
+    cid = _motif_condition_id(cfg)
+    todo = list(strata) if strata else [s for s in MOTIF_STRATA if s in set(_get(cfg, "strata", MOTIF_STRATA))]
+    out: dict[str, Any] = {}
+
+    for stratum in todo:
+        t0 = time.time()
+        cache: dict[str, Any] = {}
+        per_seed = []
+        for s in seeds:
+            try:
+                per_seed.append(_motif_one_seed(cfg, stratum, s, cache))
+            except Exception as exc:
+                print(f"[ERROR] motifs {stratum} seed{s}: {exc!r}")
+                traceback.print_exc()
+                per_seed.append({"seed": s, "error": repr(exc)})
+        ok = [s for s in per_seed if "error" not in s]
+        if not ok:
+            out[stratum] = {"error": "no usable seed"}
+            continue
+        sdir = _phase_dir(cfg, "motifs", cid, stratum)
+
+        res = {
+            "schema_version": SCHEMA_VERSION,
+            "experiment": "bag_of_patches",
+            "condition_id": cid,
+            "stratum": stratum,
+            "seeds": [s["seed"] for s in ok],
+            "config": _cfg_snapshot(cfg),
+            "provenance": {
+                "git_sha": git_sha(),
+                "qrphish_version": _pkg_version_safe(),
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+            "data": {
+                "n_total": ok[0]["n_total"],
+                "n_train": ok[0]["n_train"],
+                "n_val": ok[0]["n_val"],
+                "n_test": ok[0]["n_test"],
+                "n_windows_mean": ok[0]["n_windows_mean"],
+            },
+            "representations": {
+                key: _motif_aggregate(ok, key, n_boot=n_boot_pool)
+                for key in sorted(ok[0]["representations"])
+            },
+            "per_seed": [
+                {k: v for k, v in s.items()
+                 if k not in ("enrichment", "enrichment_inputs", "preds")}
+                for s in per_seed
+            ],
+            "runtime_sec": None,
+        }
+
+        enr: dict[str, Any] = {"stratum": stratum}
+        for size, sub_key in ((3, None), (2, "size2")):
+            # CI는 5시드 train을 (seed, row)로 풀링해 한 번만 돌린다. 부트스트랩 횟수는
+            # motif 축이 512개라 비용이 커서 ENRICHMENT_CI_BOOT(500)로 낮췄다.
+            src = [s["enrichment_inputs"][size] for s in ok]
+            pooled_enr = motif_enrichment(
+                np.concatenate([d["H"] for d in src]),
+                np.concatenate([d["y"] for d in src]),
+                np.concatenate([d["groups"] for d in src]),
+                size=size,
+                n_boot=ENRICHMENT_CI_BOOT,
+                seed=0,
+            )
+            block = combine_seed_enrichments(
+                [s["enrichment"][size]["train"] for s in ok],
+                [s["enrichment"][size]["test"] for s in ok],
+                size=size,
+                n_windows_mean=ok[0]["n_windows_mean"],
+                pooled=pooled_enr,
+                ci_n_boot=ENRICHMENT_CI_BOOT,
+            )
+            block["stratum"] = stratum
+            if sub_key is None:
+                enr.update(block)
+            else:
+                enr[sub_key] = block
+
+        res["runtime_sec"] = round(time.time() - t0, 1)
+        (sdir / "results.json").write_text(
+            json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        (sdir / "enrichment.json").write_text(
+            json.dumps(enr, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        out[stratum] = res
+    return out
+
+
+# --------------------------------------------------------------------------- probes
+# review_01 "D. Lexical probe" — CNN 임베딩에서 URL 어휘 속성을 선형으로 읽어낼 수
+# 있는지 본다. "복원(recover)"이 아니라 "선형 접근 가능(linearly accessible)"의 증거다.
+
+
+def _probe_one_seed(cfg: Any, cid: str, stratum: str, seed: int, ngrams: list[str],
+                    n_boot: int) -> dict:
+    """한 (층, 시드)의 프로브 결과. ``ngrams``는 층에서 **한 번 고정한** 목표 유니버스다."""
+    from qrphish.probes import build_targets, embed, run_probe_suite
+
+    model, ds, arr, meta = _load_trained(cfg, cid, stratum, seed)
+    if not hasattr(model, "feature_maps"):
+        return {"seed": seed, "error": "프로브는 conv 모델(small_cnn) 임베딩에만 적용한다"}
+
+    split = arr["split"].astype(int)
+    tr_rows = np.nonzero(split == 0)[0]
+    te_rows = np.nonzero(split == 2)[0]
+    if tr_rows.size == 0 or te_rows.size == 0:
+        return {"seed": seed, "error": "train/test가 비어 있다"}
+
+    urls = meta["url"].astype(str).to_numpy()
+    groups = meta["group"].astype(str).to_numpy()
+    y = np.asarray(arr["y"], dtype=np.int64)
+    targets = build_targets(urls, y, list(ngrams))
+
+    z_tr = embed(model, ds, tr_rows)
+    z_te = embed(model, ds, te_rows)
+
+    # 대조: 같은 구조의 **미학습** CNN 임베딩. 구조/입력만으로 얻어지는 몫을 뺀다.
+    # arch는 체크포인트에 기록된 값을 쓴다(문자열을 박으면 다른 조건에서 조용히 어긋난다).
+    set_seed(50_000 + seed)
+    rnd = build_model(_ckpt_arch(cfg, cid, stratum, seed), ds.n, ds.canonical_data_mask)
+    rnd.eval()
+    z_tr_r = embed(rnd, ds, tr_rows)
+    z_te_r = embed(rnd, ds, te_rows)
+
+    res = run_probe_suite(
+        z_tr, z_te, z_tr_r, z_te_r, targets, tr_rows, te_rows, groups,
+        seed=seed, n_boot=n_boot,
+    )
+    return {
+        "seed": seed,
+        "n_train": int(tr_rows.size),
+        "n_test": int(te_rows.size),
+        "n_ngram_targets": len(ngrams),
+        "targets": res,
+    }
+
+
+def _probe_ngram_universe(
+    cfg: Any, cid: str, stratum: str, seed: int, n_ngram: int
+) -> list[str]:
+    """층 전체가 공유하는 char 3-gram 목표 목록. 라벨을 보지 않고 빈도로만 고른다."""
+    from qrphish.probes import top_char_ngrams
+
+    sd = _seed_dir(cfg, cid, stratum, seed)
+    arr = load_stratum_arrays(sd)
+    meta = pd.read_parquet(sd / "meta.parquet")
+    tr_rows = np.nonzero(arr["split"].astype(int) == 0)[0]
+    return top_char_ngrams(meta["url"].astype(str).to_numpy()[tr_rows], size=3, top=n_ngram)
+
+
+def _probe_aggregate(per_seed: list[dict], n_seeds: int) -> dict:
+    """시드별 프로브 결과 -> 목표별 요약.
+
+    ``ci``는 시드별 그룹 부트스트랩 CI의 하한/상한 평균이다. 정식 집계 CI가 아니므로
+    유의 판정은 **시드별로** (CI 하한 > max(셔플 CI 상한, 무작위 초기화 CI 상한))를 따진 뒤
+    ``n_seeds`` 전부에서 성립할 것을 요구한다. 일부 시드에서 표본 부족으로 건너뛴 목표는
+    전 시드 일치를 확인할 수 없으므로 유의로 세지 않는다.
+    """
+    names: set[str] = set()
+    for d in per_seed:
+        names |= set(d["targets"])
+    out: dict[str, Any] = {}
+    for name in sorted(names):
+        rows = [d["targets"][name] for d in per_seed if name in d["targets"]]
+        usable = [r for r in rows if "skipped" not in r]
+        if not usable:
+            out[name] = {"skipped": rows[0].get("skipped", "unknown"), "n_seeds": 0}
+            continue
+        kind = usable[0]["kind"]
+        out[name] = {
+            "kind": kind,
+            "metric": "auroc" if kind == "binary" else "r2",
+            "family": usable[0]["family"],
+            "n_seeds": len(usable),
+            "score": float(np.nanmean([r["score"] for r in usable])),
+            "score_sd": float(np.nanstd([r["score"] for r in usable], ddof=0)),
+            "ci": [
+                float(np.nanmean([r["ci"][0] for r in usable])),
+                float(np.nanmean([r["ci"][1] for r in usable])),
+            ],
+            "shuffle": float(np.nanmean([r["shuffle"] for r in usable])),
+            "shuffle_ci": [
+                float(np.nanmean([r["shuffle_ci"][0] for r in usable])),
+                float(np.nanmean([r["shuffle_ci"][1] for r in usable])),
+            ],
+            "random_init": float(np.nanmean([r["random_init"] for r in usable])),
+            "random_init_ci": [
+                float(np.nanmean([r["random_init_ci"][0] for r in usable])),
+                float(np.nanmean([r["random_init_ci"][1] for r in usable])),
+            ],
+            "n_seeds_significant": int(sum(bool(r["significant"]) for r in usable)),
+            "significant": bool(
+                len(usable) == n_seeds and all(r["significant"] for r in usable)
+            ),
+            "above_random_init": bool(
+                len(usable) == n_seeds and all(r["above_random_init"] for r in usable)
+            ),
+        }
+    return out
+
+
+def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
+    """어휘 프로브 실험 (review_01 D). 저장된 체크포인트만 읽고 학습하지 않는다.
+
+    층별 결과를 ``reports/probes/{stratum}/results.json``에 쓴다.
+    """
+    import time
+
+    cid = MAIN_CONDITION
+    seeds = [int(s) for s in _get(cfg, "seed_list", [0])]
+    n_boot = min(int(_get(_get(cfg, "eval"), "n_bootstrap", 2000)), 500)
+    todo = list(strata) if strata else list(_get(cfg, "strata", ["v2", "v3", "v4"]))
+
+    out: dict[str, Any] = {}
+    for stratum in todo:
+        avail = [s for s in _available_seeds(cfg, cid, stratum) if s in set(seeds)]
+        if not avail:
+            # dropped 층(P0에서 표본 부족으로 학습을 돌리지 않은 층)은 체크포인트가 없다.
+            # 전체 실행을 죽이지 말고 건너뛴다.
+            msg = (
+                f"{_out_root(cfg) / cid / stratum} 아래에 model.pt를 가진 seed 디렉터리가 없다 "
+                "— 층을 건너뛴다 (P0에서 dropped 되었거나 P1이 아직 안 돌았다)."
+            )
+            print(f"[skip] probes {stratum}: {msg}")
+            out[stratum] = {"skipped": msg}
+            continue
+        t0 = time.time()
+        # n-gram 목표 유니버스는 층에서 **한 번만** 고른다(가장 낮은 시드의 train URL,
+        # 라벨 무관 빈도). 시드마다 다시 고르면 시드별로 목표 집합이 달라져 "전 시드에서
+        # 유의"라는 판정이 같은 대상을 두고 내린 판정이 아니게 된다.
+        try:
+            ngrams = _probe_ngram_universe(cfg, cid, stratum, avail[0], 100)
+        except Exception as exc:
+            print(f"[ERROR] probes {stratum}: n-gram 유니버스 구성 실패 {exc!r}")
+            traceback.print_exc()
+            out[stratum] = {"error": repr(exc)}
+            continue
+        per_seed = []
+        for s in avail:
+            try:
+                per_seed.append(_probe_one_seed(cfg, cid, stratum, s, ngrams, n_boot))
+            except Exception as exc:
+                print(f"[ERROR] probes {stratum} seed{s}: {exc!r}")
+                traceback.print_exc()
+                per_seed.append({"seed": s, "error": repr(exc)})
+        ok = [d for d in per_seed if "error" not in d]
+        if not ok:
+            out[stratum] = {"error": per_seed[0].get("error", "no usable seed")}
+            continue
+
+        agg = _probe_aggregate(ok, len(avail))
+        # 라벨 프로브는 어휘 증거가 아니라 상한 참고선이므로 요약 카운트에서 뺀다.
+        lex = {k: v for k, v in agg.items() if v.get("family") not in (None, "label")}
+        sig = [k for k, v in lex.items() if v.get("significant")]
+        ranked = sorted(
+            (k for k in sig), key=lambda k: -lex[k]["score"]
+        )[:10]
+
+        res = {
+            "schema_version": SCHEMA_VERSION,
+            "experiment": "lexical_probe",
+            "condition_id": cid,
+            "stratum": stratum,
+            "seeds": [d["seed"] for d in ok],
+            "config": _cfg_snapshot(cfg),
+            "provenance": {
+                "git_sha": git_sha(),
+                "qrphish_version": _pkg_version_safe(),
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+            "data": {"n_train": ok[0]["n_train"], "n_test": ok[0]["n_test"]},
+            "ngrams": list(ngrams),
+            "targets": agg,
+            "summary": {
+                "n_targets": len(lex),
+                "n_significant": len(sig),
+                "frac_significant": (len(sig) / len(lex)) if lex else 0.0,
+                "top10": [
+                    {"target": k, "metric": lex[k]["metric"], "score": lex[k]["score"],
+                     "shuffle": lex[k]["shuffle"], "random_init": lex[k]["random_init"]}
+                    for k in ranked
+                ],
+                "label_probe": agg.get("label:phishing"),
+            },
+            "notes": [
+                "프로브가 유의해도 '문자를 복원했다'는 뜻은 아니다. "
+                "임베딩에서 그 속성이 선형으로 접근 가능하다는 뜻이다.",
+                "유의 = 모든 시드에서 (그룹 부트스트랩 CI 하한 > 셔플 CI 상한).",
+                "셔플 기준선은 그룹 단위로 목표를 갈아끼운다(행 단위 셔플은 기준선을 부풀린다).",
+            ],
+            "per_seed": [
+                {"seed": d["seed"], "n_train": d["n_train"], "n_test": d["n_test"]} for d in ok
+            ],
+            "runtime_sec": round(time.time() - t0, 1),
+        }
+        sdir = _phase_dir(cfg, "probes", cid, stratum)
+        (sdir / "results.json").write_text(
+            json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        out[stratum] = res
+    return out
+
+
+# ------------------------------------------------------------------------ occlusion
+# review_01 "C. Causal motif ablation" — 상위 motif를 뒤집으면 CNN 예측이 무너지는가.
+
+
+def _occlusion_aggregate(per_seed: list[dict]) -> dict:
+    """조건별 시드 평균. CI는 시드별 값을 그대로 per_seed에 남기고 여기서는 평균만."""
+    conds = sorted({c for d in per_seed for c in d["conditions"]})
+    keys = ("auroc", "d_auroc", "mean_logit_delta",
+            "mean_logit_delta_phishing", "mean_logit_delta_benign")
+    out: dict[str, Any] = {
+        "auroc_original": float(np.nanmean([d["auroc_original"] for d in per_seed])),
+    }
+    for c in conds:
+        rows = [d["conditions"][c] for d in per_seed if c in d["conditions"]]
+        block = {k: float(np.nanmean([r[k] for r in rows])) for k in keys}
+        block["d_auroc_sd_across_seeds"] = float(
+            np.nanstd([r["d_auroc"] for r in rows], ddof=0)
+        )
+        block["n_seeds_d_auroc_ci_excludes_0"] = int(
+            sum(1 for r in rows if r["d_auroc_ci"][1] < 0 or r["d_auroc_ci"][0] > 0)
+        )
+        block["n_flipped_mean"] = float(np.nanmean([r["n_flipped"]["mean"] for r in rows]))
+        block["frac_samples_no_match"] = float(
+            np.nanmean([r["n_flipped"]["frac_zero"] for r in rows])
+        )
+        out[c] = block
+    return out
+
+
+def run_occlusion(
+    cfg: Any,
+    strata: list[str] | None = None,
+    top_k: int = 10,
+    size: int = 3,
+    n_random_rep: int = 5,
+) -> dict:
+    """인과 motif 절제 (review_01 C). ``run_motifs`` 결과가 먼저 있어야 한다.
+
+    ``reports/motifs/{stratum}/enrichment.json``의 상위 phishing motif가 매칭된 창의
+    중심 모듈을 뒤집고, 같은 개수의 무작위 데이터 모듈 뒤집기 및 상위 benign motif
+    뒤집기와 원본 대비 쌍체 비교한다. 결과는
+    ``reports/occlusion/{stratum}/results.json``.
+    """
+    import time
+
+    from qrphish.occlusion import load_enrichment, occlude_stratum
+
+    cid = MAIN_CONDITION
+    motif_cid = _motif_condition_id(cfg)
+    seeds = [int(s) for s in _get(cfg, "seed_list", [0])]
+    n_boot = min(int(_get(_get(cfg, "eval"), "n_bootstrap", 2000)), 500)
+    todo = list(strata) if strata else list(_get(cfg, "strata", ["v2", "v3", "v4"]))
+
+    out: dict[str, Any] = {}
+    for stratum in todo:
+        enr_path = _reports_dir(cfg) / "motifs" / motif_cid / stratum / "enrichment.json"
+        if not enr_path.exists():
+            # run_motifs가 돌지 않은 층(MOTIF_STRATA 밖이거나 dropped)은 건너뛴다.
+            msg = f"enrichment.json이 없다: {enr_path} — 층을 건너뛴다 ([9] motif를 먼저 돌려라)."
+            print(f"[skip] occlusion {stratum}: {msg}")
+            out[stratum] = {"skipped": msg}
+            continue
+        enr = load_enrichment(enr_path)
+        if int(enr.get("size", size)) != int(size):
+            raise ValueError(
+                f"enrichment.json의 size={enr.get('size')}가 요청한 size={size}와 다르다"
+            )
+        avail = [s for s in _available_seeds(cfg, cid, stratum) if s in set(seeds)]
+        if not avail:
+            msg = (
+                f"{_out_root(cfg) / cid / stratum} 아래에 model.pt를 가진 seed 디렉터리가 없다 "
+                "— 층을 건너뛴다."
+            )
+            print(f"[skip] occlusion {stratum}: {msg}")
+            out[stratum] = {"skipped": msg}
+            continue
+        t0 = time.time()
+        per_seed = []
+        for s in avail:
+            try:
+                model, ds, arr, meta = _load_trained(cfg, cid, stratum, s)
+                te_rows = np.nonzero(arr["split"].astype(int) == 2)[0]
+                groups = meta["group"].astype(str).to_numpy()[te_rows]
+                block = occlude_stratum(
+                    model, ds, te_rows, groups, enr,
+                    top_k=top_k, size=size, n_random_rep=n_random_rep, seed=s, n_boot=n_boot,
+                )
+            except Exception as exc:
+                print(f"[ERROR] occlusion {stratum} seed{s}: {exc!r}")
+                traceback.print_exc()
+                per_seed.append({"seed": int(s), "error": repr(exc), "conditions": {}})
+                continue
+            block["seed"] = int(s)
+            per_seed.append(block)
+        if not any("error" not in b for b in per_seed):
+            out[stratum] = {"error": "no usable seed", "per_seed": per_seed}
+            print(f"[ERROR] occlusion {stratum}: 모든 시드 실패")
+            continue
+
+        res = {
+            "schema_version": SCHEMA_VERSION,
+            "experiment": "causal_motif_occlusion",
+            "condition_id": cid,
+            "stratum": stratum,
+            "seeds": avail,
+            "config": _cfg_snapshot(cfg),
+            "provenance": {
+                "git_sha": git_sha(),
+                "qrphish_version": _pkg_version_safe(),
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+            "motif_source": str(enr_path),
+            "top_k": int(top_k),
+            "size": int(size),
+            "n_random_rep": int(n_random_rep),
+            "aggregate": _occlusion_aggregate([b for b in per_seed if "error" not in b]),
+            "per_seed": per_seed,
+            "notes": [
+                "뒤집은 격자는 더 이상 유효한 QR이 아니다. RS 오류정정 덕에 실제 스캐너는 "
+                "여전히 디코딩할 수 있지만, 이것은 모델 입력에 대한 개입일 뿐 실제 QR 변형이 아니다.",
+                "무작위 대조는 각 샘플에서 phishing motif가 맞은 개수와 같은 수를 뒤집는다.",
+                "매칭은 원본 격자에서 한 번에 계산한 뒤 동시에 뒤집는다(순서 의존 제거).",
+            ],
+            "runtime_sec": round(time.time() - t0, 1),
+        }
+        sdir = _phase_dir(cfg, "occlusion", cid, stratum)
+        (sdir / "results.json").write_text(
+            json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        out[stratum] = res
     return out
