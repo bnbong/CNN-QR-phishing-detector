@@ -19,6 +19,7 @@ URL_MODES = ("raw", "norm")
 LENGTH_MATCHES = ("exact", "quantile", "none")
 FEATURES = ("data_only", "all")
 ARCHES = ("small_cnn", "bit_mlp", "linear_probe")
+GROUP_KEYS = ("etld1", "etld1_template")
 STRATA = ("v1", "v2", "v3", "v4", "v5plus")
 
 
@@ -60,6 +61,14 @@ class StratumRules:
 class SplitConfig:
     ratios: tuple[float, float, float] = (0.70, 0.15, 0.15)
     max_group_frac: float = 0.05
+    # 설계 5절(G). "etld1"은 1차 실험과 동일한 동작이고, "etld1_template"이면
+    # eTLD+1 그룹과 URL 경로 템플릿 클러스터를 union-find로 합쳐 group 컬럼을 만든다.
+    group_key: str = "etld1"
+    template_threshold: float = 0.7
+    template_shingle: int = 3
+    # 범용 골격(``/index.html`` 등) 과병합 게이트: 토큰이 이 수 미만이고 자리표시자·쿼리
+    # 키도 없으면 클러스터링에서 빼고 단독 클러스터로 둔다 (설계 5.2).
+    min_template_tokens: int = 3
 
 
 @dataclass(frozen=True)
@@ -157,6 +166,13 @@ def _validate(cfg: Config) -> None:
         raise ValueError(f"split.ratios 합이 1이 아니다 (got {sum(cfg.split.ratios)})")
     if not 0 < cfg.split.max_group_frac <= 1:
         raise ValueError("split.max_group_frac은 (0, 1] 범위여야 한다")
+    _one_of(cfg.split.group_key, GROUP_KEYS, "split.group_key")
+    if not 0 < cfg.split.template_threshold <= 1:
+        raise ValueError("split.template_threshold는 (0, 1] 범위여야 한다")
+    if cfg.split.template_shingle < 1:
+        raise ValueError("split.template_shingle은 1 이상이어야 한다")
+    if cfg.split.min_template_tokens < 1:
+        raise ValueError("split.min_template_tokens는 1 이상이어야 한다")
 
     if cfg.eval.n_bootstrap < 1:
         raise ValueError("eval.n_bootstrap은 1 이상이어야 한다")

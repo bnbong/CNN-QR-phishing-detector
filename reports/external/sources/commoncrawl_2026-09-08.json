@@ -1,0 +1,139 @@
+{
+  "name": "commoncrawl",
+  "label": 0,
+  "url": "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-34/cc-index-table.paths.gz",
+  "raw_path": "data/external/raw/cc_urls_2026-09-08.csv.gz",
+  "parsed_path": "data/external/commoncrawl_urls_2026-09-08.csv",
+  "pinned_id": "CC-MAIN-2026-34",
+  "row_groups_used": [
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00099-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1496962
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00054-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1503988
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00003-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1646511
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00034-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1449353
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00211-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1509224
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00103-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1555258
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00283-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1518530
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00276-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1470001
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00057-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1371408
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00088-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1709900
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00101-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1520523
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00149-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1475517
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00178-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1492911
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00292-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1735020
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00240-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1409620
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00157-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1385807
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00151-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1513995
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00013-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1460369
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00188-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1420617
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00219-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1416297
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00142-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1464730
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00080-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1432858
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00143-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1522539
+    },
+    {
+      "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00127-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+      "row_group": 0,
+      "n_rows": 1478761
+    }
+  ],
+  "n_parts_available": 300,
+  "fetched_at": "2026-09-08T01:47:21.128881+00:00",
+  "sha256": "c827ec8593c0caa2dfc028a7e5696d9728cca04db285cba130b746b2aa9d68a9",
+  "n_raw": 35960699,
+  "n_after_tranco_join": 9447020,
+  "n_after_domain_cap": 62520,
+  "per_domain_cap": 8,
+  "tranco_list_id": "GQJ9K",
+  "license_note": "Common Crawl terms-of-use, crawl CC-MAIN-2026-34"
+}

@@ -199,6 +199,7 @@ def test_load_seed_preds_fills_seed_from_path(synthetic) -> None:
     assert d is not None
     assert np.array_equal(d["seed"], np.full(d["y"].size, 1))
     pooled = _pool_preds(synthetic["cfg"], BASE, "v2", SEEDS)
+    assert pooled is not None
     assert sorted(set(pooled["seed"].tolist())) == SEEDS
 
 
@@ -232,6 +233,7 @@ def test_compare_conditions_is_immune_to_per_seed_score_offsets(synthetic, tmp_p
     from qrphish.evaluate import auroc
 
     pooled = _pool_preds(cfg, BASE, "v2", SEEDS)
+    assert pooled is not None
     assert auroc(pooled["y"], pooled["p"]) < shifted["auroc_a"] - 0.05
 
 

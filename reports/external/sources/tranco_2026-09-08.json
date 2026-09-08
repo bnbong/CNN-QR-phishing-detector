@@ -1,0 +1,13 @@
+{
+  "name": "tranco",
+  "label": 0,
+  "url": "https://tranco-list.eu/download/GQJ9K/1000000",
+  "raw_path": "data/external/raw/tranco_2026-09-08.csv",
+  "parsed_path": "data/external/tranco_urls_2026-09-08.csv",
+  "pinned_id": "GQJ9K",
+  "fetched_at": "2026-09-08T01:42:42.924994+00:00",
+  "sha256": "b042b88d22180585a14c39d345046d4daa1008dfee29bd9ee9b9689f7eac1fd5",
+  "n_raw": 1000000,
+  "n_top": 50000,
+  "license_note": "Tranco list GQJ9K (연구용 공개, 구성 소스 라이선스 상속)"
+}

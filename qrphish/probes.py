@@ -26,6 +26,7 @@ from qrphish.evaluate import (
     group_bootstrap,
     precompute_cluster_resamples,
 )
+from qrphish.urls import strip_leading_scheme
 
 __all__ = [
     "KEYWORDS",
@@ -104,13 +105,13 @@ def top_char_ngrams(urls, size: int = 3, top: int = 100) -> list[str]:
 
 
 def _host(url: str) -> str:
-    s = str(url)
-    s = s.split("://", 1)[-1]
+    # 선행 스킴만 벗긴다. ``split("://")``는 쿼리 안의 URL까지 스킴으로 오인한다.
+    s = strip_leading_scheme(url)
     return s.split("/", 1)[0].split("?", 1)[0].split("@")[-1].split(":", 1)[0]
 
 
 def _path_depth(url: str) -> int:
-    s = str(url).split("://", 1)[-1]
+    s = strip_leading_scheme(url)
     rest = s.split("/", 1)[1] if "/" in s else ""
     rest = rest.split("?", 1)[0].split("#", 1)[0]
     return len([p for p in rest.split("/") if p])

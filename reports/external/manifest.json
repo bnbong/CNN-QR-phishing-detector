@@ -1,0 +1,245 @@
+{
+  "collect_date": "2026-09-08",
+  "git_sha": "3f216f3b1e2755fbffc6bf89e2aeb5388bc10695",
+  "scheme_policy_resolved": "strip",
+  "dedup_mode": "etld1",
+  "drop_benign_on_phish_domains": true,
+  "sources": [
+    {
+      "name": "tranco",
+      "label": 0,
+      "url": "https://tranco-list.eu/download/GQJ9K/1000000",
+      "raw_path": "data/external/raw/tranco_2026-09-08.csv",
+      "parsed_path": "data/external/tranco_urls_2026-09-08.csv",
+      "pinned_id": "GQJ9K",
+      "fetched_at": "2026-09-08T01:42:42.924994+00:00",
+      "sha256": "b042b88d22180585a14c39d345046d4daa1008dfee29bd9ee9b9689f7eac1fd5",
+      "n_raw": 1000000,
+      "n_top": 50000,
+      "license_note": "Tranco list GQJ9K (연구용 공개, 구성 소스 라이선스 상속)"
+    },
+    {
+      "name": "phishdb",
+      "label": 1,
+      "url": "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-links-ACTIVE.txt",
+      "raw_path": "data/external/raw/phishdb_active_2026-09-08.txt",
+      "pinned_id": "bd042bbfc9c8f902c3a398d963c4cd3ba17b6e54",
+      "pinned_committed_at": "2025-12-22T20:39:14Z",
+      "fetched_at": "2026-09-08T01:42:47.120623+00:00",
+      "sha256": "be4a179b3ac92b7135595b459c2c9867fe681c12209489dd99517db8407a67c6",
+      "n_raw": 789054,
+      "license_note": "MIT (Phishing.Database). ACTIVE 파일 최신 커밋 2025-12-22 — 아카이브 성격",
+      "freshness_note": "ACTIVE 파일의 마지막 갱신 커밋은 2025-12-22이다. 현재 살아있는 피싱이 아니라 역사적 피싱 URL 아카이브로 해석해야 한다."
+    },
+    {
+      "name": "openphish",
+      "label": 1,
+      "url": "https://raw.githubusercontent.com/openphish/public_feed/<commit>/feed.txt",
+      "raw_path": "data/external/raw/openphish_history_2026-09-08.txt",
+      "pinned_id": "639ce24855e6b81f5c04f2f2410b9bfc499aa320;c7fe5e7382a66bd5a3a98bda0789d75214cdbf34;615b9da9fe9cf5634636417981bc3111efb5896c;a788939590ade64a38e0cb6efff134fb49be099b;0ba365f53beea528c5df21aaf54f5d520b17c12e",
+      "n_commits_listed": 180,
+      "n_commits_fetched": 180,
+      "window_days": 90,
+      "since": "2026-06-10T01:42:47Z",
+      "fetched_at": "2026-09-08T01:44:23.445967+00:00",
+      "sha256": "1bae7823690a9cd3c5f5d3b7cc9b676e5907e963491005cd1a9afd8501f80276",
+      "n_raw": 43990,
+      "license_note": "OpenPhish community feed, openphish.com/terms.html (비상업 연구, 재배포 금지)",
+      "method_note": "shallow clone 대신 GitHub API 커밋 목록 + 커밋별 raw feed.txt 누적. 리포 전체를 내려받지 않는다."
+    },
+    {
+      "name": "commoncrawl",
+      "label": 0,
+      "url": "https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-34/cc-index-table.paths.gz",
+      "raw_path": "data/external/raw/cc_urls_2026-09-08.csv.gz",
+      "parsed_path": "data/external/commoncrawl_urls_2026-09-08.csv",
+      "pinned_id": "CC-MAIN-2026-34",
+      "row_groups_used": [
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00099-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1496962
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00054-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1503988
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00003-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1646511
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00034-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1449353
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00211-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1509224
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00103-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1555258
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00283-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1518530
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00276-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1470001
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00057-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1371408
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00088-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1709900
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00101-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1520523
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00149-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1475517
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00178-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1492911
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00292-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1735020
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00240-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1409620
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00157-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1385807
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00151-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1513995
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00013-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1460369
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00188-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1420617
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00219-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1416297
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00142-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1464730
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00080-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1432858
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00143-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1522539
+        },
+        {
+          "part": "cc-index/table/cc-main/warc/crawl=CC-MAIN-2026-34/subset=warc/part-00127-613c35b3-6c54-48c6-8b12-0c082d329687.c000.zstd.parquet",
+          "row_group": 0,
+          "n_rows": 1478761
+        }
+      ],
+      "n_parts_available": 300,
+      "fetched_at": "2026-09-08T01:47:21.128881+00:00",
+      "sha256": "c827ec8593c0caa2dfc028a7e5696d9728cca04db285cba130b746b2aa9d68a9",
+      "n_raw": 35960699,
+      "n_after_tranco_join": 9447020,
+      "n_after_domain_cap": 62520,
+      "per_domain_cap": 8,
+      "tranco_list_id": "GQJ9K",
+      "license_note": "Common Crawl terms-of-use, crawl CC-MAIN-2026-34"
+    }
+  ],
+  "excluded_sources": {
+    "phishtank": "HTTP 403 (Cloudflare). 앱 키 발급 사실상 중단",
+    "urlhaus": "threat 컬럼 100% malware_download — 피싱 라벨 아님"
+  },
+  "counts": {
+    "n_raw": 895564,
+    "n_dropped_empty_url": 0,
+    "n_dropped_unknown_label": 0,
+    "n_dropped_empty_after_norm": 0,
+    "n_conflicting_urls": 0,
+    "n_dropped_label_conflict": 0,
+    "n_dropped_duplicate": 80105,
+    "n_dropped_hosting_blocklist": 0,
+    "n_benign_on_phish_domains": 374,
+    "n_dropped_phish_domain_from_benign": 374,
+    "n_overlap_exact_url_vs_webphish": 3898,
+    "n_overlap_etld1_vs_webphish": 199257,
+    "n_webphish_groups_seen_in_external": 3021,
+    "n_dropped_vs_webphish": 199257,
+    "n_final": 615828,
+    "n_final_benign": 60824,
+    "n_final_phishing": 555004,
+    "n_groups": 236684,
+    "by_source": {
+      "phishdb": 523541,
+      "commoncrawl": 60824,
+      "openphish": 31463
+    }
+  },
+  "ext_b2_counts": {
+    "n_raw": 883044,
+    "n_dropped_empty_url": 0,
+    "n_dropped_unknown_label": 0,
+    "n_dropped_empty_after_norm": 0,
+    "n_conflicting_urls": 10,
+    "n_dropped_label_conflict": 20,
+    "n_dropped_duplicate": 79282,
+    "n_dropped_hosting_blocklist": 13,
+    "n_benign_on_phish_domains": 1012,
+    "n_dropped_phish_domain_from_benign": 1012,
+    "n_overlap_exact_url_vs_webphish": 3900,
+    "n_overlap_etld1_vs_webphish": 200454,
+    "n_webphish_groups_seen_in_external": 4651,
+    "n_dropped_vs_webphish": 200454,
+    "n_final": 602263,
+    "n_final_benign": 47268,
+    "n_final_phishing": 554995,
+    "n_groups": 274838,
+    "by_source": {
+      "phishdb": 523532,
+      "tranco": 47268,
+      "openphish": 31463
+    }
+  },
+  "elapsed_sec": 33.5
+}

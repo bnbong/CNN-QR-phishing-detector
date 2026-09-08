@@ -116,3 +116,6 @@ data/*.xlsx
 # 리포트 산출물은 커밋한다 (위 *.csv / *.png 규칙 예외)
 !reports/*.csv
 !reports/*.png
+
+# 외부 수집 원본·중간 산출물은 커밋하지 않는다 (약관·용량). 메타는 reports/external/에 커밋.
+data/external/

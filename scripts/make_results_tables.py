@@ -326,6 +326,8 @@ def motif_cell(motifs: dict[str, dict], stratum: str, key: str) -> str:
     rep = (motifs.get(stratum, {}).get("representations") or {}).get(key)
     if not rep:
         return "—"
+    # motif 러너의 results.json은 표현별 dict 안에만 집계값을 담는다(최상위 pooling 필드 없음).
+    # auroc_pooled/auroc_pooled_ci가 짝을 이루므로 점추정도 같은 풀링에서 읽어야 CI와 맞는다.
     lo, hi = (rep.get("auroc_pooled_ci") or [None, None])[:2]
     point = rep.get("auroc_pooled")
     if point is None:
@@ -484,12 +486,20 @@ H_LABEL = {
 }
 
 
-def hypotheses_table() -> str:
-    """H1~H4 판정 표 — 방향과 기각 여부만.
+def _p(value: float) -> str:
+    """Holm 보정 p값. 2000회 부트스트랩의 해상도(1/2001)를 넘어가면 부등호로 쓴다."""
+    v = float(value)
+    if v < 0.001:
+        return "<0.001"
+    return f"{v:.3f}"
 
-    추정치·CI·p값은 시드 간 점수 척도 불일치로 왜곡돼 있어 싣지 않는다
-    (시드 층화 부트스트랩으로 재집계 예정). 효과의 부호와 Holm 보정 후
-    판정 방향만 보고한다.
+
+def hypotheses_table() -> str:
+    """H1~H4 판정 표 — 층별 추정치·95% CI·Holm 보정 p·판정.
+
+    ``reports/hypotheses.json``은 시드 층화 클러스터 부트스트랩(``pooling:
+    seed_stratified``)으로 만든 값이다. 시드별로 AUROC를 계산해 평균하므로
+    시드 간 점수 척도 차이가 통합 추정치를 끌고 가지 않는다.
     """
     path = REPORTS / "hypotheses.json"
     if not path.exists():
@@ -500,17 +510,151 @@ def hypotheses_table() -> str:
         return ""
     rows = []
     for h in ("H1", "H2", "H3", "H4"):
-        cells = []
         for s in STRATA:
             t = tests.get((h, s))
             if t is None:
-                cells.append("—")
                 continue
-            sign = "+" if float(t["estimate"]) > 0 else "−"
-            verdict = "기각" if t.get("reject") else "비기각"
-            cells.append(f"{sign} / {verdict}")
-        rows.append((f"{h}. {H_LABEL[h]}", cells))
-    return strata_table("가설 (방향 / Holm 보정 후 판정)", rows)
+            lo, hi = t["ci"][:2]
+            rows.append(
+                [
+                    f"{h}. {H_LABEL[h]}",
+                    s,
+                    f"{float(t['estimate']):+.3f}",
+                    f"[{float(lo):+.3f}, {float(hi):+.3f}]",
+                    _p(t["p_holm"]),
+                    "기각" if t.get("reject") else "비기각",
+                ]
+            )
+    return table(
+        ["가설", "층", "ΔAUROC 추정치", "95% CI", "p (Holm)", "판정"],
+        rows,
+    )
+
+
+# --------------------------------------------------------------------------- 전이(F)
+TRANSFER_MODE_LABEL = {
+    "a": "F-a zero-shot (WebPhish→외부)",
+    "b": "F-b in-domain (외부→외부)",
+    "c": "F-c 역방향 (외부→WebPhish)",
+}
+TRANSFER_BASELINES = [
+    ("charngram_lr", "char n-gram LR"),
+    ("bytehist_lr", "byte-hist LR"),
+    ("motif_patch3_lr", "motif-hist LR (3x3)"),
+    ("length_lr", "length LR (게이트)"),
+    ("version_lr", "version LR (게이트)"),
+]
+
+
+def load_transfer() -> dict[tuple[str, str, str], dict]:
+    """``reports/transfer/{source_tag}/{mode}/{condition_id}/{stratum}/results.json``.
+
+    안 돌렸으면 빈 dict. 키는 ``(source_tag, mode, stratum)``이다.
+    """
+    out: dict[tuple[str, str, str], dict] = {}
+    root = REPORTS / "transfer"
+    if not root.exists():
+        return out
+    for path in sorted(root.glob("*/*/*/*/results.json")):
+        stratum, _cid, mode, tag = (
+            path.parent.name,
+            path.parent.parent.name,
+            path.parent.parent.parent.name,
+            path.parent.parent.parent.parent.name,
+        )
+        try:
+            out[(tag, mode, stratum)] = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def load_motif_replication() -> dict[tuple[str, str], dict]:
+    out: dict[tuple[str, str], dict] = {}
+    root = REPORTS / "transfer"
+    if not root.exists():
+        return out
+    for path in sorted(root.glob("*/motif_replication/*/replication.json")):
+        tag = path.parent.parent.parent.name
+        try:
+            out[(tag, path.parent.name)] = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def transfer_table() -> str:
+    """F-a/F-b/F-c × 층 × {CNN, 텍스트 기준선, 순열 바닥선} + motif 재현성 (설계 6절).
+
+    바닥선은 그룹 단위 라벨 순열의 97.5 백분위다. CNN AUROC의 CI 하한이 이 값 이하면
+    "우연과 구분 불가"(collapse)다.
+    """
+    data = load_transfer()
+    if not data:
+        return ""
+    tags = sorted({k[0] for k in data})
+    out: list[str] = []
+    for tag in tags:
+        strata = sorted({k[2] for k in data if k[0] == tag})
+        rows: list[list[str]] = []
+        for mode in ("a", "b", "c"):
+            for st in strata:
+                r = data.get((tag, mode, st))
+                if not r or "error" in r:
+                    continue
+                m = r.get("model", {})
+                ci = m.get("auroc_pooled_ci") or [None, None]
+                nb = r.get("null_permutation", {})
+                base = r.get("baselines", {})
+                rows.append(
+                    [
+                        TRANSFER_MODE_LABEL.get(mode, mode),
+                        st,
+                        f3(m.get("auroc_mean")),
+                        f"[{f3(ci[0])}, {f3(ci[1])}]",
+                        f3(nb.get("ci_upper")),
+                        *[f3((base.get(k) or {}).get("auroc")) for k, _ in TRANSFER_BASELINES],
+                        str(r.get("verdict", {}).get("label", "—")),
+                    ]
+                )
+        if not rows:
+            continue
+        out.append(f"**외부 소스 `{tag}`**\n")
+        out.append(
+            table(
+                ["실행", "층", "CNN AUROC", "95% CI", "순열 바닥선(97.5%)",
+                 *[label for _, label in TRANSFER_BASELINES], "판정"],
+                rows,
+            )
+        )
+    rep = load_motif_replication()
+    if rep:
+        rows = []
+        for (tag, st), d in sorted(rep.items()):
+            if "error" in d or "skipped" in d:
+                continue
+            sp, sm, jc = d["spearman_logodds"], d["sign_match_rate"], d["jaccard_topk"]
+            rows.append(
+                [
+                    tag,
+                    st,
+                    f"{f3(sp['rho'])} [{f3(sp['ci'][0])}, {f3(sp['ci'][1])}]",
+                    f"{f3(sm['value'])} [{f3(sm['ci'][0])}, {f3(sm['ci'][1])}]",
+                    f"{f3(jc['value'])} (귀무 상한 {f3(jc['null_ci'][1])})",
+                    str(d.get("verdict", {}).get("label", "—")),
+                ]
+            )
+        if rows:
+            out.append("**motif 재현성 (설계 4절)**\n")
+            out.append(
+                table(
+                    ["소스", "층", "Spearman ρ (512종)", "부호 일치율 (상위 20)",
+                     "Jaccard (상위 20)", "판정"],
+                    rows,
+                )
+            )
+    return "\n".join(out)
+
 
 
 SECTIONS = [
@@ -525,6 +669,7 @@ SECTIONS = [
     ("어휘 프로브 (RQ2 · D안)", table_probes),
     ("인과 motif 절제 (RQ3 · C안)", table_occlusion),
     ("가설 검정 판정 (H1~H4)", hypotheses_table),
+    ("외부 검증 전이 (F) · motif 재현성", transfer_table),
 ]
 
 

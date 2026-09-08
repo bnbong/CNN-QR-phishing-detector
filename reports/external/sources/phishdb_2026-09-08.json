@@ -1,0 +1,13 @@
+{
+  "name": "phishdb",
+  "label": 1,
+  "url": "https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-links-ACTIVE.txt",
+  "raw_path": "data/external/raw/phishdb_active_2026-09-08.txt",
+  "pinned_id": "bd042bbfc9c8f902c3a398d963c4cd3ba17b6e54",
+  "pinned_committed_at": "2025-12-22T20:39:14Z",
+  "fetched_at": "2026-09-08T01:42:47.120623+00:00",
+  "sha256": "be4a179b3ac92b7135595b459c2c9867fe681c12209489dd99517db8407a67c6",
+  "n_raw": 789054,
+  "license_note": "MIT (Phishing.Database). ACTIVE 파일 최신 커밋 2025-12-22 — 아카이브 성격",
+  "freshness_note": "ACTIVE 파일의 마지막 갱신 커밋은 2025-12-22이다. 현재 살아있는 피싱이 아니라 역사적 피싱 URL 아카이브로 해석해야 한다."
+}

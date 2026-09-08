@@ -53,6 +53,7 @@ __all__ = [
     "condition_id",
     "run_p0",
     "run_matrix",
+    "run_template_split",
     "run_explain",
     "run_probes",
     "run_occlusion",
@@ -61,6 +62,7 @@ __all__ = [
     "aggregate_reports",
     "reaggregate",
     "run_motifs",
+    "run_transfer",
     "load_matrix",
 ]
 
@@ -191,13 +193,19 @@ def _reports_dir(cfg: Any) -> Path:
 
 
 # ----------------------------------------------------------------------- data prep
-def _prepare_frame(cfg: Any, stratum: str, seed: int) -> tuple[pd.DataFrame, dict]:
+def _prepare_frame(
+    cfg: Any, stratum: str, seed: int, *, frame: pd.DataFrame | None = None
+) -> tuple[pd.DataFrame, dict]:
     """load → path filter → 층 필터 → **그룹 분할 → split별 길이 매칭**.
 
     매칭을 분할보다 **뒤에** 두는 것이 핵심이다. 층 전체에서 한 번 맞춰봐야
     :func:`group_split`의 그룹 배정과 5% 상한 다운샘플이 행을 통째로 옮기거나 지우면서
     split 안의 길이 주변분포를 다시 깨뜨린다. 매칭은 행 제거만 하므로 순서를 바꿔도
     split 간 그룹 교집합 0은 유지된다.
+
+    ``frame``이 주어지면 ``load_webphish`` 단계만 건너뛰고 **이후 절차는 완전히 같다**.
+    외부 검증(F)이 쓰는 주입 지점이다. 외부용으로 이 절차를 복제하면 두 경로가 조용히
+    갈라져 F-a 대 in-domain 비교가 무의미해진다(설계 7.1).
     """
     from qrphish.splits import (
         assert_length_matched,
@@ -214,13 +222,17 @@ def _prepare_frame(cfg: Any, stratum: str, seed: int) -> tuple[pd.DataFrame, dic
     url_mode = str(_get(cond, "url_mode", "norm"))
     if url_mode not in ("raw", "norm"):
         raise ValueError(f"condition.url_mode는 'raw'|'norm'이어야 한다 (got {url_mode!r})")
-    df, stats = load_webphish(
-        Path(str(_get(data, "csv_path"))),
-        url_mode,  # type: ignore[arg-type]
-        category_col=str(_get(data, "category_col", "Category")),
-        url_col=str(_get(data, "url_col", "Data")),
-        positive_label=str(_get(data, "positive_label", "spam")),
-    )
+    if frame is not None:
+        df = frame.reset_index(drop=True).copy()
+        stats = {"injected_frame": True, "n_rows": int(len(df))}
+    else:
+        df, stats = load_webphish(
+            Path(str(_get(data, "csv_path"))),
+            url_mode,  # type: ignore[arg-type]
+            category_col=str(_get(data, "category_col", "Category")),
+            url_col=str(_get(data, "url_col", "Data")),
+            positive_label=str(_get(data, "positive_label", "spam")),
+        )
     diag: dict = {"load_stats": stats, "n_loaded": int(len(df))}
 
     if _get(cond, "path_filter", False):
@@ -242,6 +254,43 @@ def _prepare_frame(cfg: Any, stratum: str, seed: int) -> tuple[pd.DataFrame, dic
     if len(df) == 0:
         diag["n_after_match"] = 0
         return df, diag
+
+    # --- 그룹 키 선택 훅 (설계 5절 G) -------------------------------------
+    # "etld1"이면 1차 실험과 완전히 동일하다. "etld1_template"이면 eTLD+1과
+    # URL 경로 템플릿 클러스터를 union-find로 합친 키로 group 컬럼을 갈아끼운다.
+    # splits.py는 손대지 않는다 — group 값만 바뀌고 group_split은 그대로 쓴다.
+    split_cfg = _get(cfg, "split")
+    group_key = str(_get(split_cfg, "group_key", "etld1"))
+    if group_key not in ("etld1", "etld1_template"):
+        raise ValueError(
+            f"split.group_key는 'etld1'|'etld1_template'이어야 한다 (got {group_key!r})"
+        )
+    diag["group_key"] = group_key
+    if group_key == "etld1_template":
+        from qrphish.templates import (
+            combined_group_key,
+            template_diagnostics,
+            template_groups,
+        )
+
+        df = df.copy()
+        df["group_etld1"] = df["group"]  # 원래 eTLD+1 키를 보존한다
+        tpl = template_groups(
+            df["url"].tolist(),
+            threshold=float(_get(split_cfg, "template_threshold", 0.7)),
+            k=int(_get(split_cfg, "template_shingle", 3)),
+            min_template_tokens=int(_get(split_cfg, "min_template_tokens", 3)),
+        )
+        df["group"] = combined_group_key(df["group_etld1"].tolist(), tpl.tolist())
+        diag["template"] = {
+            "clusters": template_diagnostics(tpl.tolist(), df["label"].tolist()),
+            "combined": template_diagnostics(df["group"].tolist(), df["label"].tolist()),
+            "n_groups_etld1": int(df["group_etld1"].nunique()),
+            "n_groups_after_union": int(df["group"].nunique()),
+            "threshold": float(_get(split_cfg, "template_threshold", 0.7)),
+            "shingle_k": int(_get(split_cfg, "template_shingle", 3)),
+            "min_template_tokens": int(_get(split_cfg, "min_template_tokens", 3)),
+        }
 
     ratios = tuple(_get(_get(cfg, "split"), "ratios", (0.70, 0.15, 0.15)))
     df, sdiag = group_split(
@@ -504,14 +553,26 @@ def _pool_preds(
     }
 
 
-def _run_one_seed(cfg: Any, stratum: str, seed: int, cond_dir: Path, entry: dict) -> dict:
-    """한 (층, 시드) 실행 → per_seed 항목."""
+def _run_one_seed(
+    cfg: Any,
+    stratum: str,
+    seed: int,
+    cond_dir: Path,
+    entry: dict,
+    *,
+    frame: pd.DataFrame | None = None,
+) -> dict:
+    """한 (층, 시드) 실행 → per_seed 항목.
+
+    ``frame``은 :func:`_prepare_frame`으로 그대로 넘어간다. F-b(외부 자체 학습)가
+    학습 경로를 복제하지 않고 이 함수를 그대로 재사용하기 위한 주입 지점이다.
+    """
     cond = _get(cfg, "condition")
     qr = _get(cfg, "qr")
     mcfg = _get(cfg, "model")
     ecfg = _get(cfg, "eval")
 
-    df, diag = _prepare_frame(cfg, stratum, seed)
+    df, diag = _prepare_frame(cfg, stratum, seed, frame=frame)
     if len(df) == 0:
         return {"seed": seed, "error": "empty stratum after matching"}
 
@@ -698,6 +759,124 @@ def run_matrix(cfg: Any, phase: str, matrix_path: Path | str = "configs/matrix.y
                              encoding="utf-8")
             results.append(res)
     return results
+
+
+def _test_urls(df: pd.DataFrame) -> set[str]:
+    return set(df.loc[df["split"] == "test", "url"].astype(str))
+
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a and not b:
+        return 1.0
+    return len(a & b) / len(a | b)
+
+
+def run_template_split(cfg: Any, strata: list[str] | None = None) -> dict:
+    """G(템플릿 단위 분할)의 **사전 진단**만 수행한다. 학습은 하지 않는다.
+
+    P0와 같은 성격이다. 층마다 eTLD+1 분할과 템플릿 합집합 분할을 각각 돌려
+    (1) 템플릿 클러스터 크기 분포, (2) 분할 후 클래스비·최대 그룹 점유율,
+    (3) **두 분할의 test 집합 자카드**를 남긴다. (3)이 곧 "1차 test 행 중 몇 %가
+    템플릿 분할에서 train으로 이동했는가"의 직접 측정이다.
+
+    실제 재학습은 ``run_matrix(cfg, "P2")``의 ``template_split`` 항목이 담당한다
+    (조건 id가 달라 1차 아티팩트를 덮어쓰지 않는다).
+
+    산출물: ``reports/template_split/{stratum}/diagnostics.json``
+    """
+    out_root = _reports_dir(cfg) / "template_split"
+    seeds = list(_get(cfg, "seed_list", [0]))
+    targets = list(strata) if strata else _surviving_strata(cfg)
+    cfg_etld1 = apply_overrides(cfg, {"split.group_key": "etld1"})
+    cfg_tpl = apply_overrides(cfg, {"split.group_key": "etld1_template"})
+
+    summary: dict[str, Any] = {
+        "created_at": datetime.now(UTC).isoformat(),
+        "git_sha": git_sha(),
+        "condition_id": condition_id(cfg),
+        "seeds": [int(s) for s in seeds],
+        "strata": {},
+    }
+    for stratum in targets:
+        per_seed: list[dict] = []
+        template_diag: dict | None = None
+        for seed in seeds:
+            try:
+                df_e, diag_e = _prepare_frame(cfg_etld1, stratum, seed)
+                df_t, diag_t = _prepare_frame(cfg_tpl, stratum, seed)
+            except Exception as exc:  # 한 층이 터져도 나머지 층은 계속 본다
+                print(f"[ERROR] template_split {stratum} seed{seed}: {exc!r}")
+                traceback.print_exc()
+                per_seed.append({"seed": int(seed), "error": repr(exc)})
+                continue
+            if template_diag is None:
+                template_diag = diag_t.get("template")
+            te, tt = _test_urls(df_e), _test_urls(df_t)
+            per_seed.append(
+                {
+                    "seed": int(seed),
+                    "etld1": _split_summary(df_e, diag_e),
+                    "etld1_template": _split_summary(df_t, diag_t),
+                    "test_set_jaccard": float(_jaccard(te, tt)),
+                    "n_test_etld1": len(te),
+                    "n_test_template": len(tt),
+                    # 1차 test 행 중 템플릿 분할에서 test에 남지 않은 비율
+                    "frac_stage1_test_rows_left_test": (
+                        float(len(te - tt) / len(te)) if te else 0.0
+                    ),
+                }
+            )
+        ok = [r for r in per_seed if "error" not in r]
+        entry: dict[str, Any] = {
+            "template": template_diag,
+            "per_seed": per_seed,
+            "n_seeds_ok": len(ok),
+        }
+        if ok:
+            entry["mean"] = {
+                "test_set_jaccard": float(np.mean([r["test_set_jaccard"] for r in ok])),
+                "frac_stage1_test_rows_left_test": float(
+                    np.mean([r["frac_stage1_test_rows_left_test"] for r in ok])
+                ),
+                "n_after_match_etld1": float(np.mean([r["etld1"]["n"] for r in ok])),
+                "n_after_match_template": float(
+                    np.mean([r["etld1_template"]["n"] for r in ok])
+                ),
+                "max_group_frac_observed_template": float(
+                    np.mean([r["etld1_template"]["max_group_frac_observed"] for r in ok])
+                ),
+            }
+        summary["strata"][stratum] = entry
+        d = out_root / stratum
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "diagnostics.json").write_text(
+            json.dumps(entry, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+    out_root.mkdir(parents=True, exist_ok=True)
+    (out_root / "diagnostics.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    return summary
+
+
+def _split_summary(df: pd.DataFrame, diag: dict) -> dict:
+    """진단 JSON에 담을 분할 요약(전체 diag는 크므로 필요한 것만 뽑는다)."""
+    sd = diag.get("split", {})
+    return {
+        "n": int(len(df)),
+        "n_in_stratum": int(diag.get("n_in_stratum", 0)),
+        "n_after_split": int(diag.get("n_after_split", 0)),
+        "n_groups": int(sd.get("n_groups", 0)),
+        "groups_disjoint": bool(sd.get("groups_disjoint", False)),
+        "max_group_frac_observed": float(sd.get("max_group_frac_observed", 0.0)),
+        "n_downsampled_groups": int(len(sd.get("downsampled_groups", []))),
+        "top5_test_group_frac": float(sd.get("top5_test_group_frac", 0.0)),
+        "pos_ratio": {
+            name: float(info.get("pos_ratio", 0.0))
+            for name, info in (sd.get("per_split") or {}).items()
+        },
+        "length_match_ok": bool(diag.get("length_match", {}).get("all_identical", True)),
+    }
 
 
 def _pooled_auroc(cfg, cid, stratum, seeds, n_boot: int) -> tuple[float, list[float]]:
@@ -2346,3 +2525,751 @@ def run_occlusion(
         out[stratum] = res
         print(f"[occlusion] {stratum} 종료 ({res['runtime_sec']}s)", flush=True)
     return out
+
+
+# ------------------------------------------------------------------------ transfer
+# 외부 검증(F). 설계 스펙 `EXTERNAL_VALIDATION_DESIGN.md` 3·4·6·7절.
+# 세부 계산은 qrphish/transfer.py에 있고, 여기서는 층·시드 루프와 산출물 경로만 다룬다.
+TRANSFER_MODES = ("a", "b", "c", "d")
+# F-a 베이스라인·motif를 fit할 WebPhish train 행 수 상한. 전이 판정의 주 지표는 CNN AUROC라
+# 베이스라인은 "함께 무너지는가"만 보면 되고, char n-gram TF-IDF를 수십만 행에서 fit하면
+# 로컬 CPU 실행 예산을 혼자 다 쓴다.
+TRANSFER_FIT_CAP = 30000
+# motif 히스토그램은 URL당 QR 인코딩 + sliding window라 훨씬 비싸다. 따로 더 낮게 잡는다.
+TRANSFER_MOTIF_FIT_CAP = 4000
+TRANSFER_MOTIF_EVAL_CAP = 8000
+
+
+def _transfer_report_dir(cfg: Any, source_tag: str, mode: str, cid: str, stratum: str) -> Path:
+    """``reports/transfer/{source_tag}/{mode}/{condition_id}/{stratum}/`` (설계 7.5).
+
+    mode와 조건 id를 경로에 넣지 않으면 F-a/F-b/F-c 산출물이 서로 덮어쓴다.
+    """
+    d = _reports_dir(cfg) / "transfer" / source_tag / mode / cid / stratum
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _external_cond_dir(cfg: Any, source_tag: str, mode: str, cid: str) -> Path:
+    """``artifacts/external/{source_tag}/{mode}/{condition_id}/``.
+
+    1차 체크포인트가 있는 ``artifacts/{condition_id}/``를 절대 침범하면 안 된다
+    (설계 9절 #19). 외부 층은 전부 이 아래로 간다.
+
+    ``mode``를 경로에 넣지 않으면 F-a/F-b/F-c가 같은 층에서 ``grids.npz``·``meta.parquet``·
+    ``results.json``을 서로 덮어쓴다(F-b는 외부 학습 분할, F-a는 평가 전용 분할이라 내용이
+    다르다). 리포트 경로(:func:`_transfer_report_dir`)와 같은 층위를 쓴다.
+    """
+    return _out_root(cfg) / "external" / source_tag / mode / cid
+
+
+def _webphish_results(cfg: Any, cid: str, stratum: str) -> dict | None:
+    return _read_json_safe(_out_root(cfg) / cid / stratum / "results.json")
+
+
+def _read_json_safe(path: Path) -> dict | None:
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _seed_thresholds(results: dict | None) -> dict[int, float]:
+    """WebPhish ``results.json``의 시드별 val 임계값. zero-shot은 이 값을 재사용한다."""
+    if not results:
+        return {}
+    out = {}
+    for s in results.get("per_seed", []):
+        if "error" in s or s.get("threshold") is None:
+            continue
+        out[int(s["seed"])] = float(s["threshold"])
+    return out
+
+
+def _subsample(df: pd.DataFrame, cap: int, seed: int) -> pd.DataFrame:
+    if cap <= 0 or len(df) <= cap:
+        return df.reset_index(drop=True)
+    return df.sample(n=cap, random_state=seed).reset_index(drop=True)
+
+
+def _split_mask(df: pd.DataFrame, code: int) -> np.ndarray:
+    from qrphish.dataset import SPLIT_CODE
+
+    vals = [SPLIT_CODE[s] if isinstance(s, str) else int(s) for s in df["split"].tolist()]
+    return np.asarray(vals, dtype=np.int64) == code
+
+
+def _eval_rows_mask(df: pd.DataFrame, eval_rows: str) -> np.ndarray:
+    """F-a 평가 행. 주 결과는 ``all``(외부는 학습에 전혀 쓰지 않으므로 전체가 평가 대상),
+    F-b와 같은 행으로 쌍체 비교하고 싶으면 ``test``."""
+    if eval_rows == "all":
+        return np.ones(len(df), dtype=bool)
+    if eval_rows == "test":
+        return _split_mask(df, 2)
+    raise ValueError(f"eval_rows는 'all'|'test'여야 한다 (got {eval_rows!r})")
+
+
+def _predict_with_checkpoint(cfg: Any, ckpt_path: Path, seed_dir: Path, rows: np.ndarray):
+    """저장된 체크포인트로 ``seed_dir``의 층 아티팩트 일부 행을 평가한다.
+
+    ``ds.n != ckpt["n"]``이면 하드 실패다. v5plus처럼 버전 합집합 층에서 외부 데이터의
+    최대 버전이 다르면 격자 크기가 달라져 같은 CNN을 쓸 수 없다(설계 3.4 #4).
+    """
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    features, mask_mode = _ckpt_dataset_spec(cfg, ckpt, ckpt_path)
+    arr = load_stratum_arrays(seed_dir)
+    meta = pd.read_parquet(seed_dir / "meta.parquet")
+    ds = QRGridDataset(
+        arr["X_packed"], arr["y"], int(arr["n"]), arr["versions"], int(arr["ec"]),
+        features=features, mask_mode=mask_mode,
+    )
+    if int(ds.n) != int(ckpt["n"]):
+        raise ValueError(
+            f"격자 크기가 체크포인트와 다르다: ds.n={ds.n}, ckpt['n']={ckpt['n']} "
+            f"({ckpt_path}). 같은 층이라도 버전 분포가 다르면 같은 CNN을 쓸 수 없다 "
+            "(설계 3.4 #4)."
+        )
+    model = build_model(ckpt["arch"], ds.n, ds.canonical_data_mask)
+    model.load_state_dict(ckpt["state_dict"])
+    model.eval()
+
+    sub = copy.copy(ds)
+    sub.indices = np.nonzero(np.asarray(rows))[0]
+    loader = DataLoader(sub, batch_size=256, shuffle=False, num_workers=0)
+    y, p = predict_probs(model, loader, device=pick_device())
+    return y, p, meta, arr
+
+
+def _motif_hists(cfg: Any, frames: dict[str, pd.DataFrame], cache: dict) -> dict:
+    """여러 프레임에 대해 같은 ``n_max``로 motif 히스토그램을 만든다.
+
+    ``n_max``가 프레임마다 다르면 ``data_mask_for``가 달라져 창 개수가 달라지고, 두
+    히스토그램이 비교 불가능해진다. 그래서 모든 프레임의 최대 버전에서 한 번에 정한다.
+    """
+    vmax = max(int(df["version"].max()) for df in frames.values() if len(df))
+    n_max = 4 * vmax + 17
+    return {k: _motif_features(cfg, df, cache, n_max)[0] for k, df in frames.items()}
+
+
+def _transfer_baseline_block(
+    cfg: Any,
+    stratum: str,
+    seed: int,
+    ext_eval: pd.DataFrame,
+    *,
+    fit_frame: pd.DataFrame | None,
+    fit_on: str,
+    with_motif: bool,
+) -> dict:
+    """F-a/F-c 베이스라인: ``fit_frame``(train)에서 fit → 외부 평가 행에 apply.
+
+    설계 3.7 — CNN만 무너지는지, 텍스트 기준선도 함께 무너지는지가 해석 매트릭스를 가른다.
+    """
+    from qrphish.transfer import transfer_baselines
+
+    if fit_frame is None or len(fit_frame) == 0:
+        return {}
+    base = transfer_baselines(
+        _subsample(fit_frame, TRANSFER_FIT_CAP, seed), ext_eval, seed, fit_on=fit_on
+    )
+    if not with_motif:
+        return base
+    # motif 히스토그램은 URL당 QR 인코딩이 필요해 훨씬 비싸다. fit/eval 모두 따로 캡을 걸고,
+    # 실패하더라도 전이 판정(CNN AUROC 대 순열 바닥선)은 그대로 진행한다.
+    try:
+        fit_m = _subsample(fit_frame, TRANSFER_MOTIF_FIT_CAP, seed)
+        ev_m = _subsample(ext_eval, TRANSFER_MOTIF_EVAL_CAP, seed)
+        H = _motif_hists(cfg, {"fit": fit_m, "eval": ev_m}, {})
+        motif = {
+            key: {"H_fit": H["fit"][key], "H_eval": H["eval"][key]}
+            for key in ("patch3", "pyramid3")
+        }
+        got = transfer_baselines(fit_m, ev_m, seed, fit_on=fit_on, motif=motif)
+        base.update({k: v for k, v in got.items() if k.startswith("motif_")})
+    except Exception as exc:  # motif는 보조 지표다
+        print(f"[WARN] transfer motif 베이스라인 실패 {stratum} seed{seed}: {exc!r}")
+    return base
+
+
+def _transfer_data_block(df: pd.DataFrame, sm: Any, eval_rows: str, tier: str) -> dict:
+    ev = df
+    return {
+        "n_total": int(len(ev)),
+        "n_benign": int((ev["label"] == 0).sum()),
+        "n_phishing": int((ev["label"] == 1).sum()),
+        "base_rate": float(ev["label"].mean()) if len(ev) else float("nan"),
+        "n_groups": int(ev["group"].nunique()),
+        "tier": tier,
+        "eval_rows": eval_rows,
+        "split_diagnostics": {
+            "top5_test_group_frac": float(
+                getattr(sm, "extra", {}).get("top5_test_group_frac", 0.0)
+            )
+            if sm is not None
+            else None
+        },
+    }
+
+
+def _transfer_model_block(
+    per_seed: list[dict], n_boot: int, threshold_source: str
+) -> dict:
+    """시드별 예측을 모아 **시드 층화** 그룹 클러스터 부트스트랩으로 CI를 낸다."""
+    from qrphish.evaluate import acc_at, auprc, f1_at
+
+    ok = [d for d in per_seed if "error" not in d]
+    if not ok:
+        return {"auroc_mean": float("nan"), "auroc_per_seed": [], "error": "no usable seed"}
+    aur = [float(auroc_fn(d["y"], d["p"])) for d in ok]
+    y = np.concatenate([d["y"] for d in ok])
+    p = np.concatenate([d["p"] for d in ok])
+    g = np.concatenate([np.asarray(d["group"]).astype(str) for d in ok])
+    s = np.concatenate([np.full(d["y"].size, int(d["seed"]), dtype=np.int64) for d in ok])
+    cb = cluster_bootstrap_by_seed(y, p, g, s, auroc_fn, n_boot=n_boot, seed=0)
+    f1s = [float(f1_at(d["y"], d["p"], float(d["threshold"]))) for d in ok if d.get("threshold")]
+    accs = [float(acc_at(d["y"], d["p"], float(d["threshold"]))) for d in ok if d.get("threshold")]
+    return {
+        "auroc_mean": float(np.mean(aur)),
+        "auroc_sd": float(np.std(aur, ddof=1)) if len(aur) > 1 else 0.0,
+        "auroc_per_seed": aur,
+        "auroc_pooled": float(cb["point"]),
+        "auroc_pooled_ci": [float(cb["lo"]), float(cb["hi"])],
+        "pooling": POOLING_MODE,
+        "auprc_mean": float(np.mean([auprc(d["y"], d["p"]) for d in ok])),
+        "f1_at_val_threshold": float(np.mean(f1s)) if f1s else float("nan"),
+        "acc_at_val_threshold": float(np.mean(accs)) if accs else float("nan"),
+        "threshold_source": threshold_source,
+        "thresholds": [d.get("threshold") for d in ok],
+        "n_boot": int(n_boot),
+        "seeds": [int(d["seed"]) for d in ok],
+    }
+
+
+def _pooled_arrays(per_seed: list[dict]) -> tuple[np.ndarray, ...]:
+    ok = [d for d in per_seed if "error" not in d]
+    return (
+        np.concatenate([d["y"] for d in ok]),
+        np.concatenate([d["p"] for d in ok]),
+        np.concatenate([np.asarray(d["group"]).astype(str) for d in ok]),
+        np.concatenate([np.full(d["y"].size, int(d["seed"]), dtype=np.int64) for d in ok]),
+    )
+
+
+def _fa_one_seed(
+    cfg: Any,
+    cid: str,
+    stratum: str,
+    seed: int,
+    ext_df: pd.DataFrame,
+    ext_cond_dir: Path,
+    eval_rows: str,
+    thresholds: dict[int, float],
+) -> dict:
+    """F-a 한 시드: 외부 프레임 준비 → 층 조립 → WebPhish 체크포인트로 추론."""
+    from qrphish.transfer import build_external_stratum, prepare_external_frame
+
+    df, diag = prepare_external_frame(cfg, ext_df, stratum, seed)
+    if len(df) == 0:
+        return {"seed": seed, "error": "empty external stratum after matching"}
+    seed_dir = ext_cond_dir / stratum / f"seed{seed}"
+    sm = build_external_stratum(cfg, df, stratum, seed, seed_dir)
+    meta = pd.read_parquet(seed_dir / "meta.parquet")
+    rows = _eval_rows_mask(meta, eval_rows)
+    ckpt_path = _seed_dir(cfg, cid, stratum, seed) / "model.pt"
+    if not ckpt_path.exists():
+        raise FileNotFoundError(
+            f"WebPhish 체크포인트가 없다: {ckpt_path}. F-a는 1차 학습 산출물을 재사용한다."
+        )
+    y, p, meta, _arr = _predict_with_checkpoint(cfg, ckpt_path, seed_dir, rows)
+    idx = np.nonzero(rows)[0]
+    return {
+        "seed": seed,
+        "y": np.asarray(y, dtype=np.int64),
+        "p": np.asarray(p, dtype=np.float64),
+        "group": meta["group"].to_numpy()[idx].astype(str),
+        "threshold": thresholds.get(int(seed)),
+        "frame": df,
+        "eval_frame": meta.iloc[idx].reset_index(drop=True),
+        "stratum_meta": sm,
+        "n_after_match": diag.get("n_after_match"),
+    }
+
+
+def _fc_one_seed(cfg: Any, cid: str, stratum: str, seed: int, ext_cond_dir: Path) -> dict:
+    """F-c 한 시드: 외부에서 학습한 체크포인트로 **WebPhish test 행**을 평가한다."""
+    ckpt_path = ext_cond_dir / stratum / f"seed{seed}" / "model.pt"
+    if not ckpt_path.exists():
+        raise FileNotFoundError(f"외부 학습 체크포인트가 없다: {ckpt_path} (F-b를 먼저 돌려야 한다)")
+    wp_dir = _seed_dir(cfg, cid, stratum, seed)
+    arr = load_stratum_arrays(wp_dir)
+    rows = arr["split"].astype(int) == 2
+    y, p, meta, _ = _predict_with_checkpoint(cfg, ckpt_path, wp_dir, rows)
+    idx = np.nonzero(rows)[0]
+    ext_res = _read_json_safe(ext_cond_dir / stratum / "results.json")
+    return {
+        "seed": seed,
+        "y": np.asarray(y, dtype=np.int64),
+        "p": np.asarray(p, dtype=np.float64),
+        "group": meta["group"].to_numpy()[idx].astype(str),
+        "threshold": _seed_thresholds(ext_res).get(int(seed)),
+        "eval_frame": meta.iloc[idx].reset_index(drop=True),
+    }
+
+
+def _transfer_results(
+    cfg: Any,
+    *,
+    mode: str,
+    source_tag: str,
+    cid: str,
+    stratum: str,
+    data: dict,
+    model: dict,
+    null_perm: dict,
+    baselines: dict,
+    in_domain: float | None,
+    gates: dict,
+    extra: dict | None = None,
+) -> dict:
+    """설계 7.5 결과 스키마. 키를 비워서라도 유지한다(표 생성기가 이 키를 읽는다)."""
+    from qrphish.transfer import verdict as _verdict
+
+    auroc = float(model.get("auroc_mean", float("nan")))
+    ci = list(model.get("auroc_pooled_ci", [float("nan"), float("nan")]))
+    text = (baselines.get("charngram_lr") or {}).get("auroc")
+    res = {
+        "schema_version": SCHEMA_VERSION,
+        "phase": "transfer",
+        "mode": mode,
+        "source_tag": source_tag,
+        "condition_id": cid,
+        "stratum": stratum,
+        "git_sha": git_sha(),
+        "qrphish_version": _pkg_version_safe(),
+        "created_at": datetime.now(UTC).isoformat(),
+        "config": _cfg_snapshot(cfg),
+        "data": data,
+        "model": model,
+        "null_permutation": null_perm,
+        "baselines": baselines,
+        "comparison_to_in_domain": {
+            "in_domain_auroc": in_domain,
+            "delta": (float(auroc - in_domain) if in_domain is not None else None),
+            "paired": False,
+            "delta_ci": [None, None],
+            "transfer_gap_to_text": (
+                float(text - auroc) if text is not None and text == text else None
+            ),
+        },
+        "verdict": _verdict(auroc, ci, float(null_perm.get("ci_upper", float("nan"))),
+                            in_domain, gates),
+    }
+    if extra:
+        res.update(extra)
+    return res
+
+
+def run_transfer(
+    cfg: Any,
+    external_csv: str | Path,
+    sources: list[str] | None = None,
+    strata: list[str] | None = None,
+    *,
+    modes: tuple[str, ...] | list[str] = ("a",),
+    source_tag: str | None = None,
+    cid: str = MAIN_CONDITION,
+    eval_rows: str = "all",
+    n_perm: int = 200,
+    dedup: str = "etld1",
+    motif: bool = True,
+    entry: dict | None = None,
+) -> dict:
+    """외부 검증(F). 설계 3·4·6·7절.
+
+    Args:
+        external_csv: 병합·중복제거가 끝난 외부 평가 세트 CSV.
+        sources: ``source`` 컬럼으로 거를 소스 이름들(예: ``["openphish"]``). None이면 전부.
+        strata: 대상 층. None이면 config의 ``strata``.
+        modes: 실행할 F 모드. ``"a"``(zero-shot, 학습 없음) / ``"b"``(외부 자체 학습) /
+            ``"c"``(역방향) / ``"d"``(혼합 — 미구현).
+        eval_rows: F-a 평가 행. 주 결과는 ``"all"``.
+        n_perm: 그룹 단위 라벨 순열 횟수(바닥선).
+
+    Returns:
+        ``{mode: {stratum: results}}``. 부작용으로
+        ``reports/transfer/{source_tag}/{mode}/{cid}/{stratum}/results.json``을 쓴다.
+
+    층·시드 단위로 예외를 잡는다. 한 층이 터져도 나머지 층은 끝까지 간다 — 여러 시간짜리
+    실행에서 가장 나쁜 결과는 마지막 층에서 죽는 것이다.
+    """
+    import time
+
+    from qrphish.transfer import (
+        collection_bias_gate,
+        ensure_version_column,
+        filter_sources,
+        load_external_frame,
+    )
+
+    modes = tuple(str(m) for m in modes)
+    for m in modes:
+        if m not in TRANSFER_MODES:
+            raise ValueError(f"transfer mode는 {TRANSFER_MODES} 중 하나여야 한다 (got {m!r})")
+    if "d" in modes:
+        raise NotImplementedError(
+            "F-d(혼합 학습)는 이번 회차 범위 밖이다. 그룹 분할을 두 데이터셋 합집합 위에서 "
+            "한 번에 해야 하고 origin_lr 베이스라인이 필수다 (설계 3.2)."
+        )
+
+    url_mode = str(_get(_get(cfg, "condition"), "url_mode", "norm"))
+    ext_all, ext_stats = load_external_frame(
+        external_csv, mode=url_mode, dedup=dedup,
+        webphish_csv=_get(_get(cfg, "data"), "csv_path"),
+    )
+    ext_all = filter_sources(ext_all, sources)
+    # QR 버전은 층·시드와 무관하므로 **여기서 한 번만** 계산해 캐시한다. 외부 세트는
+    # 60만 행 규모라 층 × 시드마다 다시 계산하면 같은 일을 20번 반복하게 된다.
+    _t_ver = time.time()
+    ensure_version_column(cfg, ext_all)
+    print(f"[transfer] natural_version 캐시 {len(ext_all)}행 "
+          f"({time.time() - _t_ver:.1f}s)", flush=True)
+    tag = source_tag or Path(str(external_csv)).stem
+    todo = list(strata) if strata else list(_get(cfg, "strata", VERSION_SPECS))
+    seeds = [int(s) for s in _get(cfg, "seed_list", [0])]
+    n_boot = int(_get(_get(cfg, "eval"), "n_bootstrap", 2000))
+    rules = _get(cfg, "stratum_rules")
+    secondary_min = int(_get(rules, "secondary_min_per_class", 300))
+    entry = dict(entry or {})
+    # 수집 단계가 이미 내린 편향 게이트를 승계한다. 길이 매칭된 프레임으로 재계산하면
+    # 수집 단계에서 fail이던 세트가 조용히 통과한다(설계 2.3·6.1).
+    coll_gate = collection_bias_gate(external_csv, _reports_dir(cfg).parent)
+    if coll_gate is not None:
+        print(f"[transfer] 수집 단계 편향 게이트 승계: gate_passed={coll_gate['gate_passed']} "
+              f"({coll_gate['source']}#{coll_gate['block']})", flush=True)
+    else:
+        print("[transfer] 수집 단계 편향 게이트를 못 찾았다 — 층별로 재계산한다.", flush=True)
+
+    out: dict[str, Any] = {m: {} for m in modes}
+    print(f"[transfer] source={tag} n_external={len(ext_all)} modes={modes} strata={todo}",
+          flush=True)
+
+    for stratum in todo:
+        for mode in modes:
+            rpath = _transfer_report_dir(cfg, tag, mode, cid, stratum) / "results.json"
+            if rpath.exists():
+                print(f"[skip] transfer {mode} {stratum} (results.json 존재)", flush=True)
+                out[mode][stratum] = _read_json_safe(rpath)
+                continue
+            t0 = time.time()
+            # F-c는 F-b가 외부에서 학습한 체크포인트를 읽는다 — 그래서 "b" 디렉터리를 본다.
+            ext_cond_dir = _external_cond_dir(cfg, tag, "b" if mode == "c" else mode, cid)
+            print(f"[transfer] F-{mode} {stratum} 시작 — seeds={seeds}", flush=True)
+            try:
+                if mode == "a":
+                    res = _run_transfer_a(
+                        cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir,
+                        eval_rows=eval_rows, n_perm=n_perm, n_boot=n_boot,
+                        secondary_min=secondary_min, motif=motif, ext_stats=ext_stats,
+                        coll_gate=coll_gate,
+                    )
+                elif mode == "b":
+                    res = _run_transfer_b(
+                        cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir,
+                        n_perm=n_perm, n_boot=n_boot, entry=entry, coll_gate=coll_gate,
+                    )
+                else:
+                    res = _run_transfer_c(
+                        cfg, cid, tag, stratum, seeds, ext_cond_dir,
+                        n_perm=n_perm, n_boot=n_boot, coll_gate=coll_gate,
+                    )
+            except Exception as exc:
+                print(f"[ERROR] transfer F-{mode} {stratum}: {exc!r}")
+                traceback.print_exc()
+                res = {
+                    "schema_version": SCHEMA_VERSION, "phase": "transfer", "mode": mode,
+                    "source_tag": tag, "condition_id": cid, "stratum": stratum,
+                    "error": repr(exc), "data": {}, "model": {}, "null_permutation": {},
+                    "baselines": {}, "comparison_to_in_domain": {},
+                    "verdict": {"label": "descriptive_only", "gates_passed": {},
+                                "criteria_version": "prereg_v1"},
+                }
+            res["runtime_sec"] = round(time.time() - t0, 1)
+            rpath.write_text(
+                json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+            )
+            out[mode][stratum] = res
+            print(
+                f"[transfer] F-{mode} {stratum} 종료 ({res['runtime_sec']}s) "
+                f"verdict={res.get('verdict', {}).get('label')}",
+                flush=True,
+            )
+    # 게이트 판단에 쓴 외부 로더 통계는 층과 무관하므로 한 번만 남긴다.
+    (_reports_dir(cfg) / "transfer" / tag / "external_stats.json").write_text(
+        json.dumps(ext_stats, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    return out
+
+
+def _apply_collection_gate(data: dict, coll_gate: dict | None, recomputed_ok: bool) -> bool:
+    """편향 게이트를 결정한다 — 수집 단계 판정이 있으면 그것을 쓴다.
+
+    반환값이 ``gates["bias_direction_ok"]``에 들어간다. 어느 쪽을 썼는지는 ``data``에
+    남겨 결과 JSON만 보고도 추적할 수 있게 한다.
+    """
+    if coll_gate is not None:
+        data["bias_gate"] = {
+            "source": "collection",
+            "gate_passed": bool(coll_gate["gate_passed"]),
+            "path": coll_gate.get("source"),
+            "block": coll_gate.get("block"),
+            "note": coll_gate.get("gate_note"),
+            "recomputed_transfer_stage": bool(recomputed_ok),
+        }
+        return bool(coll_gate["gate_passed"])
+    data["bias_gate"] = {
+        "source": "recomputed_transfer_stage",
+        "gate_passed": bool(recomputed_ok),
+        "note": "수집 단계 bias_diagnostics.json을 못 찾아 층 프레임에서 재계산했다.",
+    }
+    return bool(recomputed_ok)
+
+
+def _run_transfer_a(
+    cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir, *,
+    eval_rows, n_perm, n_boot, secondary_min, motif, ext_stats, coll_gate=None,
+) -> dict:
+    """F-a — zero-shot. 학습하지 않는다. 임계값은 WebPhish val 값을 재사용한다."""
+    from qrphish.dataset import stratum_tier
+    from qrphish.transfer import bias_direction_ok, gates_from, permutation_null
+
+    wp_res = _webphish_results(cfg, cid, stratum)
+    thresholds = _seed_thresholds(wp_res)
+    per_seed: list[dict] = []
+    for s in seeds:
+        try:
+            per_seed.append(
+                _fa_one_seed(cfg, cid, stratum, s, ext_all, ext_cond_dir, eval_rows, thresholds)
+            )
+        except Exception as exc:
+            print(f"[ERROR] transfer F-a {stratum} seed{s}: {exc!r}")
+            traceback.print_exc()
+            per_seed.append({"seed": s, "error": repr(exc)})
+    ok = [d for d in per_seed if "error" not in d]
+    if not ok:
+        raise RuntimeError(f"F-a {stratum}: 모든 시드 실패")
+
+    first = ok[0]
+    ev = first["eval_frame"]
+    per_class_min = int(ev["label"].value_counts().min()) if len(ev) else 0
+    tier = stratum_tier(per_class_min, secondary_min=secondary_min)
+    if per_class_min < secondary_min:
+        # 사전 등록된 층 채택 규칙을 외부 데이터에 맞춰 완화하지 않는다(설계 3.4 #1).
+        print(f"[transfer] F-a {stratum}: 외부 표본 부족 (클래스당 {per_class_min}) — 서술만",
+              flush=True)
+
+    model = _transfer_model_block(per_seed, n_boot, "webphish_val")
+    y, p, g, sd = _pooled_arrays(per_seed)
+    null_perm = permutation_null(y, p, g, sd, n_perm=n_perm, seed=0)
+
+    # 베이스라인은 첫 성공 시드에서만 낸다(WebPhish train에서 fit하는 비용이 크고,
+    # 판정의 주 지표는 CNN AUROC다). 어느 시드였는지 결과에 남긴다.
+    wp_frame, _ = _prepare_frame(cfg, stratum, int(first["seed"]))
+    wp_train = wp_frame[_split_mask(wp_frame, 0)].reset_index(drop=True)
+    baselines = _transfer_baseline_block(
+        cfg, stratum, int(first["seed"]), ev,
+        fit_frame=wp_train, fit_on="webphish_train", with_motif=motif,
+    )
+
+    bias = bias_direction_ok(ev, wp_frame)
+    sm = first.get("stratum_meta")
+    data = _transfer_data_block(ev, sm, eval_rows, tier)
+    data["length_match"] = {"bucket": _length_bucket(_get(cfg, "condition")),
+                            "all_identical": True}
+    data["external_loader"] = ext_stats.get("loader")
+    data["bias_diagnostics"] = bias
+    data["baseline_seed"] = int(first["seed"])
+    gate_notes: dict[str, str] = {}
+    bias_ok = _apply_collection_gate(data, coll_gate, bool(bias["ok"]))
+    gates = gates_from(baselines, data["split_diagnostics"].get("top5_test_group_frac"),
+                       bias_ok, notes=gate_notes)
+    data["gate_notes"] = gate_notes
+    if tier == "dropped":
+        gates["stratum_tier_ok"] = False
+
+    in_domain = ((wp_res or {}).get("aggregate") or {}).get("auroc_mean")
+    res = _transfer_results(
+        cfg, mode="a", source_tag=tag, cid=cid, stratum=stratum, data=data, model=model,
+        null_perm=null_perm, baselines=baselines,
+        in_domain=(float(in_domain) if in_domain is not None else None), gates=gates,
+    )
+    if motif:
+        res["motif_replication"] = _transfer_motif_replication(
+            cfg, tag, stratum, first, ok
+        )
+    return res
+
+
+def _transfer_motif_replication(cfg, tag, stratum, first, ok) -> dict:
+    """설계 4절 — WebPhish에서 찾은 motif가 외부 train에서 다시 보이는가.
+
+    motif 선택은 **WebPhish train에서만** 한다. 외부를 보고 고르면 순환 논증이다.
+    """
+    from qrphish.transfer import motif_replication
+
+    enr_path = _phase_dir(cfg, "motifs", _motif_condition_id(cfg), stratum) / "enrichment.json"
+    enr = _read_json_safe(enr_path)
+    if not enr:
+        return {"skipped": f"WebPhish enrichment가 없다: {enr_path} (run_motifs 먼저)"}
+    try:
+        df = first["frame"]
+        tr = df[_split_mask(df, 0)].reset_index(drop=True)
+        tr = _subsample(tr, TRANSFER_MOTIF_EVAL_CAP, int(first["seed"]))
+        H = _motif_hists(cfg, {"train": tr}, {})["train"]["patch3"]
+        rep = motif_replication(
+            enr, H, tr["label"].to_numpy(dtype=np.int64),
+            tr["group"].astype(str).to_numpy(), size=3, k=20, seed=0,
+        )
+        rep["n_rows"] = int(len(tr))
+        rep["webphish_enrichment"] = str(enr_path)
+        d = _reports_dir(cfg) / "transfer" / tag / "motif_replication" / stratum
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "replication.json").write_text(
+            json.dumps(rep, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        return rep
+    except Exception as exc:
+        print(f"[WARN] motif 재현성 {stratum}: {exc!r}")
+        traceback.print_exc()
+        return {"error": repr(exc)}
+
+
+def _run_transfer_b(cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir, *,
+                    n_perm, n_boot, entry, coll_gate=None) -> dict:
+    """F-b — 외부 데이터 자체 학습·평가. ``_run_one_seed``를 그대로 재사용한다.
+
+    전이가 실패했을 때 "외부에 신호가 없다"와 "전이가 안 된다"를 가르는 실행이다.
+    """
+    from qrphish.dataset import stratum_tier
+    from qrphish.transfer import gates_from, permutation_null, transfer_baselines
+
+    per_seed_raw = []
+    for s in seeds:
+        try:
+            per_seed_raw.append(
+                _run_one_seed(cfg, stratum, int(s), ext_cond_dir, entry, frame=ext_all)
+            )
+        except Exception as exc:
+            print(f"[ERROR] transfer F-b {stratum} seed{s}: {exc!r}")
+            traceback.print_exc()
+            per_seed_raw.append({"seed": s, "error": repr(exc)})
+    ok = [d for d in per_seed_raw if "error" not in d]
+    if not ok:
+        raise RuntimeError(f"F-b {stratum}: 모든 시드 실패")
+    # 층 재개용으로 아티팩트 쪽에도 results.json을 남긴다(F-c가 임계값을 여기서 읽는다).
+    (ext_cond_dir / stratum).mkdir(parents=True, exist_ok=True)
+    (ext_cond_dir / stratum / "results.json").write_text(
+        json.dumps({"per_seed": per_seed_raw, "condition_id": cid, "stratum": stratum},
+                   ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+
+    per_seed = []
+    for d in per_seed_raw:
+        if "error" in d:
+            per_seed.append(d)
+            continue
+        pr = _load_seed_preds_at(ext_cond_dir / stratum / f"seed{d['seed']}", int(d["seed"]))
+        if pr is None:
+            per_seed.append({"seed": d["seed"], "error": "preds_test.npz 없음"})
+            continue
+        pr["threshold"] = d.get("threshold")
+        per_seed.append(pr)
+    model = _transfer_model_block(per_seed, n_boot, "external_val")
+    y, p, g, sd = _pooled_arrays(per_seed)
+    null_perm = permutation_null(y, p, g, sd, n_perm=n_perm, seed=0)
+
+    seed0 = int(ok[0]["seed"])
+    meta = pd.read_parquet(ext_cond_dir / stratum / f"seed{seed0}" / "meta.parquet")
+    tr = meta[_split_mask(meta, 0)].reset_index(drop=True)
+    te = meta[_split_mask(meta, 2)].reset_index(drop=True)
+    baselines = transfer_baselines(tr, te, seed0, fit_on="external_train")
+    per_class_min = int(te["label"].value_counts().min()) if len(te) else 0
+    data = _transfer_data_block(
+        te, None, "test",
+        stratum_tier(per_class_min,
+                     secondary_min=int(_get(_get(cfg, "stratum_rules"), "secondary_min_per_class", 300))),
+    )
+    data["n_train"] = int(len(tr))
+    gate_notes: dict[str, str] = {}
+    bias_ok = _apply_collection_gate(data, coll_gate, True)
+    gates = gates_from(baselines, None, bias_ok, notes=gate_notes)
+    data["gate_notes"] = gate_notes
+    wp_res = _webphish_results(cfg, cid, stratum)
+    in_domain = ((wp_res or {}).get("aggregate") or {}).get("auroc_mean")
+    return _transfer_results(
+        cfg, mode="b", source_tag=tag, cid=cid, stratum=stratum, data=data, model=model,
+        null_perm=null_perm, baselines=baselines,
+        in_domain=(float(in_domain) if in_domain is not None else None), gates=gates,
+        extra={"per_seed_train": [{k: v for k, v in d.items() if k != "baselines"}
+                                  for d in per_seed_raw]},
+    )
+
+
+def _load_seed_preds_at(seed_dir: Path, seed: int) -> dict | None:
+    path = Path(seed_dir) / "preds_test.npz"
+    if not path.exists():
+        return None
+    with np.load(path, allow_pickle=False) as z:
+        return {
+            "seed": int(seed),
+            "y": np.asarray(z["y"], dtype=np.int64),
+            "p": np.asarray(z["p"], dtype=np.float64),
+            "group": np.asarray(z["group"]).astype(str),
+        }
+
+
+def _run_transfer_c(cfg, cid, tag, stratum, seeds, ext_cond_dir, *, n_perm, n_boot,
+                    coll_gate=None) -> dict:
+    """F-c — 외부에서 학습한 모델로 WebPhish test를 평가한다(역방향 전이).
+
+    F-a와 비대칭이면 어느 쪽 신호가 더 일반적인지 알려준다.
+    ``ext_cond_dir``는 **F-b가 쓴** 디렉터리다(체크포인트가 거기 있다).
+    """
+    from qrphish.transfer import gates_from, permutation_null, transfer_baselines
+
+    per_seed = []
+    for s in seeds:
+        try:
+            per_seed.append(_fc_one_seed(cfg, cid, stratum, int(s), ext_cond_dir))
+        except Exception as exc:
+            print(f"[ERROR] transfer F-c {stratum} seed{s}: {exc!r}")
+            traceback.print_exc()
+            per_seed.append({"seed": s, "error": repr(exc)})
+    ok = [d for d in per_seed if "error" not in d]
+    if not ok:
+        raise RuntimeError(f"F-c {stratum}: 모든 시드 실패")
+    model = _transfer_model_block(per_seed, n_boot, "external_val")
+    y, p, g, sd = _pooled_arrays(per_seed)
+    null_perm = permutation_null(y, p, g, sd, n_perm=n_perm, seed=0)
+
+    seed0 = int(ok[0]["seed"])
+    ext_meta = pd.read_parquet(ext_cond_dir / stratum / f"seed{seed0}" / "meta.parquet")
+    ext_train = ext_meta[_split_mask(ext_meta, 0)].reset_index(drop=True)
+    wp_test = ok[0]["eval_frame"]
+    baselines = transfer_baselines(
+        _subsample(ext_train, TRANSFER_FIT_CAP, seed0), wp_test, seed0, fit_on="external_train"
+    )
+    data = _transfer_data_block(wp_test, None, "test", "webphish_test")
+    # 평가는 WebPhish지만 **학습**이 외부 데이터라, 수집 단계 게이트가 깨졌으면 F-c도
+    # 결론에 쓰지 않는다.
+    gate_notes: dict[str, str] = {}
+    bias_ok = _apply_collection_gate(data, coll_gate, True)
+    gates = gates_from(baselines, None, bias_ok, notes=gate_notes)
+    data["gate_notes"] = gate_notes
+    wp_res = _webphish_results(cfg, cid, stratum)
+    in_domain = ((wp_res or {}).get("aggregate") or {}).get("auroc_mean")
+    return _transfer_results(
+        cfg, mode="c", source_tag=tag, cid=cid, stratum=stratum, data=data, model=model,
+        null_perm=null_perm, baselines=baselines,
+        in_domain=(float(in_domain) if in_domain is not None else None), gates=gates,
+    )

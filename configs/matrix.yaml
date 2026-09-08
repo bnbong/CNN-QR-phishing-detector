@@ -164,3 +164,21 @@ P2:
       model.arch: small_cnn
     decoded_text_reference: true
     baselines: []
+
+  - name: template_split               # G: 피싱 키트 템플릿 누출 크기 (설계 5절)
+    # 주 조건(main_cnn)과 모든 것이 같고 그룹 키만 eTLD+1 ∪ 템플릿 클러스터다.
+    # extra로 조건 id를 분리해 1차 아티팩트를 덮어쓰지 않는다.
+    extra: templatesplit
+    strata: ["v2", "v3", "v4"]
+    overrides:
+      condition.url_mode: norm
+      condition.length_match: exact
+      condition.length_bucket: 1
+      condition.features: data_only
+      condition.shuffle_positions: false
+      qr.mask_mode: fixed
+      qr.mask_pattern: 0
+      model.arch: small_cnn
+      split.group_key: etld1_template
+    decoded_text_reference: true
+    baselines: [length_lr, version_lr, bytehist_lr]

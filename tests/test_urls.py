@@ -150,6 +150,52 @@ def test_missing_file_and_bad_suffix(tmp_path: Path):
         load_webphish(bad, "norm")
 
 
-def test_load_external_not_implemented(tmp_path: Path):
-    with pytest.raises(NotImplementedError):
-        load_external("tranco", tmp_path)
+def test_load_external_delegates_to_external_module(tmp_path: Path):
+    # 스텁은 qrphish.external.load_external로 위임한다. 없는 파일이면 FileNotFoundError.
+    with pytest.raises(FileNotFoundError):
+        load_external(tmp_path / "missing.csv")
+
+
+# ------------------------------------------------- 선행 스킴 판정 (회귀: `"://" in s` 버그)
+NESTED_URL = "good.com/redirect?url=https://evil.com"
+
+
+def test_has_leading_scheme_only_matches_prefix():
+    from qrphish.urls import ensure_scheme, has_leading_scheme, strip_leading_scheme
+
+    assert has_leading_scheme("https://a.com/x")
+    assert has_leading_scheme("ftp://a.com")
+    assert not has_leading_scheme(NESTED_URL)
+    assert not has_leading_scheme("a.com/x?u=http://b.com")
+    assert ensure_scheme(NESTED_URL) == "http://" + NESTED_URL
+    assert ensure_scheme("https://a.com") == "https://a.com"
+    assert strip_leading_scheme("https://a.com/x") == "a.com/x"
+    assert strip_leading_scheme(NESTED_URL) == NESTED_URL
+
+
+def test_nested_scheme_url_keeps_host_and_depth():
+    """쿼리 안에 URL을 품은 주소가 `<empty>` 그룹이 되면 안 된다."""
+    assert etld1(NESTED_URL) == "good.com"
+    assert path_depth(NESTED_URL) == 1
+    assert normalize_url("HTTP://WWW.good.com/r?url=https://WWW.evil.com", "norm") == (
+        "http://good.com/r?url=https://www.evil.com"
+    )
+
+
+def test_nested_scheme_url_in_other_modules():
+    from qrphish.external import strip_scheme
+    from qrphish.probes import _host, _path_depth
+    from qrphish.templates import url_template
+
+    assert strip_scheme(NESTED_URL) == NESTED_URL
+    assert strip_scheme("https://" + NESTED_URL) == NESTED_URL
+    assert _host(NESTED_URL) == "good.com"
+    assert _path_depth(NESTED_URL) == 1
+    assert url_template(NESTED_URL) == "/redirect?url"
+
+
+def test_webphish_has_no_empty_group(webphish_csv):
+    """1차 결과 불변 고정 — WebPhish에는 스킴을 품은 URL이 없어 `<empty>` 그룹도 0이다."""
+    df, _ = load_webphish(webphish_csv)
+    assert int(df["url"].str.contains("://").sum()) == 0
+    assert int((df["group"] == "<empty>").sum()) == 0

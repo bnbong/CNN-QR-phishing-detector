@@ -1,8 +1,9 @@
 """Colab 노트북 사전 점검 — `notebooks/colab_run.ipynb`를 축소 데이터로 실제 실행한다.
 
 노트북의 파이썬 코드를 **한 글자도 바꾸지 않고** 그대로 exec 한다. 제거하는 것은
-Colab 전용 줄(`!`/`%` 매직, `drive.mount`, `google.colab` import)과 `DATA_CSV`/`OUT_DIR`
-재대입뿐이다. 두 변수는 실행 전 네임스페이스에 주입한다.
+Colab 전용 줄(`!`/`%` 매직, `drive.mount`, `google.colab` import)과 `DATA_CSV`/`OUT_DIR`/
+`EXT_CSV`/`EXT_SOURCE_TAG` 재대입뿐이다. 이 변수들은 실행 전 네임스페이스에 주입한다.
+`--external-csv`를 주지 않으면 `EXT_CSV=None`이 주입되어 외부 검증(F) 셀이 스스로 건너뛴다.
 
 축소는 config 쪽에서만 한다. `qrphish.config.load_config`를 monkeypatch 해서 반환
 config에 `model.max_epochs` / `eval.n_bootstrap` / `seed_list` 오버라이드를 얹는다.
@@ -30,7 +31,7 @@ _DROP_PREFIXES = ("!", "%")
 _DROP_PATTERNS = (
     re.compile(r"^\s*from\s+google\.colab\b"),
     re.compile(r"^\s*drive\.mount\("),
-    re.compile(r"^\s*(DATA_CSV|OUT_DIR)\s*="),
+    re.compile(r"^\s*(DATA_CSV|OUT_DIR|EXT_CSV|EXT_SOURCE_TAG)\s*="),
 )
 
 
@@ -58,19 +59,26 @@ def load_cells(nb_path: Path) -> list[tuple[int, str]]:
     return out
 
 
-def make_subsample(src_csv: Path, dst: Path, per_class: int, seed: int) -> dict:
-    """클래스별 단순 무작위 추출. 길이 분포는 원본 그대로 유지된다."""
+def make_subsample(
+    src_csv: Path, dst: Path, per_class: int, seed: int, label_col: str | None = None
+) -> dict:
+    """클래스별 단순 무작위 추출. 길이 분포는 원본 그대로 유지된다.
+
+    ``label_col``이 None이면 첫 컬럼을 라벨로 본다(WebPhish 원본의 ``Category``).
+    외부 세트는 ``label`` 컬럼을 쓰므로 명시적으로 넘긴다.
+    """
     import pandas as pd
 
     df = pd.read_csv(src_csv, encoding="utf-8")
+    col = label_col or df.columns[0]
     parts = []
-    for _label, sub in df.groupby(df.columns[0]):
+    for _label, sub in df.groupby(col):
         n = min(per_class, len(sub))
         parts.append(sub.sample(n=n, random_state=seed))
     out = pd.concat(parts).sample(frac=1.0, random_state=seed).reset_index(drop=True)
     dst.parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(dst, index=False, encoding="utf-8")
-    return {"n": int(len(out)), "by_class": out[out.columns[0]].value_counts().to_dict()}
+    return {"n": int(len(out)), "by_class": out[col].value_counts().to_dict()}
 
 
 def install_shims() -> list[str]:
@@ -120,6 +128,21 @@ def main() -> int:
     ap.add_argument("--max-epochs", type=int, default=2)
     ap.add_argument("--n-bootstrap", type=int, default=50)
     ap.add_argument("--seeds", default="0,1")
+    ap.add_argument(
+        "--external-csv",
+        default=None,
+        help="외부 검증(F) 셀에 주입할 CSV. 미지정이면 F 셀이 스스로 건너뛴다",
+    )
+    ap.add_argument("--external-tag", default="preflight_ext", help="외부 소스 태그")
+    ap.add_argument(
+        "--external-per-class",
+        type=int,
+        default=None,
+        help=(
+            "외부 CSV도 클래스(label)별 이 수만큼으로 줄여 주입한다. 실제 세트는 60만 행이라 "
+            "축소하지 않으면 사전 점검이 몇 시간짜리가 된다. 미지정이면 원본 그대로 쓴다"
+        ),
+    )
     ap.add_argument("--report", default=None, help="preflight_report.md 경로")
     ap.add_argument("--notebook", default=str(REPO / "notebooks" / "colab_run.ipynb"))
     args = ap.parse_args()
@@ -137,6 +160,21 @@ def main() -> int:
             Path(args.source_csv), data_csv, args.per_class, args.sample_seed
         )
 
+    ext_csv: str | None = None
+    ext_info: dict | str = "미지정"
+    if args.external_csv:
+        src_ext = Path(args.external_csv).resolve()
+        if args.external_per_class:
+            sub_ext = out_dir / "external_sub.csv"
+            ext_info = make_subsample(
+                src_ext, sub_ext, args.external_per_class, args.sample_seed,
+                label_col="label",
+            )
+            ext_csv = str(sub_ext)
+        else:
+            ext_csv = str(src_ext)
+            ext_info = {"reused": ext_csv}
+
     shimmed = install_shims()
     patch_load_config(
         {
@@ -150,6 +188,8 @@ def main() -> int:
         "__name__": "__main__",
         "DATA_CSV": str(data_csv),
         "OUT_DIR": str(out_dir),
+        "EXT_CSV": ext_csv,
+        "EXT_SOURCE_TAG": str(args.external_tag),
     }
     cells = load_cells(Path(args.notebook))
     rows: list[dict] = []
@@ -195,6 +235,7 @@ def main() -> int:
         f"- notebook: `{args.notebook}`",
         f"- OUT_DIR: `{out_dir}`",
         f"- DATA_CSV: `{data_csv}` ({sample_info})",
+        f"- EXT_CSV: `{ext_csv or '미지정 (F 셀 건너뜀)'}` ({ext_info})",
         f"- overrides: max_epochs={args.max_epochs}, n_bootstrap={args.n_bootstrap}, "
         f"seeds={args.seeds}",
         f"- shims: {shimmed or '없음'}",

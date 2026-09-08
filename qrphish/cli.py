@@ -117,6 +117,44 @@ def probes(
 
 
 @app.command()
+def transfer(
+    external_csv: str = typer.Argument(..., help="외부 평가 세트 CSV 경로"),
+    config: str = _CONFIG,
+    modes: str = typer.Option("a", "--modes", help="F 모드 조합 (예: a,b,c)"),
+    stratum: str = typer.Option(None, "--stratum", "-s", help="지정하면 그 층만"),
+    sources: str = typer.Option(None, "--sources", help="source 컬럼으로 거를 소스(쉼표 구분)"),
+    source_tag: str = typer.Option(None, "--source-tag", help="산출 경로에 쓸 짧은 식별자"),
+    eval_rows: str = typer.Option("all", "--eval-rows", help="F-a 평가 행: all|test"),
+    n_perm: int = typer.Option(200, "--n-perm", help="그룹 단위 라벨 순열 횟수(바닥선)"),
+    no_motif: bool = typer.Option(False, "--no-motif", help="motif 베이스라인·재현성 생략"),
+) -> None:
+    """F: 외부 검증 전이 평가. F-a는 학습하지 않고 1차 체크포인트만 읽는다."""
+    from qrphish.runner import run_transfer
+
+    res = run_transfer(
+        _load(config),
+        external_csv,
+        [s.strip() for s in sources.split(",")] if sources else None,
+        [stratum] if stratum else None,
+        modes=tuple(m.strip() for m in modes.split(",") if m.strip()),
+        source_tag=source_tag,
+        eval_rows=eval_rows,
+        n_perm=n_perm,
+        motif=not no_motif,
+    )
+    for mode, per_stratum in res.items():
+        for st, r in per_stratum.items():
+            if "error" in r:
+                typer.echo(f"F-{mode} {st}: ERROR {r['error']}")
+                continue
+            typer.echo(
+                f"F-{mode} {st}: AUROC={r['model'].get('auroc_mean'):.3f} "
+                f"바닥선상한={r['null_permutation'].get('ci_upper'):.3f} "
+                f"판정={r['verdict']['label']}"
+            )
+
+
+@app.command()
 def hypotheses(
     config: str = _CONFIG,
     matrix: str = typer.Option("configs/matrix.yaml", "--matrix", "-m"),

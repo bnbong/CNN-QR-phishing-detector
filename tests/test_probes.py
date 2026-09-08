@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 import torch
@@ -235,7 +237,7 @@ def test_probe_suite_parallel_matches_serial(setup: Setup) -> None:
     rnd = SmallCNN(in_ch=2).eval()
     zr_tr, zr_te = embed(rnd, setup.ds, tr), embed(rnd, setup.ds, te)
 
-    kw = dict(seed=0, n_boot=40, min_positive=5)
+    kw: dict[str, Any] = dict(seed=0, n_boot=40, min_positive=5)
     a = run_probe_suite(z_tr, z_te, zr_tr, zr_te, targets, tr, te, setup.groups,
                         n_jobs=1, **kw)
     b = run_probe_suite(z_tr, z_te, zr_tr, zr_te, targets, tr, te, setup.groups,

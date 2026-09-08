@@ -1,0 +1,16 @@
+{
+  "name": "openphish",
+  "label": 1,
+  "url": "https://raw.githubusercontent.com/openphish/public_feed/<commit>/feed.txt",
+  "raw_path": "data/external/raw/openphish_history_2026-09-08.txt",
+  "pinned_id": "639ce24855e6b81f5c04f2f2410b9bfc499aa320;c7fe5e7382a66bd5a3a98bda0789d75214cdbf34;615b9da9fe9cf5634636417981bc3111efb5896c;a788939590ade64a38e0cb6efff134fb49be099b;0ba365f53beea528c5df21aaf54f5d520b17c12e",
+  "n_commits_listed": 180,
+  "n_commits_fetched": 180,
+  "window_days": 90,
+  "since": "2026-06-10T01:42:47Z",
+  "fetched_at": "2026-09-08T01:44:23.445967+00:00",
+  "sha256": "1bae7823690a9cd3c5f5d3b7cc9b676e5907e963491005cd1a9afd8501f80276",
+  "n_raw": 43990,
+  "license_note": "OpenPhish community feed, openphish.com/terms.html (비상업 연구, 재배포 금지)",
+  "method_note": "shallow clone 대신 GitHub API 커밋 목록 + 커밋별 raw feed.txt 누적. 리포 전체를 내려받지 않는다."
+}

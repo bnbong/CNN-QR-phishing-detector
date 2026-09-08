@@ -3,15 +3,25 @@
 전부 동일 인터페이스:
     ``fit_predict(urls, y, split, meta=None, seed=0) -> (p_val, p_test)``
 동일 split 인덱스를 받아 sklearn으로 학습하고 val/test 확률을 돌려준다.
+
+**fit/apply 분리 경로** (외부 검증 설계 7.2·9절 #12): 위 인터페이스는 한 프레임 안에서
+fit과 predict를 모두 한다. F-a(zero-shot transfer)는 WebPhish train에서 fit한 벡터라이저·
+계수를 **외부 데이터에 그대로 적용**해야 하므로 (다시 fit하면 그것은 F-a가 아니라 F-b다)
+``fit_*(...) -> FittedBaseline`` / ``apply_*(model, ...) -> p`` 쌍을 따로 둔다.
+기존 함수는 시그니처·수치 모두 그대로 두되, **내부에서 같은 fit/apply 경로를 호출**하도록
+고쳐 두 경로가 조용히 갈라지는 일을 막았다(``tests/test_transfer.py``가 동치를 검증한다).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 
 __all__ = [
     "BASELINES",
@@ -22,6 +32,20 @@ __all__ = [
     "bytehist_lr",
     "maskindex_lr",
     "charcnn",
+    # fit/apply 분리 경로
+    "FittedBaseline",
+    "fit_charngram_lr",
+    "apply_charngram_lr",
+    "fit_bytehist_lr",
+    "apply_bytehist_lr",
+    "fit_length_lr",
+    "apply_length_lr",
+    "fit_version_lr",
+    "apply_version_lr",
+    "fit_motifhist_lr",
+    "apply_motifhist_lr",
+    "bytehist_features",
+    "length_features",
 ]
 
 TRAIN, VAL, TEST = 0, 1, 2
@@ -32,16 +56,45 @@ def _masks(split: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return split == TRAIN, split == VAL, split == TEST
 
 
-def _fit_lr(Xtr, ytr, Xva, Xte, seed: int, C: float = 1.0):
+@dataclass
+class FittedBaseline:
+    """train에서 한 번 fit한 베이스라인. ``apply_*``가 이 객체만 보고 확률을 낸다.
+
+    ``const``가 채워져 있으면 train에 한 클래스만 있어 학습이 불가능했던 경우이고,
+    그때는 모든 행에 같은 상수 확률을 낸다(기존 ``_fit_lr``의 규약과 동일).
+    """
+
+    kind: str
+    clf: Any = None
+    const: float | None = None
+    vectorizer: Any = None
+    scaler: Any = None
+    meta: dict = field(default_factory=dict)
+
+    def predict(self, X) -> np.ndarray:
+        if self.const is not None:
+            n = X.shape[0] if hasattr(X, "shape") else len(X)
+            return np.full(int(n), float(self.const), dtype=np.float64)
+        assert self.clf is not None
+        return np.asarray(self.clf.predict_proba(X)[:, 1], dtype=np.float64)
+
+
+def _fit_core(kind: str, Xtr, ytr, seed: int, C: float = 1.0, **extra) -> FittedBaseline:
+    """행렬 하나에서 LR을 fit한다. ``_fit_lr``과 **정확히 같은** 추정기 설정을 쓴다."""
+    ytr = np.asarray(ytr)
+    if len(np.unique(ytr)) < 2:
+        const = float(np.mean(ytr)) if len(ytr) else 0.5
+        return FittedBaseline(kind=kind, const=const, **extra)
     clf = LogisticRegression(
         C=C, max_iter=2000, class_weight="balanced", solver="liblinear", random_state=seed
     )
-    if len(np.unique(ytr)) < 2:
-        # 한 클래스뿐이면 학습 불가 → 상수 확률
-        const = float(np.mean(ytr)) if len(ytr) else 0.5
-        return np.full(Xva.shape[0], const), np.full(Xte.shape[0], const)
     clf.fit(Xtr, ytr)
-    return clf.predict_proba(Xva)[:, 1], clf.predict_proba(Xte)[:, 1]
+    return FittedBaseline(kind=kind, clf=clf, **extra)
+
+
+def _fit_lr(Xtr, ytr, Xva, Xte, seed: int, C: float = 1.0):
+    m = _fit_core("generic", Xtr, ytr, seed, C=C)
+    return m.predict(Xva), m.predict(Xte)
 
 
 def charngram_lr(urls, y, split, meta=None, seed: int = 0):
@@ -53,9 +106,24 @@ def charngram_lr(urls, y, split, meta=None, seed: int = 0):
     urls = np.asarray(urls, dtype=object)
     y = np.asarray(y)
     tr, va, te = _masks(split)
+    m = fit_charngram_lr(urls[tr], y[tr], seed)
+    return apply_charngram_lr(m, urls[va]), apply_charngram_lr(m, urls[te])
+
+
+def fit_charngram_lr(urls_tr, y_tr, seed: int = 0) -> FittedBaseline:
+    """char_wb 1~5-gram TF-IDF 벡터라이저 + LR을 **train에서만** fit한다."""
+    urls_tr = np.asarray(urls_tr, dtype=object)
     vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(1, 5), min_df=2, sublinear_tf=True)
-    Xtr = vec.fit_transform(urls[tr].tolist())
-    return _fit_lr(Xtr, y[tr], vec.transform(urls[va].tolist()), vec.transform(urls[te].tolist()), seed)
+    Xtr = vec.fit_transform(urls_tr.tolist())
+    return _fit_core("charngram_lr", Xtr, y_tr, seed, vectorizer=vec)
+
+
+def apply_charngram_lr(model: FittedBaseline, urls) -> np.ndarray:
+    """fit된 벡터라이저로 변환만 하고 계수를 그대로 적용한다(재fit 금지)."""
+    urls = np.asarray(urls, dtype=object)
+    if model.const is not None:
+        return np.full(urls.size, float(model.const), dtype=np.float64)
+    return model.predict(model.vectorizer.transform(urls.tolist()))
 
 
 def _from_meta(meta, col: str, urls) -> np.ndarray:
@@ -69,30 +137,98 @@ def version_lr(urls, y, split, meta=None, seed: int = 0):
     v = _from_meta(meta, "version", urls).astype(np.float64).reshape(-1, 1)
     y = np.asarray(y)
     tr, va, te = _masks(split)
-    return _fit_lr(v[tr], y[tr], v[va], v[te], seed)
+    m = fit_version_lr(v[tr], y[tr], seed)
+    return apply_version_lr(m, v[va]), apply_version_lr(m, v[te])
+
+
+def fit_version_lr(versions_tr, y_tr, seed: int = 0) -> FittedBaseline:
+    """게이트용: QR 버전 단독. 층 안에서는 AUROC 0.5여야 한다."""
+    X = np.asarray(versions_tr, dtype=np.float64).reshape(-1, 1)
+    return _fit_core("version_lr", X, y_tr, seed)
+
+
+def apply_version_lr(model: FittedBaseline, versions) -> np.ndarray:
+    return model.predict(np.asarray(versions, dtype=np.float64).reshape(-1, 1))
 
 
 def length_lr(urls, y, split, meta=None, seed: int = 0):
     """하한선: URL 길이 단독(길이 + 로그 길이)."""
-    urls = np.asarray(urls, dtype=object)
-    ln = np.asarray([len(u.encode("utf-8", "surrogatepass")) for u in urls], dtype=np.float64)
-    X = np.stack([ln, np.log1p(ln)], axis=1)
+    X = length_features(urls)
     y = np.asarray(y)
     tr, va, te = _masks(split)
-    return _fit_lr(X[tr], y[tr], X[va], X[te], seed)
+    m = _fit_core("length_lr", X[tr], y[tr], seed)
+    return m.predict(X[va]), m.predict(X[te])
+
+
+def length_features(urls) -> np.ndarray:
+    """``(N, 2)`` — 바이트 길이와 log1p(바이트 길이)."""
+    urls = np.asarray(urls, dtype=object)
+    ln = np.asarray([len(u.encode("utf-8", "surrogatepass")) for u in urls], dtype=np.float64)
+    return np.stack([ln, np.log1p(ln)], axis=1)
+
+
+def fit_length_lr(urls_tr, y_tr, seed: int = 0) -> FittedBaseline:
+    """게이트용: URL 길이 단독. ``L-exact``에서는 AUROC 0.5여야 한다."""
+    return _fit_core("length_lr", length_features(urls_tr), y_tr, seed)
+
+
+def apply_length_lr(model: FittedBaseline, urls) -> np.ndarray:
+    return model.predict(length_features(urls))
 
 
 def bytehist_lr(urls, y, split, meta=None, seed: int = 0):
     """하한선: 바이트 히스토그램(256차원, 길이 정규화). 순서 정보 없음."""
+    X = bytehist_features(urls)
+    y = np.asarray(y)
+    tr, va, te = _masks(split)
+    m = _fit_core("bytehist_lr", X[tr], y[tr], seed)
+    return m.predict(X[va]), m.predict(X[te])
+
+
+def bytehist_features(urls) -> np.ndarray:
+    """``(N, 256)`` — 길이 정규화 바이트 히스토그램. 순서 정보 없음."""
     urls = np.asarray(urls, dtype=object)
     X = np.zeros((len(urls), 256), dtype=np.float64)
     for i, u in enumerate(urls):
         b = np.frombuffer(u.encode("utf-8", "surrogatepass"), dtype=np.uint8)
         if b.size:
             X[i] = np.bincount(b, minlength=256) / b.size
-    y = np.asarray(y)
-    tr, va, te = _masks(split)
-    return _fit_lr(X[tr], y[tr], X[va], X[te], seed)
+    return X
+
+
+def fit_bytehist_lr(urls_tr, y_tr, seed: int = 0) -> FittedBaseline:
+    return _fit_core("bytehist_lr", bytehist_features(urls_tr), y_tr, seed)
+
+
+def apply_bytehist_lr(model: FittedBaseline, urls) -> np.ndarray:
+    return model.predict(bytehist_features(urls))
+
+
+def fit_motifhist_lr(H_tr, y_tr, seed: int = 0, C: float = 1.0) -> FittedBaseline:
+    """motif 히스토그램 LR(RQ3 직접 검정의 전이판)을 train 히스토그램에서 fit한다.
+
+    ``qrphish.motifs.bag_of_patches_lr``와 **같은** 표준화 + lbfgs LR을 쓴다. 다만 C는
+    val로 고르지 않고 넘겨받는다(외부에는 fit용 val이 없다). ``C=1.0``이면
+    ``bag_of_patches_lr(..., X_hist_val=None)``과 수치가 일치한다.
+    """
+    Xtr = np.asarray(H_tr, dtype=np.float64)
+    ytr = np.asarray(y_tr).astype(np.int64).reshape(-1)
+    if len(np.unique(ytr)) < 2:
+        const = float(ytr.mean()) if ytr.size else 0.5
+        return FittedBaseline(kind="motifhist_lr", const=const)
+    scaler = StandardScaler().fit(Xtr)
+    clf = LogisticRegression(
+        C=C, max_iter=1000, class_weight="balanced", solver="lbfgs", random_state=seed
+    )
+    clf.fit(scaler.transform(Xtr), ytr)
+    return FittedBaseline(kind="motifhist_lr", clf=clf, scaler=scaler, meta={"C": float(C)})
+
+
+def apply_motifhist_lr(model: FittedBaseline, H) -> np.ndarray:
+    X = np.asarray(H, dtype=np.float64)
+    if model.const is not None:
+        return np.full(X.shape[0], float(model.const), dtype=np.float64)
+    return model.predict(model.scaler.transform(X))
 
 
 def maskindex_lr(urls, y, split, meta=None, seed: int = 0):

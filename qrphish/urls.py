@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -10,6 +11,9 @@ import pandas as pd
 import tldextract
 
 __all__ = [
+    "has_leading_scheme",
+    "ensure_scheme",
+    "strip_leading_scheme",
     "normalize_url",
     "etld1",
     "path_depth",
@@ -18,7 +22,28 @@ __all__ = [
     "load_external",
 ]
 
-_SCHEME_SEP = "://"
+# **선행** 스킴만 인식한다. ``"://" in s``로 판정하면
+# ``good.com/redirect?url=https://evil.com``처럼 쿼리 안에 URL을 품은 주소가 스킴 있는 URL로
+# 오인돼 호스트가 빈 값(`<empty>` 그룹)이 된다. 스킴 문법은 RFC 3986 3.1.
+_LEADING_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://")
+
+
+def has_leading_scheme(url: str) -> bool:
+    """문자열이 **선행** 스킴(`http://`, `ftp://` 등)으로 시작하는가."""
+    return _LEADING_SCHEME_RE.match(str(url).strip()) is not None
+
+
+def ensure_scheme(url: str, default: str = "http://") -> str:
+    """선행 스킴이 없으면 ``default``를 붙인다. 있으면 그대로."""
+    s = str(url).strip()
+    return s if has_leading_scheme(s) else default + s
+
+
+def strip_leading_scheme(url: str) -> str:
+    """선행 스킴을 1회 제거한다. 없으면 그대로."""
+    s = str(url).strip()
+    m = _LEADING_SCHEME_RE.match(s)
+    return s[m.end():] if m else s
 
 
 def default_extractor() -> tldextract.TLDExtract:
@@ -51,10 +76,10 @@ def normalize_url(url: str, mode: Literal["raw", "norm"]) -> str:
         return s
 
     s = s.lower()
-    # 스킴이 있으면 스킴은 보존한 채 호스트 앞의 www.만 제거한다.
-    idx = s.find(_SCHEME_SEP)
-    if idx >= 0:
-        head, rest = s[: idx + len(_SCHEME_SEP)], s[idx + len(_SCHEME_SEP) :]
+    # 선행 스킴이 있으면 스킴은 보존한 채 호스트 앞의 www.만 제거한다.
+    m = _LEADING_SCHEME_RE.match(s)
+    if m:
+        head, rest = s[: m.end()], s[m.end() :]
     else:
         head, rest = "", s
     if rest.startswith("www."):
@@ -66,9 +91,7 @@ def normalize_url(url: str, mode: Literal["raw", "norm"]) -> str:
 
 
 def _host(url: str) -> str:
-    s = str(url).strip()
-    if _SCHEME_SEP not in s:
-        s = "http://" + s
+    s = ensure_scheme(url)
     try:
         return urlsplit(s).hostname or ""
     except ValueError:
@@ -93,9 +116,7 @@ def etld1(url: str, extractor: tldextract.TLDExtract | None = None) -> str:
 
 def path_depth(url: str) -> int:
     """호스트 뒤 경로의 비어 있지 않은 세그먼트 개수."""
-    s = str(url).strip()
-    if _SCHEME_SEP not in s:
-        s = "http://" + s
+    s = ensure_scheme(url)
     try:
         path = urlsplit(s).path
     except ValueError:
@@ -197,6 +218,11 @@ def load_webphish(
     return df, stats
 
 
-def load_external(source: Literal["phishtank", "openphish", "tranco"], path: Path) -> pd.DataFrame:
-    """2단계(외부 수집) 인터페이스. 1단계에서는 구현하지 않는다."""
-    raise NotImplementedError("stage 2 데이터 로딩은 아직 구현하지 않는다")
+def load_external(*args: object, **kwargs: object) -> tuple[pd.DataFrame, dict]:
+    """2단계(외부 수집) 인터페이스. 구현은 `qrphish.external.load_external`에 위임한다.
+
+    순환 import를 피하려고 함수 안에서 import한다(external.py가 이 모듈을 쓴다).
+    """
+    from qrphish.external import load_external as _impl
+
+    return _impl(*args, **kwargs)  # type: ignore[arg-type]
