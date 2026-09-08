@@ -30,6 +30,8 @@ __all__ = [
     "window_ids",
     "match_centers",
     "random_centers",
+    "matched_random_centers",
+    "local_black_density",
     "flip_centers",
     "batch_logits",
     "occlude_stratum",
@@ -115,6 +117,104 @@ def random_centers(data_mask: np.ndarray, k: int, rng, size: int = 3) -> np.ndar
         return np.zeros((0, 2), dtype=np.int64)
     k = min(int(k), len(centers))
     return centers[rng.choice(len(centers), size=k, replace=False)]
+
+
+def local_black_density(values: np.ndarray, centers: np.ndarray, size: int = 3) -> np.ndarray:
+    """각 중심의 ``size x size`` 창 안 1(검은 모듈) 개수 ``(K,)``."""
+    v = (np.asarray(values) > 0.5).astype(np.int64)
+    c = np.asarray(centers, dtype=np.int64)
+    if c.size == 0:
+        return np.zeros(0, dtype=np.int64)
+    r = size // 2
+    out = np.empty(len(c), dtype=np.int64)
+    for i, (cr, cc) in enumerate(c):
+        out[i] = int(v[cr - r : cr + r + 1, cc - r : cc + r + 1].sum())
+    return out
+
+
+def _quadrant(centers: np.ndarray, n: int) -> np.ndarray:
+    """중심 좌표 -> 사분면 코드 0..3 (격자 중앙선 기준, 위/왼쪽이 작다)."""
+    c = np.asarray(centers, dtype=np.int64)
+    if c.size == 0:
+        return np.zeros(0, dtype=np.int64)
+    half = n / 2.0
+    return (c[:, 0] >= half).astype(np.int64) * 2 + (c[:, 1] >= half).astype(np.int64)
+
+
+def matched_random_centers(
+    values: np.ndarray,
+    data_mask: np.ndarray,
+    target_centers: np.ndarray,
+    rng,
+    size: int = 3,
+    *,
+    density_tol: int = 1,
+    exclude: np.ndarray | None = None,
+) -> tuple[np.ndarray, int]:
+    """topology-matched 무작위 대조 중심 — 사분면과 국소 흑색 밀도를 맞춘다.
+
+    review_02 "4. occlusion topology-matched control" 대응. 기존 :func:`random_centers`는
+    뒤집는 **개수**만 맞추고 위치 분포는 맞추지 않는다. motif가 특정 영역에 몰려 있으면
+    효과 차이의 일부가 motif identity가 아니라 위치에서 올 수 있다.
+
+    각 target center마다 (a) **같은 사분면**이고 (b) 3x3 창 안 1의 개수가 target과
+    ``±density_tol`` 이내인 데이터 모듈 창 중심을 비복원으로 하나 고른다. 그런 후보가
+    남지 않으면 **사분면 제약만** 유지해 고르고(그것도 없으면 전역에서 고른다) 그 횟수를
+    함께 돌려준다.
+
+    ``target_centers``와 ``exclude``의 좌표는 후보 풀에서 **배제한다**. 대조군이 실제
+    motif center를 집어 들면 "motif를 건드렸을 때"와 "무작위 위치를 건드렸을 때"의 대비가
+    무너진다. 러너는 phishing·benign 양쪽 motif center를 합쳐 ``exclude``로 넘기므로
+    두 대조군 모두 어느 쪽 motif center도 고르지 않는다.
+
+    Returns:
+        ``(centers, n_relaxed)`` — ``centers``는 ``(K, 2)``(K는 target 개수 이하,
+        중복 없음), ``n_relaxed``는 밀도 제약을 풀어야 했던 target 수.
+    """
+    tgt = np.asarray(target_centers, dtype=np.int64).reshape(-1, 2)
+    pool = window_centers(data_mask, size)
+    if tgt.size == 0 or pool.size == 0:
+        return np.zeros((0, 2), dtype=np.int64), 0
+
+    n = np.asarray(data_mask).shape[0]
+    # 실제 motif center는 무작위 대조 후보에서 뺀다(위 도크스트링).
+    if len(pool):
+        tgt_key = set(map(tuple, tgt.tolist()))
+        if exclude is not None:
+            ex = np.asarray(exclude, dtype=np.int64).reshape(-1, 2)
+            tgt_key |= set(map(tuple, ex.tolist()))
+        keep = np.array([tuple(c) not in tgt_key for c in pool.tolist()], dtype=bool)
+        pool = pool[keep]
+        if pool.size == 0:
+            return np.zeros((0, 2), dtype=np.int64), 0
+    pool_q = _quadrant(pool, n)
+    pool_d = local_black_density(values, pool, size)
+    tgt_q = _quadrant(tgt, n)
+    tgt_d = local_black_density(values, tgt, size)
+
+    taken = np.zeros(len(pool), dtype=bool)
+    picked: list[np.ndarray] = []
+    n_relaxed = 0
+    for q, d in zip(tgt_q, tgt_d, strict=True):
+        avail = ~taken
+        cand = np.flatnonzero(avail & (pool_q == q) & (np.abs(pool_d - d) <= density_tol))
+        if cand.size == 0:
+            cand = np.flatnonzero(avail & (pool_q == q))
+            if cand.size:
+                n_relaxed += 1
+        if cand.size == 0:
+            cand = np.flatnonzero(avail)
+            if cand.size:
+                n_relaxed += 1
+        if cand.size == 0:
+            break
+        j = int(cand[rng.integers(0, cand.size)])
+        taken[j] = True
+        picked.append(pool[j])
+    return (
+        np.stack(picked).astype(np.int64) if picked else np.zeros((0, 2), dtype=np.int64),
+        n_relaxed,
+    )
 
 
 def flip_centers(x: torch.Tensor, centers: np.ndarray) -> torch.Tensor:
@@ -205,7 +305,8 @@ def occlude_stratum(
     """한 (층, 시드)의 절제 결과.
 
     조건: ``phishing_motif`` / ``benign_motif`` / ``random`` / ``random_benign_matched``
-    (무작위 조건은 각각 ``n_random_rep``회 평균).
+    / ``random_matched`` / ``random_matched_benign`` (무작위 조건은 각각 ``n_random_rep``회
+    평균).
 
     무작위 대조는 각 샘플에서 motif가 맞은 **개수와 정확히 같은 수**를 뒤집어 "뒤집은 모듈
     수" 자체의 효과를 상쇄한다. phishing motif와 benign motif는 매칭 개수가 서로 다르므로
@@ -223,9 +324,17 @@ def occlude_stratum(
     x_ben: list[torch.Tensor] = []
     x_rnd: list[list[torch.Tensor]] = [[] for _ in range(n_random_rep)]
     x_rnd_b: list[list[torch.Tensor]] = [[] for _ in range(n_random_rep)]
+    x_mrnd: list[list[torch.Tensor]] = [[] for _ in range(n_random_rep)]
+    x_mrnd_b: list[list[torch.Tensor]] = [[] for _ in range(n_random_rep)]
     n_phi, n_ben = [], []
+    n_matched_p: list[int] = []
+    n_matched_b: list[int] = []
+    n_relaxed_p = 0
+    n_relaxed_b = 0
     rngs = [np.random.default_rng(seed * 1000 + 7 * r) for r in range(n_random_rep)]
     rngs_b = [np.random.default_rng(seed * 1000 + 7 * r + 3) for r in range(n_random_rep)]
+    rngs_m = [np.random.default_rng(seed * 1000 + 7 * r + 5) for r in range(n_random_rep)]
+    rngs_mb = [np.random.default_rng(seed * 1000 + 7 * r + 11) for r in range(n_random_rep)]
     for x in xs:
         val = x[0].numpy()
         dm = x[1].numpy() > 0.5
@@ -238,6 +347,20 @@ def occlude_stratum(
         for r in range(n_random_rep):
             x_rnd[r].append(flip_centers(x, random_centers(dm, len(cp), rngs[r], size)))
             x_rnd_b[r].append(flip_centers(x, random_centers(dm, len(cb), rngs_b[r], size)))
+            # 두 대조군 모두 phishing·benign motif center를 통째로 후보에서 뺀다.
+            motif_c = np.concatenate([cp, cb]) if len(cp) or len(cb) else cp
+            mp_c, relax_p = matched_random_centers(
+                val, dm, cp, rngs_m[r], size, exclude=motif_c
+            )
+            mb_c, relax_b = matched_random_centers(
+                val, dm, cb, rngs_mb[r], size, exclude=motif_c
+            )
+            x_mrnd[r].append(flip_centers(x, mp_c))
+            x_mrnd_b[r].append(flip_centers(x, mb_c))
+            n_relaxed_p += relax_p
+            n_relaxed_b += relax_b
+            n_matched_p.append(len(mp_c))
+            n_matched_b.append(len(mb_c))
 
     base = batch_logits(model, xs, device=device)
     out: dict[str, Any] = {
@@ -271,4 +394,27 @@ def occlude_stratum(
         y, groups, base, rnd_b_logits, np.asarray(n_ben), n_boot, seed + 300
     )
     out["conditions"]["random_benign_matched"]["n_repeat"] = int(n_random_rep)
+
+    # topology-matched 무작위 대조(review_02 4절). 후보 부족으로 밀도 제약을 풀어야 했던
+    # 횟수를 함께 기록해 "얼마나 잘 매칭됐는지"를 표에서 읽을 수 있게 한다.
+    mrnd_logits = np.mean(
+        [batch_logits(model, x_mrnd[r], device=device) for r in range(n_random_rep)], axis=0
+    )
+    out["conditions"]["random_matched"] = _paired_block(
+        y, groups, base, mrnd_logits, npi, n_boot, seed + 400
+    )
+    out["conditions"]["random_matched"]["n_repeat"] = int(n_random_rep)
+    out["conditions"]["random_matched"]["frac_relaxed"] = (
+        float(n_relaxed_p / sum(n_matched_p)) if sum(n_matched_p) else 0.0
+    )
+    mrnd_b_logits = np.mean(
+        [batch_logits(model, x_mrnd_b[r], device=device) for r in range(n_random_rep)], axis=0
+    )
+    out["conditions"]["random_matched_benign"] = _paired_block(
+        y, groups, base, mrnd_b_logits, np.asarray(n_ben), n_boot, seed + 500
+    )
+    out["conditions"]["random_matched_benign"]["n_repeat"] = int(n_random_rep)
+    out["conditions"]["random_matched_benign"]["frac_relaxed"] = (
+        float(n_relaxed_b / sum(n_matched_b)) if sum(n_matched_b) else 0.0
+    )
     return out

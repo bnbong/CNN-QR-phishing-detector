@@ -90,6 +90,7 @@ def load_external_frame(
     mode: str = "norm",
     dedup: str = "etld1",
     webphish_csv: str | Path | None = None,
+    benign_cleaning: str | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """외부 평가 세트를 :func:`qrphish.urls.load_webphish`와 **같은 컬럼**으로 읽는다.
 
@@ -97,6 +98,8 @@ def load_external_frame(
 
     - **수집 원본**(``Category``/``Data`` 컬럼): ``qrphish.external.load_external``에 넘긴다.
       정규화·스킴 정책·WebPhish 대조 중복제거·편향 진단이 거기서 일어난다.
+      ``benign_cleaning``(``clean``/``keep_phish_domains``/``no_hosting_blocklist``)도
+      이 경로에서만 의미가 있다. 이미 조립된 세트는 파일 자체가 조건을 담고 있다.
     - **이미 병합·정규화가 끝난 세트**(``url``/``label`` 컬럼): 그대로 읽는다. 이 경로는
       중복 제거를 다시 하지 않으므로 ``stats["loader"]``에 그 사실을 남긴다. 수집 파이프라인이
       이미 제거를 마친 ``external_{date}.csv``와 테스트·사전 점검용 합성 CSV가 여기로 온다.
@@ -115,7 +118,13 @@ def load_external_frame(
         raise RuntimeError(
             f"{path}는 수집 원본 형식인데 qrphish.external을 불러올 수 없다: {exc!r}"
         ) from exc
-    df, stats = load_external(path, mode, dedup=dedup, webphish_csv=webphish_csv)  # type: ignore[arg-type]
+    df, stats = load_external(
+        path,  # type: ignore[arg-type]
+        mode,  # type: ignore[arg-type]
+        dedup=dedup,  # type: ignore[arg-type]
+        webphish_csv=webphish_csv,
+        benign_cleaning=benign_cleaning,
+    )
     stats = dict(stats or {})
     stats["loader"] = "qrphish.external.load_external"
     _check_columns(df)
@@ -654,8 +663,8 @@ def collection_bias_gate(
     승계하고, 없을 때만 재계산한다.
 
     찾는 곳: 외부 CSV와 같은 폴더 → ``reports_dir`` → ``reports/external/``.
-    ``main``/``ext_b2`` 중 어느 블록인지는 진단에 기록된 ``output_csv``로 맞추고,
-    없으면 파일명에 ``_b2_``가 있는지로 판단한다.
+    어느 블록인지는 진단에 기록된 ``output_csv``로 맞춘다(``sets`` 아래 세트별 블록 포함).
+    못 맞추면 파일명에 ``_b2_``가 있는지로 ``main``/``ext_b2``를 고른다.
     """
     csv_path = Path(external_csv)
     cands = [csv_path.parent / "bias_diagnostics.json"]
@@ -666,19 +675,22 @@ def collection_bias_gate(
         diag = read_json(c) if c.exists() else None
         if not diag:
             continue
+        # 수집 CLI는 세트별 진단을 ``sets``에 넣고, 하위 호환을 위해 primary/EXT-B2를
+        # ``main``/``ext_b2``에도 복제한다. 세트 이름이 늘어도 output_csv로 짝을 찾는다.
+        blocks: dict[str, Any] = {
+            k: v for k, v in diag.items() if isinstance(v, dict) and k != "sets"
+        }
+        for k, v in (diag.get("sets") or {}).items():
+            if isinstance(v, dict):
+                blocks.setdefault(f"sets.{k}", v)
         key = None
-        for name in ("main", "ext_b2"):
-            blk = diag.get(name)
-            if (
-                isinstance(blk, dict)
-                and blk.get("output_csv")
-                and Path(str(blk["output_csv"])).name == csv_path.name
-            ):
+        for name, blk in blocks.items():
+            if blk.get("output_csv") and Path(str(blk["output_csv"])).name == csv_path.name:
                 key = name
                 break
         if key is None:
             key = "ext_b2" if "_b2_" in csv_path.name else "main"
-        blk = diag.get(key)
+        blk = blocks.get(key)
         if not isinstance(blk, dict) or "gate_passed" not in blk:
             continue
         return {

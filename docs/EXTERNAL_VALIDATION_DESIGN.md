@@ -8,11 +8,16 @@
 
 | 축 | 채택 | 근거 |
 |---|---|---|
-| phishing 주 | **Phishing.Database `phishing-links-ACTIVE.txt`** (GitHub raw, MIT) | 무키로 789,054줄, 경로 보유율 91%. 규모 면에서 대안이 없다 |
-| phishing 보조 | **OpenPhish `public_feed` 최근 90일 커밋 이력 누적** | 스냅샷 1회가 300건뿐이라 누적해야 규모가 나온다. 시간 분리 held-out으로 쓴다 |
+| phishing 주(primary) | **OpenPhish `public_feed` 최근 90일 커밋 이력 누적** (고유 URL 43,990건) | 수집 시점과 시차가 작아 진짜 temporal/domain-shift 검증이 된다. 외부 test는 크기보다 독립성·신선도·출처 명확성이 중요하다 |
+| phishing 보조(secondary robustness) | **Phishing.Database `phishing-links-ACTIVE.txt`** (GitHub raw, MIT) | 무키로 789,054줄, 경로 보유율 91%. 규모는 크지만 파일 자체의 최종 갱신이 2025-12-22인 **역사적 아카이브**이고 다수가 다른 피드의 재집계라 독립 표본이 아니다 |
 | benign 주 | **Common Crawl `CC-MAIN-2026-34` columnar index parquet × Tranco `GQJ9K` 조인** | 경로 보유율 99%대. 인기도 축을 Tranco로 통제 |
+| benign 민감도(필수) | **Tranco 조인을 끈 unranked/general Common Crawl 표본**(EXT-B3) | benign=인기 웹사이트라는 축이 남아 있는지 검사한다. 오염 위험이 올라가는 것은 한계로 명시 |
 | benign 대조 | **Tranco 상위 5만 도메인**(경로 없음, EXT-B2) | "그럼 Tranco benign에서는?"에 같은 파이프라인으로 답하는 대조군 |
 | 제외 | PhishTank, URLhaus | 각각 Cloudflare 403(앱 키 발급 중단), malware 전용이라 라벨 정의 불일치 |
+
+**주·보조 배치의 근거.** 43,990건이면 외부 검증에 충분한 규모다. 주 결과(primary)는 OpenPhish 최근 90일
++ CC-MAIN-2026-34 benign으로 내고, Phishing.Database + 같은 benign은 **secondary robustness**로 함께 보고한다.
+"789k라서 PhishDB가 주"라는 배치는 쓰지 않는다.
 
 **Phishing.Database 신선도.** 리포 HEAD는 2026-08-23이지만 `phishing-links-ACTIVE.txt` 자체의 마지막
 갱신 커밋은 **2025-12-22**다. "현재 살아있는 피싱"이 아니라 **역사적 피싱 URL 아카이브**로 취급해야
@@ -47,8 +52,9 @@ UA 헤더가 없으면 503이 온다. fsspec의 http 백엔드는 aiohttp를 요
 5. **오염률 수동 추정** — **하지 않는다.** benign 300건 수동 검토는 이번 범위 밖이므로
    `contamination_estimate.p_hat`은 null로 두고, 대신 (a) 피싱 피드 eTLD+1 제거,
    (b) 호스팅 블록리스트 제거, (c) VirusTotal/Safe Browsing 미검사 상태임을 한계 절에 명시한다.
-   이 오염은 전이 성능을 **과소평가**하는 방향이므로 "전이가 살아남았다"는 결론에는 유리하고
-   "무너졌다"는 결론에는 불리하다. 그 방향을 본문에 적는다.
+   이 오염은 전이 성능을 **일반적으로 감쇠시키는 방향으로 예상되며, 단조성이 보장되지는 않는다**
+   (라벨 잡음이 systematic하면 AUROC가 항상 낮아진다고 볼 수 없다). 그래도 예상 방향은
+   "전이가 살아남았다"는 결론에 유리하고 "무너졌다"는 결론에 불리하다. 그 방향과 단서를 함께 본문에 적는다.
 6. **Phishing.Database 라이선스** — GitHub API `spdx_id`와 README 모두 **MIT**로 확인했다.
    가공·재배포에 제약이 없다. 반면 OpenPhish는 재배포 금지로 읽는 것이 안전하므로
    `data/external/`을 통째로 gitignore하고 `reports/external/`의 메타만 커밋한다.
@@ -60,7 +66,7 @@ UA 헤더가 없으면 503이 온다. fsspec의 http 백엔드는 aiohttp를 요
 
 - **스킴은 제거한다.** `head -3 data/webphish.csv` 결과 WebPhish `Data` 컬럼에는 스킴이 없다.
   따라서 `scheme_policy`는 `strip`으로 확정했고 `manifest.json`에
-  `scheme_policy_resolved: "strip"`으로 기록했다. 스킴 유무는 URL 바이트 길이를 7~8바이트 바꿔
+  `scheme_policy_resolved: "strip"`으로 기록했다. 스킴 유무는 URL 바이트 길이를 7 ~ 8바이트 바꿔
   QR 버전 배정과 길이 매칭을 직접 흔들기 때문에 이 항목이 F의 가장 흔한 실패 모드다.
 - 스킴을 떼고 나면 `qrphish.urls.normalize_url(u, mode)`를 **그대로** 호출한다. 새 규칙은 없다.
   로더의 `mode` 인자로 `raw`/`norm`을 고른다.
@@ -86,8 +92,10 @@ EXT-B2(Tranco)는 설계대로 경로 보유율 0.0이고, 이는 대조군의 �
 - benign 60,562 대 phishing 555,853으로 클래스가 크게 기운다. 주 조건 `L-exact`의 길이 매칭이
   버킷마다 `min(n_ben, n_phi)`를 뽑아 1:1로 맞춰 주므로 실질 문제는 아니지만, `L-none` 조건에서는
   AUPRC와 base rate를 함께 보고해야 한다.
-- Tranco 조인 때문에 benign이 **인기 도메인의 페이지**로 한정된다. 인기도 축은 통제되지만
-  "일반 웹 전체"의 표본은 아니다. 조인을 끄면(`tranco_csv=None`) 오염 위험이 올라간다는 교환이다.
+- Tranco 조인 때문에 benign이 **인기 도메인의 페이지**로 한정된다. "root vs path" 편향은 깨졌지만
+  "benign = 인기 웹사이트"라는 축은 일부 남는다. 그래서 조인을 끈 unranked/general Common Crawl
+  benign(EXT-B3) 민감도 세트를 **필수 실험**으로 둔다(1.3절). 조인을 끄면(`tranco_csv=None`) 오염 위험이
+  올라가는 것은 교환 조건이며 한계로 명시한다.
 - 라벨 오염을 실측하지 않았다(위 5번).
 - **benign에서 피싱 도메인을 제거한 것 자체가 선택 편향이다.** phishing으로 등장한 eTLD+1을
   benign에서 지우면(설계 1.4절 1) benign이 실제 웹보다 깨끗해지고, 그 결과 F-a의 전이 성능이
@@ -96,8 +104,10 @@ EXT-B2(Tranco)는 설계대로 경로 보유율 0.0이고, 이는 대조군의 �
   `load_external(drop_benign_on_phish_domains=...)`(기본 True) / 수집 스크립트의
   `--keep-benign-on-phish-domains`로 끌 수 있고, 제거 건수는 항상
   `n_benign_on_phish_domains`·`n_dropped_phish_domain_from_benign`으로 manifest와 stats에
-  기록된다. **옵션을 끈 민감도 분석이 필요하다** — 끈 상태의 F-a AUROC가 켠 상태보다 크게
-  낮으면 전이 결과의 상당 부분이 이 제거에서 온 것이다.
+  기록된다. **이 민감도 분석은 권장이 아니라 필수다** — `clean benign` / `keep benign on phishing domains` /
+  `hosting blocklist off` 세 조건을 반드시 비교한다(1.3절). 끈 상태의 F-a AUROC가 켠 상태보다 크게
+  낮으면 전이 결과의 상당 부분이 이 전처리에서 온 것이다. 다만 실측 수집분에서 `hosting blocklist off`는
+  primary benign 제거 건수가 0인 no-op으로 확인됐다(1.3절 3번).
 
 
 ---
@@ -128,11 +138,13 @@ E(counterfactual URL)와 H(실제 QR 조건)는 여전히 범위 밖이다.
 그리고 `review_01.md` 핵심 문제 7번은 이유를 정확히 짚는다. WebPhish의 benign은 Alexa 상위
 사이트에서, phishing은 완전히 다른 수집 과정에서 왔다. **라벨과 출처(source)가 결합**되어 있으므로,
 1차 실험이 통제한 길이·버전·패딩·`www.`를 모두 제거하고 남은 신호가 "피싱성"인지 "수집 파이프라인의
-지문"인지 원리적으로 구분할 수 없다. `raw → norm`만으로 CNN이 5~9%p 떨어졌다는 관측이 그 잔재의
+지문"인지 원리적으로 구분할 수 없다. `raw → norm`만으로 CNN이 5 ~ 9%p 떨어졌다는 관측이 그 잔재의
 크기를 보여준다.
 
 F는 이 질문에 답한다. **WebPhish에서 학습한 모델이, 출처 결합 구조가 다른 데이터에서도 작동하는가.**
 G는 보조 질문에 답한다. **eTLD+1 분할이 막지 못하는 피싱 키트 템플릿 누출이 1차 결과를 얼마나 부풀렸는가.**
+G는 고정된 캠페인 test 위에서 Model A(eTLD+1만 격리)와 Model B(eTLD+1+템플릿 격리)를 쌍체 비교하는
+구조다(5.5절).
 
 두 실험 모두 **새 CNN 대규모 학습을 요구하지 않는다.** F의 (a)는 기존 체크포인트 재사용이고,
 (b)(c)(d)와 G만 재학습이 필요하며 그 규모도 1차 매트릭스의 일부다.
@@ -145,7 +157,7 @@ G는 보조 질문에 답한다. **eTLD+1 분할이 막지 못하는 피싱 키�
 
 | 소스 | 접근 방법 | 라이선스/약관 | 예상 표본 | URL 형태 | 시점 고정 | 판정 |
 |---|---|---|---|---|---|---|
-| **OpenPhish Community** | `https://openphish.com/feed.txt` (plain text, 6시간 주기 갱신, 스냅샷 약 500~2,000건). GitHub 미러 `openphish/public_feed`의 `feed.txt` 커밋 이력으로 **과거 스냅샷 소급 수집 가능** | openphish.com/terms.html 동의. 비상업 연구 사용은 통상 허용되나 **재배포 금지**로 읽는 것이 안전 | 스냅샷 1회 1~2k. GitHub 이력 90일치 누적 시 **30~80k(중복 제거 후 추정, 미확인)** | 전체 URL, **경로·쿼리 풍부** | GitHub 커밋 해시 + 날짜로 완전 고정 | **채택 (주 소스)** |
+| **OpenPhish Community** | `https://openphish.com/feed.txt` (plain text, 6시간 주기 갱신, 스냅샷 약 500 ~ 2,000건). GitHub 미러 `openphish/public_feed`의 `feed.txt` 커밋 이력으로 **과거 스냅샷 소급 수집 가능** | openphish.com/terms.html 동의. 비상업 연구 사용은 통상 허용되나 **재배포 금지**로 읽는 것이 안전 | 스냅샷 1회 1 ~ 2k. GitHub 이력 90일치 누적 시 **30 ~ 80k(중복 제거 후 추정, 미확인)** | 전체 URL, **경로·쿼리 풍부** | GitHub 커밋 해시 + 날짜로 완전 고정 | **채택 (주 소스)** |
 | **Phishing.Database** (`Phishing-Database/Phishing.Database`, 구 mitchellkrogza) | GitHub raw: `phishing-links-ACTIVE.txt`, `phishing-links-ACTIVE-today.txt`, `phishing-links-INACTIVE.txt`. 시간당 갱신, PyFunceble로 생존 검증 | 저장소 라이선스 확인 필요(**미확인** — 구현 시 LICENSE 파일 확인해 메타에 기록) | ACTIVE 수십만 건 | 전체 URL, 경로 포함. 단 **다수가 OpenPhish/PhishTank 재집계**라 독립 표본이 아님 | 커밋 해시로 고정 | **채택 (보조/증량용, 출처 중복 경고 기록)** |
 | PhishTank | `http://data.phishtank.com/data/<appkey>/online-valid.json.bz2`, 시간당 갱신 | 등록 필요. **2020년 남용 이후 신규 사용자 등록이 닫혀 있고 2026년 6월 기준으로도 닫힌 상태**로 보고됨 | — | 전체 URL | — | **조건부 제외**. 기존 키가 있으면 `PHISHTANK_APP_KEY` 환경변수로 사용, 없으면 스킵 |
 | URLhaus (abuse.ch) | CSV 덤프 공개 | 연구 사용 허용 | 대량 | 전체 URL | 가능 | **제외.** malware 배포 URL 위주라 라벨 정의가 "피싱"과 다르다. 라벨 오염 위험이 이득보다 크다 |
@@ -159,7 +171,7 @@ Tranco 맨 도메인만 쓰면 "benign은 짧고 경로가 없다"는 WebPhish�
 
 | 소스 | 접근 방법 | 라이선스 | 예상 표본 | URL 형태 | 시점 고정 | 판정 |
 |---|---|---|---|---|---|---|
-| **Common Crawl URL 인덱스** | (i) CDX API: `https://index.commoncrawl.org/CC-MAIN-2026-34-index?url=<도메인>/*&output=json` — 도메인 지정 질의용. (ii) **대량 무작위 표본은 인덱스 샤드 직접 다운로드**: `https://data.commoncrawl.org/cc-index/collections/CC-MAIN-2026-34/indexes/cdx-00000.gz` (샤드 1개 수백 MB, 스트리밍 파싱으로 필요분만 채집). (iii) Parquet 컬럼 인덱스 `s3://commoncrawl/cc-index/table/cc-main/warc/` (Athena/DuckDB) | CC0 성격의 공개 데이터(약관: commoncrawl.org/terms-of-use) | 무제한. 목표 50k 채집에 샤드 1~2개면 충분 | **경로·쿼리 풍부. 인기도 순위와 무관한 일반 웹** | 크롤 id(`CC-MAIN-2026-34`) + 샤드 파일명 + 바이트 오프셋으로 완전 고정 | **채택 (주 소스)** |
+| **Common Crawl URL 인덱스** | (i) CDX API: `https://index.commoncrawl.org/CC-MAIN-2026-34-index?url=<도메인>/*&output=json` — 도메인 지정 질의용. (ii) **대량 무작위 표본은 인덱스 샤드 직접 다운로드**: `https://data.commoncrawl.org/cc-index/collections/CC-MAIN-2026-34/indexes/cdx-00000.gz` (샤드 1개 수백 MB, 스트리밍 파싱으로 필요분만 채집). (iii) Parquet 컬럼 인덱스 `s3://commoncrawl/cc-index/table/cc-main/warc/` (Athena/DuckDB) | CC0 성격의 공개 데이터(약관: commoncrawl.org/terms-of-use) | 무제한. 목표 50k 채집에 샤드 1 ~ 2개면 충분 | **경로·쿼리 풍부. 인기도 순위와 무관한 일반 웹** | 크롤 id(`CC-MAIN-2026-34`) + 샤드 파일명 + 바이트 오프셋으로 완전 고정 | **채택 (주 소스)** |
 | **Tranco** | `https://tranco-list.eu/top-1m.csv.zip`, 영구 id는 `https://tranco-list.eu/top-1m-id`로 조회 후 `https://tranco-list.eu/download/<listid>/full` 형태로 고정 인용. `tranco` PyPI 패키지 있음 | 연구 목적 공개 | 1M 도메인 | **맨 도메인만. 경로 없음** | 영구 list id로 완전 고정 | **보조 채택.** 단독 benign으로 쓰지 않는다. 용도는 셋 — (1) CC 샘플의 인기도 편향을 *진단*하는 축, (2) 민감도 분석용 대체 benign(`EXT-B2`), (3) CC 도메인 랭크 부착 |
 | Wikipedia 외부 링크 | 덤프 `externallinks.sql.gz` 파싱 | CC BY-SA | 수백만 | 경로 포함, 다만 **위키 편집자가 고른 링크**라 학술·언론 편향 | 덤프 날짜로 고정 | **예비.** CC 접근이 막힐 때의 대안 |
 | Majestic Million | `https://downloads.majestic.com/majestic_million.csv` | 무료, 재배포 조건 확인 필요(미확인) | 1M 도메인 | 맨 도메인만 | 날짜 고정만 가능(영구 id 없음) | **제외.** Tranco 대비 이점 없음 |
@@ -167,12 +179,31 @@ Tranco 맨 도메인만 쓰면 "benign은 짧고 경로가 없다"는 WebPhish�
 ### 1.3 권장 조합 (확정)
 
 ```
-EXT-P (phishing) = OpenPhish public_feed GitHub 이력 스냅샷 누적 (주)
-                 + Phishing.Database phishing-links-ACTIVE (증량, 출처중복 플래그)
-                 [+ PhishTank online-valid  ← APP KEY 있을 때만]
-EXT-B (benign)   = Common Crawl CC-MAIN-2026-34 인덱스 무작위 샤드 표본 (주)
-EXT-B2 (민감도)  = Tranco top-1m 상위 도메인 (경로 없음, 대조용)
+EXT-P  (phishing, primary)   = OpenPhish public_feed GitHub 이력 90일 누적
+EXT-P2 (phishing, secondary) = Phishing.Database phishing-links-ACTIVE (출처중복·아카이브 플래그)
+                               [+ PhishTank online-valid  ← APP KEY 있을 때만]
+EXT-B  (benign, 주)          = Common Crawl CC-MAIN-2026-34 × Tranco 조인
+EXT-B3 (benign, 필수 민감도) = 같은 크롤에서 Tranco 조인을 끈 unranked 표본
+EXT-B2 (benign, 대조)        = Tranco top-1m 상위 도메인 (경로 없음)
 ```
+
+**필수 실험 목록(권장 아님).** 아래 셋은 결과와 무관하게 반드시 돌린다.
+
+1. **primary vs secondary phishing 소스**: EXT-P(OpenPhish)를 주 결과로, EXT-P2(Phishing.Database)를
+   robustness로 각각 F-a에 태운다.
+2. **unranked CC benign 민감도**: EXT-B(Tranco 조인)와 EXT-B3(조인 없음)에서 F-a AUROC를 비교한다.
+   EXT-B에서 높고 EXT-B3에서 급락하면, 모델이 잡는 것이 피싱성이 아니라 인기 도메인 유래 문자 통계일
+   가능성이 커진다. 그 결과 자체가 논문에 쓸 수 있는 발견이다.
+3. **benign 정제 절제 3조건**: `clean benign`(기본) / `keep benign on phishing domains`
+   (`drop_benign_on_phish_domains=False`) / `hosting blocklist off` 를 같은 파이프라인으로 비교한다.
+   셋의 외부 AUROC가 거의 같으면 결과가 강해지고, 크게 떨어지면 외부 일반화의 상당 부분을 전처리가
+   만들어냈다는 뜻이다.
+
+   **실측 단서(2026-09-08 수집분).** `no_hosting_blocklist` 조건은 primary benign에서 **한 건도 제거하지
+   않는 no-op**이다. `external_primary_no_hosting_blocklist_*.csv`가 `external_primary_*.csv`와 92,408행
+   전부 동일하다(benign 60,824 / phishing 31,584). 즉 이 절제는 primary에서 정보량이 0이며, F-a AUROC도
+   정의상 기본 조건과 같게 나온다. 이 사실 자체를 결과로 보고하고, **블록리스트를 넓히는 일은 하지
+   않는다** — 사전 등록 밖의 사후 선택이라 절제의 해석을 오염시킨다.
 
 **왜 이 조합인가.** WebPhish의 편향축은 "benign=인기 도메인 루트 / phishing=긴 경로"다.
 EXT-B(Common Crawl)는 인기도와 무관한 일반 웹의 임의 페이지라 **경로 보유율이 높고 인기 순위가 낮다**.
@@ -198,8 +229,10 @@ Common Crawl에는 피싱 페이지도 들어 있다. 완전 제거는 불가능
 3. 잔여 오염률을 **추정해 보고**한다. EXT-B에서 무작위 300건을 뽑아 수동 검토하거나, 최소한
    VirusTotal/Google Safe Browsing 무검사 상태임을 명시한다. 추정 오염률 `p`는 AUROC 상한을 대략
    `1 - p` 규모로 깎으므로, `p`가 1%를 넘으면 결론 문장에 그대로 적는다.
-4. **이 오염은 F의 결론을 보수적으로 만든다**(benign에 피싱이 섞이면 성능이 과소평가된다). 따라서
-   "전이 성능이 살아남았다"는 결론에는 유리하고 "무너졌다"는 결론에는 불리하다. 방향을 본문에 명시한다.
+4. **이 오염은 F의 결론을 대체로 보수적으로 만든다.** benign에 피싱이 섞이면 성능은 일반적으로 감쇠
+   방향으로 예상되지만, 라벨 잡음이 systematic할 때 AUROC가 단조롭게 낮아진다고 보장할 수는 없다.
+   예상 방향은 "전이 성능이 살아남았다"는 결론에 유리하고 "무너졌다"는 결론에 불리하다. 방향과
+   이 단서를 함께 본문에 명시한다.
 
 ---
 
@@ -220,7 +253,7 @@ Common Crawl에는 피싱 페이지도 들어 있다. 완전 제거는 불가능
   > **구현 워커 필수 확인 사항**: WebPhish CSV의 `Data` 컬럼이 `http://`/`https://` 스킴을 포함하는지
   > 먼저 확인하라(`head -5 data/webphish.csv`). 외부 피드는 거의 항상 스킴을 포함한다. WebPhish가
   > 스킴을 포함하지 않는다면 외부 URL에서 **스킴을 제거**해야 하고, 포함한다면 스킴 분포(http vs https)가
-  > 두 데이터셋에서 크게 다른지 진단으로 남긴다. **스킴 유무는 URL 바이트 길이를 7~8바이트 바꾸므로
+  > 두 데이터셋에서 크게 다른지 진단으로 남긴다. **스킴 유무는 URL 바이트 길이를 7 ~ 8바이트 바꾸므로
   > QR 버전 배정과 길이 매칭을 직접 흔든다.** 이것이 F에서 가장 흔한 실패 모드다.
   > 결정: `external.py`에 `scheme_policy: "strip" | "keep" | "match_webphish"`를 두고 기본값
   > `match_webphish`(WebPhish 첫 1,000행에서 스킴 보유율 > 0.5면 keep, 아니면 strip)로 하되,
@@ -341,10 +374,15 @@ F-c·F-d는 예산이 남을 때.
 2. `build_stratum`으로 격자를 만든다. 층 디렉터리는
    `artifacts/external/{source_tag}/{cond_id}/{stratum}/seed{k}/`.
    `build_stratum`의 인자는 WebPhish 실행과 동일한 `cond`/`qr` 객체를 넘긴다.
-3. `_load_trained`로 모델을 불러와 `predict_probs`로 **외부 층 전체**(train/val/test 구분 없이 `split==2`만
-   쓰는 것이 아니라 **전체 행**)에 대해 점수를 낸다. F-a에서는 외부 데이터를 학습에 전혀 쓰지 않으므로
-   전체가 평가 대상이다. 다만 F-b와 같은 행 집합으로 비교하고 싶으면 `eval_rows: "all" | "test"`를
-   config로 두고 **주 결과는 `all`**, F-b와의 쌍체 비교용으로 `test`도 함께 낸다.
+3. **평가 cohort를 한 번 고정한다(F-a primary).** 외부 프레임을 시드 0의 절차로 한 번 만들어 그 행 집합을
+   `fixed external cohort`로 얼리고, WebPhish 시드 0 ~ 4의 다섯 모델을 **모두 같은 행**에 평가한다. 그래야
+   변동하는 것이 모델 시드뿐이고 test 분포는 완전히 동일하다. 시드마다 외부 매칭 표본까지 다시 뽑으면
+   모델 변동과 평가 집합 변동이 섞여 해석이 어려워진다.
+   `_load_trained`로 모델을 불러와 `predict_probs`로 이 cohort 전체에 점수를 낸다. F-a에서는 외부 데이터를
+   학습에 전혀 쓰지 않으므로 층 전체 행이 평가 대상이다(`eval_rows: "all"`).
+   **F-a vs F-b 쌍체 비교는 secondary(F-b)** 로 분리한다. 이때만 시드별 F-b test cohort를 쓰고
+   같은 행에서 쌍체 부트스트랩을 건다. 즉 `F-a primary = fixed external cohort`,
+   `F-a vs F-b paired secondary = 각 F-b seed test cohort`다.
 4. 임계값은 **WebPhish val에서 고른 값을 그대로** 쓴다(`results.json`의 `threshold` 또는 체크포인트 옆
    기록). 외부에서 임계값을 다시 고르면 그것은 zero-shot이 아니다. F1·Acc는 이 임계값에서만 보고하고,
    **주 지표는 임계값 무관한 AUROC**로 둔다.
@@ -473,11 +511,14 @@ fit·predict를 모두 한다. **따라서 `baselines.py`에 fit/apply 분리 �
 4. **외부에서의 인과 절제 반복.** `qrphish/occlusion.py`의 절차를 외부 층에 그대로 적용한다.
    - 대상 모델: **F-a의 WebPhish 체크포인트**(이 조합이 가장 의미 있다 — WebPhish에서 배운 모델이
      외부 QR에서도 같은 motif에 의존하는가). 여력이 되면 F-b 모델로도 반복.
-   - 뒤집을 motif: WebPhish train 상위 phishing motif(1차와 동일 목록).
-   - 대조: 1차와 동일하게 상위 benign motif 뒤집기 + **매칭 개수 동일 무작위 뒤집기**
-     (`random`, `random_benign_matched`), 5회 반복 평균.
+   - 개입 대상 motif: WebPhish train 상위 phishing motif(1차와 동일 목록). 개입은 1차와 같은
+     **motif 표적 중심 비트 개입(motif-targeted center-bit intervention)** — 매칭된 3×3 창의 중심 모듈
+     하나만 뒤집는다.
+   - 대조: 1차와 동일하게 상위 benign motif에 같은 개입 + **매칭 개수 동일 무작위 개입**
+     (`random`, `random_benign_matched`), 5회 반복 평균. 1차에 추가될 위치·밀도 매칭 대조
+     (`random_matched`)가 준비되면 외부에서도 같이 돌린다.
    - 지표: ΔAUROC와 평균 로짓 변화, 쌍체 그룹 부트스트랩 CI.
-   - 판정: WebPhish에서 관측된 ΔAUROC(0.016~0.050)의 **부호가 같고**, 무작위 대조보다 크면 재현.
+   - 판정: WebPhish에서 관측된 ΔAUROC(0.016 ~ 0.050)의 **부호가 같고**, 무작위 대조보다 크면 재현.
 
 **보고 형식**: `reports/transfer/{source}/motif_replication/{stratum}/replication.json`
 ```json
@@ -605,25 +646,92 @@ group_campaign = uf.find(row)
 > 합집합은 반드시 필요하다. 템플릿만으로 분할하면 같은 도메인이 train/test에 갈려
 > 1차보다 **약한** 통제가 된다. 두 제약을 동시에 만족해야 한다.
 
-### 5.5 실행과 판정
+### 5.5 실행과 판정 — 고정 캠페인 test 위의 쌍체 비교
 
-주 조건(`norm` · `L-exact` · `data_only` · `mask-fixed` · SmallCNN)을 **그룹 키만 바꿔** 5시드 재실행한다.
-층은 v2/v3/v4. 비교 대상은 1차 결과(`reports/.../results.json`의 AUROC).
+**설계를 바꿨다.** 분할 방식을 통째로 갈아끼운 뒤 성능을 비교하면 학습 조건뿐 아니라 평가 대상까지
+함께 바뀐다. 실측 진단이 그 규모를 보여준다. v3에서 eTLD+1 그룹 6,198개가 템플릿 union 후 5,733개로
+줄고, 1차 test 행의 **86 ~ 88%가 template split에서는 test를 떠난다**(v3 기준 88.4% = `len(te - tt) / len(te)`).
+1차 test와 새 test의 Jaccard도 평균 0.06 ~ 0.10에 그친다. 이 상태에서 두 AUROC를 빼면 그 차이가 템플릿
+누출 때문인지 평가 집합이 바뀐 탓인지 분리할 수 없다.
 
-**핵심 수치**: `ΔAUROC_G = AUROC(campaign split) − AUROC(eTLD+1 split)`.
-이것이 "피싱 키트 템플릿 누출"의 크기다.
+**새 설계**: campaign/template-disjoint **test set을 먼저 하나 고정**하고, 그 동일한 test 위에서 학습 조건만
+다른 두 모델을 쌍체 비교한다.
 
-- 두 분할은 **표본 집합이 다르다**(그룹 병합으로 5% 상한 다운샘플 결과가 달라지고, 길이 매칭도
-  split별로 다시 걸린다). 따라서 **쌍체 부트스트랩이 불가능**하다. `paired=False`로 표기하고
-  `unpaired_delta_bootstrap_by_seed`를 쓴다. H3(`L-none` 대 `L-exact`)와 정확히 같은 상황이다.
-- 함께 보고할 진단: 병합 후 그룹 수, 최대 그룹 크기 비율, test 상위 5 그룹 점유율,
-  **1차 test 행 중 몇 %가 campaign split에서 train으로 이동했는지**(누출 규모의 직접 서술).
-- 베이스라인(char n-gram LR, byte-hist LR)도 같은 분할로 재실행한다. 텍스트 기준선이 더 크게
-  떨어지면 누출은 어휘 수준이고, CNN이 더 크게 떨어지면 QR 격자 표현이 템플릿을 특히 잘 외웠다는 뜻이다.
+```
+고정 test  = template ∪ eTLD+1 연결 요소 단위로 잘라낸 held-out cohort (한 번 만들어 얼린다)
+Model A    = eTLD+1만 격리해 학습 (test와 같은 eTLD+1은 없지만 유사 template은 train에 허용)
+Model B    = eTLD+1 + template까지 격리해 학습
+핵심 수치  = ΔAUROC_G = AUROC(A) − AUROC(B)   (같은 test 행, 쌍체)
+```
+
+**형제(sibling) 도메인 — 구현에서 반드시 필요한 한 겹.** 위 상자를 그대로 코드로 옮기면 ΔAUROC가
+항등적으로 0이 된다. 템플릿 클러스터와 eTLD+1을 union-find로 합친 `combined_group_key` 성분은
+**전이적 폐포**이기 때문이다. 성분 단위로 test를 배정하는 순간 "T와 템플릿이 겹치는 행"은 하나도
+남김없이 T 안으로 들어가고, 그러면 A의 train 후보가 B와 완전히 같아진다. 다운샘플로 성분 밖에
+떨어지는 행을 A에 돌려주는 우회도 성립하지 않는다 — v3에서 그렇게 빠지는 행은 11,996 중 19개뿐이다.
+
+그래서 **test로 배정된 성분 안에서 eTLD+1 단위로 한 번 더 쪼갠다**(`qrphish/campaign.py`의
+`build_campaign_split`):
+
+- **T-도메인** → 고정 test 집합 T.
+- **형제(sibling) 도메인** → T와 같은 캠페인(템플릿 클러스터)의 **다른 도메인**. A의 train에만 넣는다.
+  목표 비율은 `sibling_frac=0.5`(다중 도메인 test 성분의 eTLD+1 그룹 중 절반을 형제로 돌린다).
+- 형제가 없는 단일 도메인 성분은 전부 T로 간다. 그 행에는 누출 기회 자체가 없으며, 비율을 진단으로 남긴다.
+- **A-sizematched(`A_sm`) — 주 지표는 이쪽이다.** `train_a = train_b ∪ siblings`이므로 A는 B보다 정확히
+  `|siblings|`만큼 크고, 그 크기 차이만으로도 AUROC가 오를 수 있다. `A_sm`은 **형제 행을 전부 유지한 채**
+  비형제 행에서 `|siblings|`개를 무작위 제거해 `|train_A_sm| = |train_B|`로 맞춘다. 그러면 Δ에 남는 것은
+  "형제 행이 비형제 행을 대체했을 때의 이득"뿐이다. **판정은 `ΔAUROC = A_sm − B`로 하고**, 크기를 맞추지
+  않은 `A − B`는 보조 지표로 함께 보고한다(`qrphish.campaign.sizematched_train_a`).
+- 결과적으로 `train_b ⊆ train_a`이고 `train_a = train_b ∪ siblings`다(길이 매칭 전). 이것이 "train 후보 =
+  T·val에 속하지 않는 모든 행 중 eTLD+1이 T와 겹치지 않는 행"이라는 리뷰 문장을 만족시키는 유일한 구성이다.
+- **val 성분은 쪼개지 않는다.** val을 쪼개면 형제 행이 A의 조기종료·임계값 선택에만 val 누출을 주어,
+  A 대 B 비교에 템플릿과 무관한 교란이 낀다.
+
+**실데이터 진단 — 검정력이 빠듯하다.** 형제를 실제로 보유한 test 행의 비율
+(`frac_test_rows_with_sibling_in_A`)은 층에 따라 **0.3 ~ 6%**에 그친다. 나머지 행은 A와 B가 같은 조건에서
+보는 행이므로 전체 ΔAUROC는 구조적으로 희석되고, 특히 **v4는 표본이 작아 검정력이 부족하다**. 그래서
+**누출 행만 따로 본 ΔAUROC를 `cnn_leaky_vs_contrast` 태그로 부차 지표**로 함께 낸다. 이름이 "부분집합"이
+아닌 이유가 있다 — 형제 행은 거의 전부 피싱이라 누출 행만 남기면 단일 클래스가 되어 AUROC가 정의되지
+않는다. 그래서 이 지표는 **"누출 행 + 누출 행이 하나도 없는 클래스의 행 전부(대조)"** 위에서 계산한다.
+표본 구성이 전체 T와 다르므로 두 Δ의 크기를 직접 비교하면 안 된다. 주 지표는 어디까지나 T 전체 위의 ΔAUROC다.
+
+**해석 프레임(사전 등록).** ΔAUROC_G가 0 근처로 나오는 것은 실패가 아니다. 그것은 **옛 G가 보던 차이가
+템플릿 누출이 아니라 test 집합이 교체된 효과였다는 확인**이다. 이 문장을 데이터를 보기 전에 박아 두어,
+0에 가까운 결과를 뒤늦게 "검정력 부족"으로만 돌리는 사후 해석을 막는다.
+
+**판정 기준.** 주 판정은 **`A_sm − B` 쌍체 ΔAUROC의 95% 양측 CI 하한이 0보다 큰가**이고 alpha는
+**0.05**다. 쌍체 예측이 있으므로 그룹 단위 교환 클러스터 순열 p값도 함께 낸다. `A − B`는 같은 방식으로
+계산하되 판정에는 쓰지 않는다(학습 표본 수 효과가 섞여 있다).
+
+- A와 B의 train 집합만 다르고 평가 행은 완전히 같으므로 `paired_cluster_bootstrap_by_seed`를 쓴다.
+  ΔAUROC_G는 "template shortcut을 학습에서 허용했을 때 얻는 이득"에 훨씬 가깝다.
+- A의 train에는 T의 형제 행이 들어가고, B의 train에서는 그 형제 행까지 제거한다. **두 조건의 train 크기가
+  달라지므로** 위의 `A_sm`(A-sizematched)을 주 지표로 쓰고, A와 B의 train 크기·B의 감소분도 함께 보고한다.
+  그러지 않으면 차이의 일부가 학습 표본 수 효과다.
+- **길이 매칭은 A와 B를 독립으로 걸지 않는다.** 따로 걸면 각자 다른 비형제 행을 버려
+  `train_b ⊆ train_a`가 깨지고, Δ에 "비형제 train 행이 서로 다르다"는 교란이 섞인다. 그래서 **B를 먼저
+  매칭하고 형제를 전부 그 위에 얹어 A를 만든다**(`train_a = train_b ∪ siblings`). 매칭 후에도 부분집합
+  관계가 정확히 성립한다.
+- A와 B를 **동시에** 정확히 매칭할 수는 없다. 형제 행이 거의 전부 피싱이라, A가 형제를 전부 가지는 한
+  A의 클래스별 길이 주변분포는 반드시 틀어진다. 깨끗한 기준선인 **B를 정확히 맞추고**, A의 잔여 불균형은
+  진단 `length_match["A"]`로 그대로 보고한다. 그 불균형이 만드는 크기 효과는 `A_sm`이 걷어낸다.
+  (형제 프레임만 따로 `match_by_length`에 넣는 방식은 쓸 수 없다 — 단일 클래스라 클래스 균형이 형제를
+  전부 지워 A와 B가 같아진다.)
+- 시드 5개, 층 v2/v3/v4, 조건은 주 조건(`norm` · `L-exact` · `data_only` · `mask-fixed` · SmallCNN) 그대로.
+  길이 매칭은 1차와 같이 split별로 건다.
+- 함께 보고할 진단: 병합 후 그룹 수, 최대 그룹 크기 비율, 고정 test의 상위 5 그룹 점유율,
+  A와 B의 train 크기, B에서 추가로 제거된 행 수.
+- 베이스라인(char n-gram LR, byte-hist LR)도 같은 A/B 구조로 돌린다. 텍스트 기준선이 더 크게 떨어지면
+  누출은 어휘 수준이고, CNN이 더 크게 떨어지면 QR 격자 표현이 템플릿을 특히 잘 외웠다는 뜻이다.
+
+**부록으로 내리는 기존 방식.** 1차 분할과 template 분할을 각각 돌려 비쌍체로 빼는 원래 설계는
+폐기하고 부록 서술로만 남긴다. 폐기 사유는 위의 두 수치다 — 1차 test 행의 86 ~ 88%가 교체되고
+test cohort Jaccard가 0.06 ~ 0.10이라 효과 분리가 되지 않는다. 부록에는 이 진단 수치와 함께
+"왜 쌍체 설계로 바꿨는가"를 적는다.
 
 ### 5.6 F와 G의 결합
 
-**시간이 있으면** F-b(외부 자체 학습)를 campaign split으로도 돌린다. 외부 피싱은 키트 중복이
+**시간이 있으면** F-b(외부 자체 학습)에도 같은 A/B 쌍체 구조를 적용한다. 외부 피싱은 키트 중복이
 WebPhish보다 심할 가능성이 높아 G의 효과가 더 클 수 있다. 우선순위는 낮다.
 
 ---
@@ -643,7 +751,7 @@ WebPhish보다 심할 가능성이 높아 G의 효과가 더 클 수 있다. 우
 | **붕괴** | 어느 층에서든 CI 하한 ≤ 바닥선 CI 상한 (= 우연과 구분 불가) |
 
 > 임계 0.10/0.20의 근거: 1차의 층 간 변동(v2 0.872 → v4 0.805, 0.067)과 `shuffle-pos` 절제 효과
-> (0.107~0.149)를 척도로 삼았다. 0.10 이내면 층 간 변동 수준, 0.20 초과면 공간 구조를 통째로
+> (0.107 ~ 0.149)를 척도로 삼았다. 0.10 이내면 층 간 변동 수준, 0.20 초과면 공간 구조를 통째로
 > 파괴한 것보다 큰 하락이라는 뜻이다.
 
 **추가 필수 조건 (게이트)**: 위 판정은 다음이 모두 참일 때만 유효하다.
@@ -672,12 +780,14 @@ WebPhish보다 심할 가능성이 높아 G의 효과가 더 클 수 있다. 우
 
 ### 6.4 G (템플릿 분할)
 
+고정 캠페인 test 위의 쌍체 차이 `ΔAUROC_G = AUROC(Model A) − AUROC(Model B)`로 판정한다.
+
 | 판정 | `ΔAUROC_G` |
 |---|---|
-| 누출 무시 가능 | 비쌍체 CI가 0을 포함 |
-| 유의하나 작음 | CI가 0을 배제, 하락폭 < 0.05 |
-| **결론 수정 필요** | 하락폭 ≥ 0.05 |
-| **결론 무효** | campaign split AUROC의 CI 하한 ≤ 라벨 셔플 바닥 CI 상한 |
+| 누출 무시 가능 | 쌍체 CI가 0을 포함 |
+| 유의하나 작음 | CI가 0을 배제, 차이 < 0.05 |
+| **결론 수정 필요** | 차이 ≥ 0.05 |
+| **결론 무효** | Model B AUROC의 CI 하한 ≤ 라벨 셔플 바닥 CI 상한 |
 
 마지막 칸이 나오면 `RESULTS.md`의 RQ1 답을 "eTLD+1 통제 하에서는 그렇다"로 한정해야 한다.
 
@@ -976,7 +1086,7 @@ template:
 | `test_template_determinism` | 같은 seed로 두 번 돌리면 `template_id`가 비트 단위로 동일 |
 | `test_config_external` | 새 config 섹션의 검증 규칙 |
 
-`test_external_parse`의 fixture는 실제 피드에서 5~10줄만 떼어 `tests/fixtures/`에 둔다
+`test_external_parse`의 fixture는 실제 피드에서 5 ~ 10줄만 떼어 `tests/fixtures/`에 둔다
 (재배포 우려가 있으면 도메인을 `example-<n>.test`로 치환한 합성 데이터로 만든다 — **이 편을 권한다**).
 
 ### 7.8 수집 스크립트 `scripts/collect_external.py`
@@ -1025,13 +1135,13 @@ template:
 | 단계 | 산출물 | 위치 | 예상 시간 |
 |---|---|---|---|
 | 0 | `templates.py` + 테스트 | 로컬 CPU | 0.5일 |
-| 1 | **G 실행** (`run_template_split`, v2/v3/v4 × 5시드) | Colab T4 | 학습 60셀, 2~3시간 |
-| 2 | `collect_external.py` 실행 | 로컬 맥북 | 1~3시간(네트워크) |
+| 1 | **G 실행** (`run_template_split`, v2/v3/v4 × 5시드) | Colab T4 | 학습 60셀, 2 ~ 3시간 |
+| 2 | `collect_external.py` 실행 | 로컬 맥북 | 1 ~ 3시간(네트워크) |
 | 3 | `bias_diagnostics` 검토 → **게이트** | 로컬 | 30분 |
 | 4 | F-a (zero-shot) + 베이스라인 전이 | 로컬 CPU 가능 | 1시간 |
 | 5 | motif 재현 (4절) | 로컬 CPU | 1시간 |
-| 6 | F-b (외부 자체 학습) | Colab T4 | 2~3시간 |
-| 7 | F-c / F-d | Colab T4 | 3~4시간 (선택) |
+| 6 | F-b (외부 자체 학습) | Colab T4 | 2 ~ 3시간 |
+| 7 | F-c / F-d | Colab T4 | 3 ~ 4시간 (선택) |
 
 **G를 먼저 두는 이유**: 외부 데이터 수집 결과와 무관하게 실행 가능하고, 1차 결론의 유효 범위를
 바로 갱신하기 때문이다. 3단계 게이트에서 막히면 수집 설계를 고쳐 2단계로 돌아간다 —
@@ -1077,12 +1187,12 @@ template:
    (도메인당 최대 3건). 더 늘리면 `L-exact` 후 층이 두꺼워지지만 수집 시간이 선형으로 는다.
 4. **수집 시점(`COLLECT_DATE`)을 언제로 잡는가?** 구현 착수일에 한 번만 정하고 이후 재수집하지 않는 것을 권한다.
    재수집하면 F 결과 전체를 다시 돌려야 한다.
-5. **benign 라벨 오염률을 수동 표본 검토로 추정할 것인가?** 300건 검토에 1~2시간. 하지 않으면
+5. **benign 라벨 오염률을 수동 표본 검토로 추정할 것인가?** 300건 검토에 1 ~ 2시간. 하지 않으면
    메타의 `contamination_estimate.p_hat`을 `null`로 두고 한계 절에 "미추정"으로 적는다.
 6. **Phishing.Database의 라이선스**를 확인하지 못했다(미확인). 구현 시 LICENSE 파일을 읽고,
    연구 사용에 제약이 있으면 OpenPhish 단독으로 축소할 것인가?
 7. **F-c·F-d를 이번 회차에 포함할 것인가?** F-a·F-b만으로 RQ3 후반에 답할 수 있다.
-   F-c·F-d는 Colab 예산 3~4시간을 더 쓴다.
+   F-c·F-d는 Colab 예산 3 ~ 4시간을 더 쓴다.
 8. **G에서 `threshold`(현 구현 0.7)를 고정할 것인가, 진단 후 확정할 것인가?** 제안은 후자
    (클러스터 크기 분포를 먼저 보고 확정한 뒤 config에 박기). 다만 그것은 데이터를 본 뒤의 선택이므로,
    **임계값 선택은 라벨을 보지 않고 클러스터 크기 분포만 보고** 한다는 점을 명시해야 한다.

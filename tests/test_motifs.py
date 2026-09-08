@@ -300,3 +300,118 @@ def test_combine_seed_enrichments_filters_top_motifs():
     )
     assert strict["top_phishing"] == [] and strict["top_benign"] == []
     assert strict["n_stable_after_filter"] == 0
+
+
+# ------------------------------------------------- review_02 1: 순수 백분위 CI 회귀
+def test_motif_enrichment_ci_is_pure_percentile():
+    """CI 경계가 부트스트랩 백분위와 **정확히** 같다 (review_02 1절).
+
+    옛 코드는 ``lo=min(lo, point)`` / ``hi=max(hi, point)``로 점추정을 CI에 억지로
+    포함시켰다. 여기서는 같은 리샘플 가중치로 백분위를 직접 다시 계산해, 반환된 CI가
+    그 백분위와 한 자리도 다르지 않음을 확인한다. 점추정이 CI 밖으로 나가는 motif가
+    있어도 경계가 움직이면 안 된다.
+    """
+    rng = np.random.default_rng(0)
+    m = M.n_motifs(2)
+    n_g, n_boot = 30, 300
+    H, y, groups = [], [], []
+    for g in range(n_g):
+        for _ in range(4):
+            phish = g < 3  # phishing을 소수 그룹에 몰아 리샘플 변동을 크게 만든다
+            v = np.zeros(m, dtype=np.float32)
+            v[1 if phish else 2] = 1.0
+            v[rng.integers(3, m)] = 1.0
+            H.append(v)
+            y.append(int(phish))
+            groups.append(f"g{g}")
+    H = np.stack(H)
+    y = np.array(y)
+    groups = np.array(groups)
+    out = M.motif_enrichment(H, y, groups, size=2, n_boot=n_boot, seed=0)
+
+    # 같은 규약으로 백분위를 직접 재현한다.
+    presence = (H > 0).astype(np.float64)
+    gidx, W = M.group_bootstrap_weights(groups, n_boot=n_boot, seed=0)
+    a, c, n1, n0 = M._group_counts(presence, y, gidx, W.shape[1])
+    vals = M._log_odds(W @ a, W @ c, W @ n1, W @ n0)
+    assert np.allclose(out["ci_lo"], np.quantile(vals, 0.025, axis=0))
+    assert np.allclose(out["ci_hi"], np.quantile(vals, 0.975, axis=0))
+
+
+# ------------------------------------------------- review_02 3: within-QR null
+def _dummy_grid(n=25, seed=0):
+    rng = np.random.default_rng(seed)
+    vals = rng.integers(0, 2, size=(n, n)).astype(bool)
+    mask = np.zeros((n, n), dtype=bool)
+    mask[2 : n - 2, 2 : n - 2] = True  # 가짜 "데이터 모듈" 영역
+    return vals, mask
+
+
+def test_shuffle_within_qr_preserves_counts_and_function_pattern():
+    vals, mask = _dummy_grid()
+    out = M.shuffle_within_qr(vals, mask, seed=3)
+    assert out.shape == vals.shape and out.dtype == bool
+    # 데이터 모듈의 0/1 개수 보존
+    assert int(out[mask].sum()) == int(vals[mask].sum())
+    # 기능 패턴(마스크 밖)은 값도 위치도 그대로
+    assert np.array_equal(out[~mask], vals[~mask])
+    # 결정적: 같은 시드면 같은 결과, 다른 시드면 (거의 확실히) 다르다
+    assert np.array_equal(out, M.shuffle_within_qr(vals, mask, seed=3))
+    assert not np.array_equal(out, M.shuffle_within_qr(vals, mask, seed=4))
+
+
+def test_shuffle_within_qr_bytes_preserves_byte_multiset():
+    """코드워드 순서만 섞으므로 바이트 다중집합이 정확히 보존된다."""
+    rng = np.random.default_rng(1)
+    n = 21
+    vals = rng.integers(0, 2, size=(n, n)).astype(bool)
+    coords = [(r, c) for r in range(n) for c in range(n)][: 8 * 30]
+    order = np.array(coords, dtype=np.int64)
+
+    def bytes_of(g):
+        bits = g[order[:, 0], order[:, 1]].astype(np.int64).reshape(-1, 8)
+        return sorted(int(b.dot(1 << np.arange(7, -1, -1))) for b in bits)
+
+    out = M.shuffle_within_qr_bytes(vals, order, seed=5)
+    assert bytes_of(out) == bytes_of(vals)
+    # 배치는 실제로 바뀐다(30개 코드워드 순열이 항등일 확률은 무시할 만하다)
+    assert not np.array_equal(out, vals)
+    # 순서 밖 모듈은 불변
+    touched = np.zeros((n, n), dtype=bool)
+    touched[order[:, 0], order[:, 1]] = True
+    assert np.array_equal(out[~touched], vals[~touched])
+    assert np.array_equal(out, M.shuffle_within_qr_bytes(vals, order, seed=5))
+
+
+def test_shuffle_within_qr_bytes_unmasks_before_shuffling():
+    """``mask_flip``을 주면 마스크를 되돌린 도메인에서 바이트 조성이 보존된다."""
+    rng = np.random.default_rng(2)
+    n = 21
+    vals = rng.integers(0, 2, size=(n, n)).astype(bool)
+    flip = np.fromfunction(lambda r, c: (r + c) % 2 == 0, (n, n)).astype(bool)
+    coords = [(r, c) for r in range(n) for c in range(n)][: 8 * 30]
+    order = np.array(coords, dtype=np.int64)
+
+    def bytes_of(g):
+        bits = g[order[:, 0], order[:, 1]].astype(np.int64).reshape(-1, 8)
+        return sorted(int(b.dot(1 << np.arange(7, -1, -1))) for b in bits)
+
+    out = M.shuffle_within_qr_bytes(vals, order, seed=7, mask_flip=flip)
+    # 마스크 도메인이 아니라 **되돌린** 도메인에서 조성이 보존된다.
+    assert bytes_of(out ^ flip) == bytes_of(vals ^ flip)
+
+
+def test_shuffle_within_qr_bytes_short_order_is_noop():
+    vals, _ = _dummy_grid(n=21)
+    order = np.array([(r, 0) for r in range(8)], dtype=np.int64)  # 코드워드 1개뿐
+    assert np.array_equal(M.shuffle_within_qr_bytes(vals, order, seed=0), vals)
+
+
+def test_within_qr_nulls_reduce_patch3_signal():
+    """실제 격자에서 3x3 히스토그램은 셔플 후 눈에 띄게 달라진다(공간 정보 파괴 확인)."""
+    vals, mask = _dummy_grid(n=29, seed=11)
+    # 인접 의존성을 심는다: 세로로 값을 복사해 강한 국소 상관을 만든다.
+    vals[1::2, :] = vals[0::2, :][: vals[1::2, :].shape[0], :]
+    h0 = M.patch_histogram(vals, mask, 3)
+    h1 = M.patch_histogram(M.shuffle_within_qr(vals, mask, seed=0), mask, 3)
+    assert np.abs(h0 - h1).sum() > 0.2

@@ -27,6 +27,7 @@ __all__ = [
     "unpaired_delta_bootstrap",
     "unpaired_delta_bootstrap_by_seed",
     "bootstrap_p_value",
+    "paired_cluster_permutation_test",
     "holm",
     "pick_threshold",
     "group_perf_iqr",
@@ -103,7 +104,10 @@ def _group_slices(groups: np.ndarray) -> list[np.ndarray]:
 
 
 def bootstrap_p_value(samples: np.ndarray, alternative: str = "greater", null: float = 0.0) -> float:
-    """부트스트랩 **백분위 CI 역전**으로 정의한 단측 p값.
+    """부트스트랩 **백분위 CI 역전**으로 정의한 단측 **pseudo-p**.
+
+    산출물에서는 이 값을 ``pseudo_p``(Holm 보정본은 ``pseudo_p_holm``)로 부른다.
+    정식 영가설 분포에서 나온 p값이 아니라는 것을 이름에서부터 드러내기 위해서다.
 
     양측 백분위 CI ``[q(alpha/2), q(1-alpha/2)]``가 ``null``을 배제하는 가장 작은
     ``alpha``를 p값으로 쓴다. ``alternative="greater"``라면 하한이 null을 넘어야 하므로
@@ -115,7 +119,8 @@ def bootstrap_p_value(samples: np.ndarray, alternative: str = "greater", null: f
        이것은 영가설 아래에서 재표집한 정식 검정 통계량의 p값이 아니라, 관측치를
        중심으로 한 부트스트랩 분포에서 CI를 역전시킨 값이다. 명목 수준을 정확히 지키지
        않을 수 있으므로 절대적인 유의 판정보다는 CI와 함께 방향·크기를 읽는 데 쓴다.
-       판정 자체는 CI가 0을 배제하는지로 하고, Holm 보정은 이 p값에 건다.
+       판정 자체는 CI가 0을 배제하는지로 하고, Holm 보정은 이 p값에 건다. 쌍체 예측이
+       있는 비교라면 :func:`paired_cluster_permutation_test`의 순열 p값을 함께 본다.
     """
     v = np.asarray(samples, dtype=np.float64)
     v = v[~np.isnan(v)]
@@ -128,6 +133,96 @@ def bootstrap_p_value(samples: np.ndarray, alternative: str = "greater", null: f
     else:
         raise ValueError(f"alternative는 'greater'|'less' (got {alternative!r})")
     return float(min(2.0 * (1 + k) / (1 + v.size), 1.0))
+
+
+def paired_cluster_permutation_test(
+    y: np.ndarray,
+    p_a: np.ndarray,
+    p_b: np.ndarray,
+    groups: np.ndarray,
+    n_perm: int = 2000,
+    *,
+    seeds: np.ndarray | None = None,
+    metric_fn: Callable[[np.ndarray, np.ndarray], float] | None = None,
+    alternative: str = "greater",
+    seed: int = 0,
+) -> dict:
+    """클러스터 인식 순열 검정 — 같은 행을 공유하는 두 예측의 Δmetric에 대한 **정식 p값**.
+
+    영가설은 "두 조건의 라벨(a/b)이 교환 가능하다"다. 부트스트랩 CI 역전 pseudo-p와 달리
+    영가설 분포를 실제로 만들어 낸다. 표본이 eTLD+1 그룹 안에서 상관되어 있으므로 교환은
+    **행 단위가 아니라 그룹 단위**로 한다: 각 순열에서 그룹마다 동전을 던져, 앞면이면 그
+    그룹의 모든 행에서 ``p_a``와 ``p_b``를 통째로 맞바꾼다.
+
+    Args:
+        y: 0/1 라벨. ``p_a``/``p_b``: 같은 행에 대한 두 조건의 예측.
+        groups: 클러스터 키(eTLD+1 등). ``seeds``: 주면 지표를 **시드별로 계산해 평균**한다
+            (:func:`paired_cluster_bootstrap_by_seed`와 같은 정의). 시드마다 점수 척도가
+            다를 수 있으므로 여러 시드를 풀링했다면 넘기는 편이 맞다.
+        n_perm: 순열 수. ``alternative``: ``"greater"``(Δ>0) / ``"less"`` / ``"two-sided"``.
+
+    Returns:
+        ``{"estimate", "perm_p", "n_perm", "n_valid", "alternative", "null_sd"}``.
+        같은 ``seed``에서 결정적이다.
+    """
+    if metric_fn is None:
+        metric_fn = auroc
+    y = np.asarray(y)
+    p_a = np.asarray(p_a, dtype=np.float64)
+    p_b = np.asarray(p_b, dtype=np.float64)
+    groups = np.asarray(groups)
+    if not (y.size == p_a.size == p_b.size == groups.size):
+        raise ValueError("paired_cluster_permutation_test: y/p_a/p_b/groups 길이가 다르다")
+    if alternative not in ("greater", "less", "two-sided"):
+        raise ValueError(f"alternative는 'greater'|'less'|'two-sided' (got {alternative!r})")
+
+    if seeds is None:
+        blocks = [np.arange(y.size, dtype=np.int64)]
+    else:
+        sarr = np.asarray(seeds)
+        if sarr.size != y.size:
+            raise ValueError("paired_cluster_permutation_test: seeds 길이가 y와 다르다")
+        blocks = [np.flatnonzero(sarr == u) for u in np.unique(sarr)]
+
+    _, ginv = np.unique(groups, return_inverse=True)
+    ginv = ginv.astype(np.int64)
+    n_g = int(ginv.max()) + 1 if ginv.size else 0
+
+    def delta(pa: np.ndarray, pb: np.ndarray) -> float:
+        vals = [
+            metric_fn(y[b], pa[b]) - metric_fn(y[b], pb[b]) for b in blocks if b.size
+        ]
+        vals = [v for v in vals if not np.isnan(v)]
+        return float(np.mean(vals)) if vals else float("nan")
+
+    obs = delta(p_a, p_b)
+    rng = np.random.default_rng(seed)
+    stat = np.empty(int(n_perm), dtype=np.float64)
+    for i in range(int(n_perm)):
+        if n_g == 0:
+            stat[i] = float("nan")
+            continue
+        swap = rng.integers(0, 2, size=n_g).astype(bool)[ginv]
+        pa = np.where(swap, p_b, p_a)
+        pb = np.where(swap, p_a, p_b)
+        stat[i] = delta(pa, pb)
+    valid = stat[~np.isnan(stat)]
+    if valid.size == 0 or np.isnan(obs):
+        p = float("nan")
+    elif alternative == "greater":
+        p = float((1 + np.sum(valid >= obs)) / (1 + valid.size))
+    elif alternative == "less":
+        p = float((1 + np.sum(valid <= obs)) / (1 + valid.size))
+    else:
+        p = float((1 + np.sum(np.abs(valid) >= abs(obs))) / (1 + valid.size))
+    return {
+        "estimate": obs,
+        "perm_p": p,
+        "n_perm": int(n_perm),
+        "n_valid": int(valid.size),
+        "alternative": alternative,
+        "null_sd": float(np.std(valid, ddof=0)) if valid.size else float("nan"),
+    }
 
 
 def holm(pvalues) -> list[float]:
@@ -617,6 +712,9 @@ def predict_probs(model, loader, device=None) -> tuple[np.ndarray, np.ndarray]:
     import torch
 
     device = device or next(model.parameters()).device
+    # 방어적: 체크포인트를 CPU로 로드한 뒤 device만 넘기는 호출자가 있으면 입력/가중치
+    # 장치가 어긋난다. 이미 같은 장치면 no-op이다.
+    model.to(device)
     model.eval()
     ys, ps = [], []
     with torch.no_grad():

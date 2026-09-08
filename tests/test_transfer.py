@@ -257,6 +257,11 @@ def _smoke(tmp_path_factory):
         cfg, ext_csv, strata=["v3"], modes=("a", "b", "c"),
         source_tag="synth", n_perm=20, motif=False,
     )
+    # 시드별 cohort F-a(F-b와의 쌍체 비교용)도 함께 돌려 두 경로가 갈리는지 본다.
+    out["a_per_seed"] = run_transfer(
+        cfg, ext_csv, strata=["v3"], modes=("a",),
+        source_tag="synth", n_perm=20, motif=False, cohort="per_seed",
+    )["a"]
     return cfg, out, tmp
 
 
@@ -273,8 +278,9 @@ def test_transfer_modes_run_and_write_schema(_smoke, mode):
     assert "charngram_lr" in res["baselines"]
     assert res["verdict"]["criteria_version"] == "prereg_v1"
 
+    mode_dir = "a_fixed" if mode == "a" else mode
     path = (
-        Path(cfg.reports_dir) / "transfer" / "synth" / mode
+        Path(cfg.reports_dir) / "transfer" / "synth" / mode_dir
         / res["condition_id"] / "v3" / "results.json"
     )
     assert path.exists(), f"결과 JSON이 설계 7.5 경로에 없다: {path}"
@@ -417,6 +423,138 @@ def test_external_artifact_dirs_are_separated_by_mode(_smoke):
     cfg, _, _ = _smoke
     root = Path(cfg.output_dir) / "external" / "synth"
     modes = sorted(p.name for p in root.iterdir() if p.is_dir())
-    assert modes == ["a", "b"]  # F-c는 F-b의 체크포인트를 읽기만 한다
+    # F-c는 F-b의 체크포인트를 읽기만 한다. F-a는 cohort별로 갈린다.
+    assert modes == ["a", "a_fixed", "b"]
     for m in modes:
         assert (root / m / "norm-exact-data_only-fixed-small_cnn" / "v3").exists()
+
+
+# --------------------------------------------------------------- 장치 일치(device)
+def test_predict_with_checkpoint_runs_on_pick_device(_smoke, monkeypatch):
+    """체크포인트 추론 경로가 ``pick_device()``에서 끝까지 돌아야 한다.
+
+    실제 버그는 CUDA에서만 터졌다(모델은 CPU, 입력만 CUDA). 로컬에서는 장치를 흉내낼 수
+    없으므로, 여기서는 (a) 경로가 pick_device 기준으로 동작하고 (b) 반환 직전 내부
+    assert(모델 파라미터 장치 == 추론 장치)가 통과한다는 것만 고정한다.
+    """
+    import torch
+
+    from qrphish import runner as R
+
+    cfg, _, _ = _smoke
+    monkeypatch.setattr(R, "pick_device", lambda *a, **k: torch.device("cpu"))
+    sd = Path(cfg.output_dir) / "norm-exact-data_only-fixed-small_cnn" / "v3" / "seed0"
+    arr = R.load_stratum_arrays(sd)
+    rows = np.ones(len(np.asarray(arr["y"])), dtype=bool)
+    y, p, meta, _ = R._predict_with_checkpoint(cfg, sd / "model.pt", sd, rows)
+    assert len(y) == len(p) == int(rows.sum())
+    assert np.all((p >= 0) & (p <= 1))
+
+
+def test_checkpoint_paths_move_model_to_device():
+    """정적 검사: 체크포인트를 로드해 forward 하는 경로에 모델 쪽 ``.to(device)``가 있어야
+    한다. 입력만 옮기고 모델을 두면 CUDA에서 weight/input type 불일치로 죽는다."""
+    import inspect
+
+    from qrphish import evaluate as E
+    from qrphish import runner as R
+
+    src = inspect.getsource(R._predict_with_checkpoint)
+    assert "pick_device()" in src
+    assert "model.to(device)" in src
+    assert "predict_probs(model, loader, device=device)" in src
+
+    loaded = inspect.getsource(R._load_trained)
+    assert "model.to(pick_device())" in loaded
+
+    # predict_probs는 배치와 모델 **양쪽**을 device로 보내야 한다.
+    pp = inspect.getsource(E.predict_probs)
+    assert "model.to(device)" in pp
+    assert "xb.to(device)" in pp
+
+
+def test_all_torch_load_calls_use_map_location():
+    """``torch.load``는 항상 ``map_location``을 명시한다(GPU에서 저장한 체크포인트를
+    CPU 런타임에서 열 때 조용히 죽지 않도록)."""
+    import re
+    from pathlib import Path as _P
+
+    root = _P(__file__).resolve().parents[1] / "qrphish"
+    bad = []
+    for f in sorted(root.rglob("*.py")):
+        text = f.read_text(encoding="utf-8")
+        for m in re.finditer(r"torch\.load\(", text):
+            tail = text[m.start() : m.start() + 400]
+            if "map_location" not in tail.split(")\n")[0]:
+                bad.append(f"{f.name}:{text[: m.start()].count(chr(10)) + 1}")
+    assert not bad, f"map_location 없는 torch.load: {bad}"
+
+
+def test_failed_results_json_is_not_skipped_on_rerun(tmp_path, capsys):
+    """실패로 기록된 results.json은 재개 대상이 아니라 **재실행** 대상이다.
+
+    Colab에서 F-a가 장치 불일치로 전 시드 실패한 뒤 error results.json을 남겼는데, 예전
+    skip 규칙("파일이 있으면 건너뛴다")이면 버그를 고쳐도 그 층이 영원히 실패로 남는다.
+    """
+    from qrphish.runner import _completed_result
+
+    ok = tmp_path / "ok.json"
+    ok.write_text(json.dumps({"per_seed": [{"seed": 0}, {"seed": 1, "error": "x"}]}), "utf-8")
+    assert _completed_result(ok, "ok") is not None
+
+    top_err = tmp_path / "err.json"
+    top_err.write_text(json.dumps({"error": "RuntimeError('F-a v2: 모든 시드 실패')"}), "utf-8")
+    assert _completed_result(top_err, "F-a v2") is None
+
+    all_seeds_failed = tmp_path / "seeds.json"
+    all_seeds_failed.write_text(
+        json.dumps({"per_seed": [{"seed": 0, "error": "e"}, {"seed": 1, "error": "e"}]}), "utf-8"
+    )
+    assert _completed_result(all_seeds_failed, "F-a v2") is None
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", "utf-8")
+    assert _completed_result(broken, "F-a v2") is None
+
+    assert _completed_result(tmp_path / "missing.json", "F-a v2") is None
+    assert capsys.readouterr().out.count("[rerun]") == 3
+
+
+# ------------------------------------------------------------------- F-a 평가 cohort
+def test_fa_fixed_and_per_seed_cohorts_are_separate(_smoke):
+    """고정 cohort와 시드별 cohort는 결과·경로가 모두 갈려야 한다 (리뷰 02)."""
+    cfg, out, _ = _smoke
+    fixed, per_seed = out["a"], out["a_per_seed"]["v3"]
+    assert fixed["v3"]["cohort"] == "fixed"
+    assert fixed["v3"]["data"]["cohort"] == "fixed"
+    assert fixed["v3"]["data"]["cohort_seed"] == 0
+    assert per_seed["cohort"] == "per_seed"
+    assert per_seed["data"]["cohort_seed"] is None
+
+    root = Path(cfg.reports_dir) / "transfer" / "synth"
+    cid = per_seed["condition_id"]
+    assert (root / "a_fixed" / cid / "v3" / "results.json").exists()
+    assert (root / "a" / cid / "v3" / "results.json").exists()
+
+
+def test_fa_one_seed_reuses_given_cohort(_smoke, monkeypatch):
+    """고정 cohort를 주면 층 격자를 다시 만들지 않고 그대로 평가해야 한다."""
+    from qrphish import runner
+    from qrphish.transfer import ensure_version_column, load_external_frame
+
+    cfg, out, tmp = _smoke
+    cid = out["a"]["v3"]["condition_id"]
+    ext_all, _ = load_external_frame(tmp / "external.csv", mode=cfg.condition.url_mode)
+    ensure_version_column(cfg, ext_all)
+    ext_cond_dir = Path(cfg.output_dir) / "external" / "synth" / "a_fixed" / cid
+    co = runner._fa_cohort(cfg, "v3", 0, ext_all, ext_cond_dir, "all")
+
+    def _boom(*a, **kw):
+        raise AssertionError("고정 cohort를 줬는데 층을 다시 만들었다")
+
+    monkeypatch.setattr(runner, "_fa_cohort", _boom)
+    res = runner._fa_one_seed(
+        cfg, cid, "v3", 0, ext_all, ext_cond_dir, "all", {0: 0.5}, cohort=co
+    )
+    assert res["cohort_seed"] == 0
+    assert res["y"].size == int(co["rows"].sum())

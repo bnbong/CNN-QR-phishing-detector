@@ -283,18 +283,17 @@ def test_config_validates_template_fields() -> None:
     assert from_dict({"split": {"min_template_tokens": 4}}).split.min_template_tokens == 4
 
 
-def test_matrix_has_template_split_entry() -> None:
-    from qrphish.runner import apply_overrides as ao
-    from qrphish.runner import condition_id, load_matrix
+def test_matrix_has_no_template_split_entry() -> None:
+    """옛 G 조건은 폐기됐다(review_02 3절) — matrix에 남아 있으면 안 된다.
+
+    비쌍체 template_split 비교는 1차 test 행의 88%가 test를 떠나 해석이 불가능했다.
+    대신 ``runner.run_campaign_holdout``의 고정 T 쌍체 비교를 쓴다.
+    """
+    from qrphish.runner import load_matrix
 
     matrix = load_matrix(REPO_ROOT / "configs" / "matrix.yaml")
-    entries = [e for e in matrix["P2"] if e["name"] == "template_split"]
-    assert len(entries) == 1
-    entry = entries[0]
-    cfg = ao(load_config(REPO_ROOT / "configs" / "base.yaml"), entry["overrides"])
-    assert cfg.split.group_key == "etld1_template"
-    # 1차 주 조건 아티팩트를 덮어쓰지 않도록 조건 id가 달라야 한다.
-    assert condition_id(cfg, entry.get("extra")).endswith("-templatesplit")
+    names = {e["name"] for entries in matrix.values() for e in entries}
+    assert "template_split" not in names
 
 
 # --- _prepare_frame 통합 ----------------------------------------------------

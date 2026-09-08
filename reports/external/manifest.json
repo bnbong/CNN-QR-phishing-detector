@@ -1,6 +1,6 @@
 {
   "collect_date": "2026-09-08",
-  "git_sha": "3f216f3b1e2755fbffc6bf89e2aeb5388bc10695",
+  "git_sha": "a14af8d0311b0fe90d075c707182359f60da4ac9",
   "scheme_policy_resolved": "strip",
   "dedup_mode": "etld1",
   "drop_benign_on_phish_domains": true,
@@ -12,7 +12,7 @@
       "raw_path": "data/external/raw/tranco_2026-09-08.csv",
       "parsed_path": "data/external/tranco_urls_2026-09-08.csv",
       "pinned_id": "GQJ9K",
-      "fetched_at": "2026-09-08T01:42:42.924994+00:00",
+      "fetched_at": "2026-09-08T04:16:04.647282+00:00",
       "sha256": "b042b88d22180585a14c39d345046d4daa1008dfee29bd9ee9b9689f7eac1fd5",
       "n_raw": 1000000,
       "n_top": 50000,
@@ -177,13 +177,17 @@
         }
       ],
       "n_parts_available": 300,
-      "fetched_at": "2026-09-08T01:47:21.128881+00:00",
-      "sha256": "c827ec8593c0caa2dfc028a7e5696d9728cca04db285cba130b746b2aa9d68a9",
+      "fetched_at": "2026-09-08T04:19:49.157941+00:00",
+      "sha256": "9f7c8522d9401dc54d607ad4c257c047a1072a648c69bc6cad64e12a4a79c405",
       "n_raw": 35960699,
       "n_after_tranco_join": 9447020,
       "n_after_domain_cap": 62520,
       "per_domain_cap": 8,
       "tranco_list_id": "GQJ9K",
+      "unranked_parsed_path": "data/external/commoncrawl_unranked_urls_2026-09-08.csv",
+      "unranked_raw_path": "data/external/raw/cc_unranked_urls_2026-09-08.csv.gz",
+      "n_unranked": 65000,
+      "unranked_note": "Tranco 조인을 뺀 benign 표본(민감도 세트). 인기도 confound는 줄지만 피싱·WebPhish 도메인 오염 위험이 커진다.",
       "license_note": "Common Crawl terms-of-use, crawl CC-MAIN-2026-34"
     }
   ],
@@ -191,29 +195,223 @@
     "phishtank": "HTTP 403 (Cloudflare). 앱 키 발급 사실상 중단",
     "urlhaus": "threat 컬럼 100% malware_download — 피싱 라벨 아님"
   },
+  "sets": {
+    "primary": {
+      "n_final": 92408,
+      "n_final_benign": 60824,
+      "n_final_phishing": 31584,
+      "n_groups": 19962,
+      "by_source": {
+        "commoncrawl": 60824,
+        "openphish": 31584
+      },
+      "output_csv": "data/external/external_primary_2026-09-08.csv",
+      "benign_cleaning": "clean",
+      "note": "primary: OpenPhish 최근 90일 phishing + CC×Tranco benign",
+      "union_dedup_stats": {
+        "n_raw": 895564,
+        "n_dropped_empty_url": 0,
+        "n_dropped_unknown_label": 0,
+        "n_dropped_empty_after_norm": 0,
+        "n_conflicting_urls": 0,
+        "n_dropped_label_conflict": 0,
+        "n_dropped_duplicate": 80105,
+        "n_dropped_hosting_blocklist": 0,
+        "n_benign_on_phish_domains": 374,
+        "n_dropped_phish_domain_from_benign": 374,
+        "n_overlap_exact_url_vs_webphish": 3898,
+        "n_overlap_etld1_vs_webphish": 199257,
+        "n_webphish_groups_seen_in_external": 3021,
+        "n_dropped_vs_webphish": 199257,
+        "n_final": 615828,
+        "n_final_benign": 60824,
+        "n_final_phishing": 555004,
+        "n_groups": 236684
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다"
+    },
+    "secondary": {
+      "n_final": 584244,
+      "n_final_benign": 60824,
+      "n_final_phishing": 523420,
+      "n_groups": 226174,
+      "by_source": {
+        "phishdb": 523420,
+        "commoncrawl": 60824
+      },
+      "output_csv": "data/external/external_secondary_2026-09-08.csv",
+      "benign_cleaning": "clean",
+      "note": "secondary(robustness): Phishing.Database 아카이브 + 동일 benign",
+      "union_dedup_stats": {
+        "n_raw": 895564,
+        "n_dropped_empty_url": 0,
+        "n_dropped_unknown_label": 0,
+        "n_dropped_empty_after_norm": 0,
+        "n_conflicting_urls": 0,
+        "n_dropped_label_conflict": 0,
+        "n_dropped_duplicate": 80105,
+        "n_dropped_hosting_blocklist": 0,
+        "n_benign_on_phish_domains": 374,
+        "n_dropped_phish_domain_from_benign": 374,
+        "n_overlap_exact_url_vs_webphish": 3898,
+        "n_overlap_etld1_vs_webphish": 199257,
+        "n_webphish_groups_seen_in_external": 3021,
+        "n_dropped_vs_webphish": 199257,
+        "n_final": 615828,
+        "n_final_benign": 60824,
+        "n_final_phishing": 555004,
+        "n_groups": 236684
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다"
+    },
+    "primary_keep_phish_domains": {
+      "n_final": 92734,
+      "n_final_benign": 61150,
+      "n_final_phishing": 31584,
+      "n_groups": 19999,
+      "by_source": {
+        "commoncrawl": 61150,
+        "openphish": 31584
+      },
+      "output_csv": "data/external/external_primary_keep_phish_domains_2026-09-08.csv",
+      "benign_cleaning": "keep_phish_domains",
+      "note": "benign 정제 절제 조건 — primary와 같은 phishing 행, benign만 다르다",
+      "union_dedup_stats": {
+        "n_raw": 895564,
+        "n_dropped_empty_url": 0,
+        "n_dropped_unknown_label": 0,
+        "n_dropped_empty_after_norm": 0,
+        "n_conflicting_urls": 0,
+        "n_dropped_label_conflict": 0,
+        "n_dropped_duplicate": 80105,
+        "n_dropped_hosting_blocklist": 0,
+        "n_benign_on_phish_domains": 374,
+        "n_dropped_phish_domain_from_benign": 0,
+        "n_overlap_exact_url_vs_webphish": 3898,
+        "n_overlap_etld1_vs_webphish": 199305,
+        "n_webphish_groups_seen_in_external": 3021,
+        "n_dropped_vs_webphish": 199305,
+        "n_final": 616154,
+        "n_final_benign": 61150,
+        "n_final_phishing": 555004,
+        "n_groups": 236684
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다"
+    },
+    "primary_no_hosting_blocklist": {
+      "n_final": 92408,
+      "n_final_benign": 60824,
+      "n_final_phishing": 31584,
+      "n_groups": 19962,
+      "by_source": {
+        "commoncrawl": 60824,
+        "openphish": 31584
+      },
+      "output_csv": "data/external/external_primary_no_hosting_blocklist_2026-09-08.csv",
+      "benign_cleaning": "no_hosting_blocklist",
+      "note": "benign 정제 절제 조건 — primary와 같은 phishing 행, benign만 다르다",
+      "union_dedup_stats": {
+        "n_raw": 895564,
+        "n_dropped_empty_url": 0,
+        "n_dropped_unknown_label": 0,
+        "n_dropped_empty_after_norm": 0,
+        "n_conflicting_urls": 0,
+        "n_dropped_label_conflict": 0,
+        "n_dropped_duplicate": 80105,
+        "n_dropped_hosting_blocklist": 0,
+        "n_benign_on_phish_domains": 374,
+        "n_dropped_phish_domain_from_benign": 374,
+        "n_overlap_exact_url_vs_webphish": 3898,
+        "n_overlap_etld1_vs_webphish": 199257,
+        "n_webphish_groups_seen_in_external": 3021,
+        "n_dropped_vs_webphish": 199257,
+        "n_final": 615828,
+        "n_final_benign": 60824,
+        "n_final_phishing": 555004,
+        "n_groups": 236684
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다"
+    },
+    "primary_ccunranked": {
+      "n_final": 96225,
+      "n_final_benign": 64641,
+      "n_final_phishing": 31584,
+      "n_groups": 51895,
+      "by_source": {
+        "commoncrawl_unranked": 64641,
+        "openphish": 31584
+      },
+      "output_csv": "data/external/external_primary_ccunranked_2026-09-08.csv",
+      "benign_cleaning": "clean",
+      "note": "Tranco 조인을 뺀 CC benign. 인기도(popularity) confound를 줄이는 대신, benign에 실제 피싱/저품질 도메인이 섞일 오염 위험이 커진다. 주 결과가 아니라 민감도 세트다.",
+      "union_dedup_stats": {
+        "n_raw": 898044,
+        "n_dropped_empty_url": 0,
+        "n_dropped_unknown_label": 0,
+        "n_dropped_empty_after_norm": 0,
+        "n_conflicting_urls": 0,
+        "n_dropped_label_conflict": 0,
+        "n_dropped_duplicate": 79287,
+        "n_dropped_hosting_blocklist": 0,
+        "n_benign_on_phish_domains": 149,
+        "n_dropped_phish_domain_from_benign": 149,
+        "n_overlap_exact_url_vs_webphish": 3898,
+        "n_overlap_etld1_vs_webphish": 198963,
+        "n_webphish_groups_seen_in_external": 3001,
+        "n_dropped_vs_webphish": 198963,
+        "n_final": 619645,
+        "n_final_benign": 64641,
+        "n_final_phishing": 555004,
+        "n_groups": 268617
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다"
+    },
+    "ext_b2": {
+      "n_raw": 883044,
+      "n_dropped_empty_url": 0,
+      "n_dropped_unknown_label": 0,
+      "n_dropped_empty_after_norm": 0,
+      "n_conflicting_urls": 10,
+      "n_dropped_label_conflict": 20,
+      "n_dropped_duplicate": 79282,
+      "n_dropped_hosting_blocklist": 13,
+      "n_benign_on_phish_domains": 1012,
+      "n_dropped_phish_domain_from_benign": 1012,
+      "n_overlap_exact_url_vs_webphish": 3900,
+      "n_overlap_etld1_vs_webphish": 200454,
+      "n_webphish_groups_seen_in_external": 4651,
+      "n_dropped_vs_webphish": 200454,
+      "n_final": 602263,
+      "n_final_benign": 47268,
+      "n_final_phishing": 554995,
+      "n_groups": 274838,
+      "by_source": {
+        "phishdb": 523411,
+        "tranco": 47268,
+        "openphish": 31584
+      },
+      "output_csv": "data/external/external_b2_2026-09-08.csv",
+      "benign_cleaning": "clean",
+      "note": "EXT-B2 대조군: Tranco 맨 도메인 benign",
+      "union_dedup_stats": null,
+      "gate_passed": false,
+      "gate_note": "경고: benign 경로 보유율(0.000)이 phishing(0.760)보다 낮다. WebPhish와 같은 방향의 편향이므로 전이 실험은 검증이 아니다."
+    }
+  },
+  "primary_set": "primary",
   "counts": {
-    "n_raw": 895564,
-    "n_dropped_empty_url": 0,
-    "n_dropped_unknown_label": 0,
-    "n_dropped_empty_after_norm": 0,
-    "n_conflicting_urls": 0,
-    "n_dropped_label_conflict": 0,
-    "n_dropped_duplicate": 80105,
-    "n_dropped_hosting_blocklist": 0,
-    "n_benign_on_phish_domains": 374,
-    "n_dropped_phish_domain_from_benign": 374,
-    "n_overlap_exact_url_vs_webphish": 3898,
-    "n_overlap_etld1_vs_webphish": 199257,
-    "n_webphish_groups_seen_in_external": 3021,
-    "n_dropped_vs_webphish": 199257,
-    "n_final": 615828,
+    "n_final": 92408,
     "n_final_benign": 60824,
-    "n_final_phishing": 555004,
-    "n_groups": 236684,
+    "n_final_phishing": 31584,
+    "n_groups": 19962,
     "by_source": {
-      "phishdb": 523541,
       "commoncrawl": 60824,
-      "openphish": 31463
+      "openphish": 31584
     }
   },
   "ext_b2_counts": {
@@ -236,10 +434,10 @@
     "n_final_phishing": 554995,
     "n_groups": 274838,
     "by_source": {
-      "phishdb": 523532,
+      "phishdb": 523411,
       "tranco": 47268,
-      "openphish": 31463
+      "openphish": 31584
     }
   },
-  "elapsed_sec": 33.5
+  "elapsed_sec": 82.8
 }

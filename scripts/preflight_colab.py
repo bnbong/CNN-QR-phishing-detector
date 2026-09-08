@@ -2,7 +2,7 @@
 
 노트북의 파이썬 코드를 **한 글자도 바꾸지 않고** 그대로 exec 한다. 제거하는 것은
 Colab 전용 줄(`!`/`%` 매직, `drive.mount`, `google.colab` import)과 `DATA_CSV`/`OUT_DIR`/
-`EXT_CSV`/`EXT_SOURCE_TAG` 재대입뿐이다. 이 변수들은 실행 전 네임스페이스에 주입한다.
+`EXT_CSV`/`EXT_SOURCE_TAG`/`EXT_EXTRA` 재대입뿐이다. 이 변수들은 실행 전 네임스페이스에 주입한다.
 `--external-csv`를 주지 않으면 `EXT_CSV=None`이 주입되어 외부 검증(F) 셀이 스스로 건너뛴다.
 
 축소는 config 쪽에서만 한다. `qrphish.config.load_config`를 monkeypatch 해서 반환
@@ -31,15 +31,31 @@ _DROP_PREFIXES = ("!", "%")
 _DROP_PATTERNS = (
     re.compile(r"^\s*from\s+google\.colab\b"),
     re.compile(r"^\s*drive\.mount\("),
-    re.compile(r"^\s*(DATA_CSV|OUT_DIR|EXT_CSV|EXT_SOURCE_TAG)\s*="),
+    re.compile(r"^\s*(DATA_CSV|OUT_DIR|EXT_CSV|EXT_SOURCE_TAG|EXT_DIR|EXT_DATE)\s*="),
+    # EXT_EXTRA는 여러 줄 dict 리터럴이라 한 줄 패턴으로 못 지운다(_EXTRA_START가 처리).
 )
 
 
+_EXTRA_START = re.compile(r"^\s*EXT_EXTRA\s*=\s*\{\s*$")
+
+
 def strip_cell(src: str) -> str:
-    """셀 소스에서 Colab 전용 줄만 걷어낸다."""
+    """셀 소스에서 Colab 전용 줄만 걷어낸다.
+
+    ``EXT_EXTRA = {`` … ``}``는 여러 줄 딕셔너리라 닫는 중괄호까지 통째로 걷어낸다.
+    주입값은 ``--external-extra``에서 온다.
+    """
     kept = []
+    in_extra = False
     for line in src.splitlines():
         s = line.lstrip()
+        if in_extra:
+            if s.startswith("}"):
+                in_extra = False
+            continue
+        if _EXTRA_START.match(line):
+            in_extra = True
+            continue
         if s.startswith(_DROP_PREFIXES):
             continue
         if any(p.match(line) for p in _DROP_PATTERNS):
@@ -143,6 +159,15 @@ def main() -> int:
             "축소하지 않으면 사전 점검이 몇 시간짜리가 된다. 미지정이면 원본 그대로 쓴다"
         ),
     )
+    ap.add_argument(
+        "--external-extra",
+        default=None,
+        help=(
+            "보조 외부 세트. `이름=경로` 를 쉼표로 잇는다 "
+            "(예: secondary=/x/a.csv,ccunranked=/x/b.csv). "
+            "--external-per-class가 있으면 각각 같은 방식으로 줄여 주입한다"
+        ),
+    )
     ap.add_argument("--report", default=None, help="preflight_report.md 경로")
     ap.add_argument("--notebook", default=str(REPO / "notebooks" / "colab_run.ipynb"))
     args = ap.parse_args()
@@ -175,6 +200,26 @@ def main() -> int:
             ext_csv = str(src_ext)
             ext_info = {"reused": ext_csv}
 
+    ext_extra: dict[str, str] = {}
+    if args.external_extra:
+        for item in args.external_extra.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            name, _, path = item.partition("=")
+            src_p = Path(path).resolve()
+            if not src_p.exists():
+                print(f"[external-extra] 파일 없음, 건너뜀: {src_p}")
+                continue
+            if args.external_per_class:
+                sub = out_dir / f"external_sub_{name}.csv"
+                make_subsample(
+                    src_p, sub, args.external_per_class, args.sample_seed, label_col="label"
+                )
+                ext_extra[name] = str(sub)
+            else:
+                ext_extra[name] = str(src_p)
+
     shimmed = install_shims()
     patch_load_config(
         {
@@ -190,6 +235,7 @@ def main() -> int:
         "OUT_DIR": str(out_dir),
         "EXT_CSV": ext_csv,
         "EXT_SOURCE_TAG": str(args.external_tag),
+        "EXT_EXTRA": ext_extra,
     }
     cells = load_cells(Path(args.notebook))
     rows: list[dict] = []
@@ -236,6 +282,7 @@ def main() -> int:
         f"- OUT_DIR: `{out_dir}`",
         f"- DATA_CSV: `{data_csv}` ({sample_info})",
         f"- EXT_CSV: `{ext_csv or '미지정 (F 셀 건너뜀)'}` ({ext_info})",
+        f"- EXT_EXTRA: {ext_extra or '없음'}",
         f"- overrides: max_epochs={args.max_epochs}, n_bootstrap={args.n_bootstrap}, "
         f"seeds={args.seeds}",
         f"- shims: {shimmed or '없음'}",

@@ -31,35 +31,36 @@
       }
     },
     "phishing": {
-      "n": 555004,
-      "path_depth_ge1_frac": 0.759810740102774,
-      "path_depth_mean": 2.098429921225793,
+      "n": 31584,
+      "path_depth_ge1_frac": 0.45982142857142855,
+      "path_depth_mean": 0.9663120567375887,
       "url_bytes_len": {
-        "mean": 71.50872966681321,
-        "p10": 18.0,
-        "median": 46.0,
-        "p90": 131.0,
+        "mean": 42.53403622087133,
+        "p10": 14.0,
+        "median": 34.0,
+        "p90": 74.0,
         "max": 9256
       },
-      "scheme_frac": 1.8017888159364617e-06,
-      "n_groups": 227576,
-      "top5_group_frac": 0.08911287125858552,
+      "scheme_frac": 0.0,
+      "n_groups": 10854,
+      "top5_group_frac": 0.335612968591692,
       "top_groups": {
-        "pages.dev": 21792,
-        "vercel.app": 11459,
-        "r2.dev": 6599,
-        "qwo231sdx.club": 5322,
-        "gitbook.io": 4286,
-        "fleek.co": 3510,
-        "ewp.live": 3166,
-        "deliverylifesupport.com": 1768,
-        "whatsmapp.download": 1749,
-        "attemplate.com": 1728
+        "pages.dev": 6050,
+        "vercel.app": 2687,
+        "icefactory.cl": 954,
+        "roblox.com.ml": 530,
+        "framer.app": 379,
+        "replit.app": 320,
+        "typedream.app": 291,
+        "roblox.com.mu": 273,
+        "arcadejafet.cl": 266,
+        "roblox.com.bi": 262
       }
     },
     "gate_passed": true,
     "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-    "output_csv": "data/external/external_2026-09-08.csv"
+    "output_csv": "data/external/external_primary_2026-09-08.csv",
+    "benign_cleaning": "clean"
   },
   "ext_b2": {
     "benign": {
@@ -118,7 +119,370 @@
     },
     "gate_passed": false,
     "gate_note": "경고: benign 경로 보유율(0.000)이 phishing(0.760)보다 낮다. WebPhish와 같은 방향의 편향이므로 전이 실험은 검증이 아니다.",
-    "output_csv": "data/external/external_b2_2026-09-08.csv"
+    "output_csv": "data/external/external_b2_2026-09-08.csv",
+    "benign_cleaning": "clean"
+  },
+  "sets": {
+    "primary": {
+      "benign": {
+        "n": 60824,
+        "path_depth_ge1_frac": 0.939464684992766,
+        "path_depth_mean": 2.2218696567144547,
+        "url_bytes_len": {
+          "mean": 62.87646323819545,
+          "p10": 25.0,
+          "median": 51.0,
+          "p90": 104.0,
+          "max": 1911
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 9108,
+        "top5_group_frac": 0.0006576351440220965,
+        "top_groups": {
+          "muvfl.com": 8,
+          "libretexts.org": 8,
+          "theinspirationedit.com": 8,
+          "ligo.org": 8,
+          "oecd-nea.org": 8,
+          "novusbio.com": 8,
+          "spar-international.com": 8,
+          "freelance.ru": 8,
+          "flexshopper.com": 8,
+          "knowunity.de": 8
+        }
+      },
+      "phishing": {
+        "n": 31584,
+        "path_depth_ge1_frac": 0.45982142857142855,
+        "path_depth_mean": 0.9663120567375887,
+        "url_bytes_len": {
+          "mean": 42.53403622087133,
+          "p10": 14.0,
+          "median": 34.0,
+          "p90": 74.0,
+          "max": 9256
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 10854,
+        "top5_group_frac": 0.335612968591692,
+        "top_groups": {
+          "pages.dev": 6050,
+          "vercel.app": 2687,
+          "icefactory.cl": 954,
+          "roblox.com.ml": 530,
+          "framer.app": 379,
+          "replit.app": 320,
+          "typedream.app": 291,
+          "roblox.com.mu": 273,
+          "arcadejafet.cl": 266,
+          "roblox.com.bi": 262
+        }
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
+      "output_csv": "data/external/external_primary_2026-09-08.csv",
+      "benign_cleaning": "clean"
+    },
+    "secondary": {
+      "benign": {
+        "n": 60824,
+        "path_depth_ge1_frac": 0.939464684992766,
+        "path_depth_mean": 2.2218696567144547,
+        "url_bytes_len": {
+          "mean": 62.87646323819545,
+          "p10": 25.0,
+          "median": 51.0,
+          "p90": 104.0,
+          "max": 1911
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 9108,
+        "top5_group_frac": 0.0006576351440220965,
+        "top_groups": {
+          "muvfl.com": 8,
+          "libretexts.org": 8,
+          "theinspirationedit.com": 8,
+          "ligo.org": 8,
+          "oecd-nea.org": 8,
+          "novusbio.com": 8,
+          "spar-international.com": 8,
+          "freelance.ru": 8,
+          "flexshopper.com": 8,
+          "knowunity.de": 8
+        }
+      },
+      "phishing": {
+        "n": 523420,
+        "path_depth_ge1_frac": 0.7779125749875817,
+        "path_depth_mean": 2.166743723969279,
+        "url_bytes_len": {
+          "mean": 73.2571090137939,
+          "p10": 18.0,
+          "median": 47.0,
+          "p90": 136.0,
+          "max": 5127
+        },
+        "scheme_frac": 1.9105116350158574e-06,
+        "n_groups": 217066,
+        "top5_group_frac": 0.0772534484735012,
+        "top_groups": {
+          "pages.dev": 15742,
+          "vercel.app": 8772,
+          "r2.dev": 6525,
+          "qwo231sdx.club": 5322,
+          "gitbook.io": 4075,
+          "fleek.co": 3510,
+          "ewp.live": 3166,
+          "deliverylifesupport.com": 1768,
+          "whatsmapp.download": 1749,
+          "attemplate.com": 1728
+        }
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
+      "output_csv": "data/external/external_secondary_2026-09-08.csv",
+      "benign_cleaning": "clean"
+    },
+    "primary_keep_phish_domains": {
+      "benign": {
+        "n": 61150,
+        "path_depth_ge1_frac": 0.9391659852820932,
+        "path_depth_mean": 2.2214063777596076,
+        "url_bytes_len": {
+          "mean": 62.96626328699918,
+          "p10": 25.0,
+          "median": 51.0,
+          "p90": 104.0,
+          "max": 1911
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 9151,
+        "top5_group_frac": 0.0006541291905151267,
+        "top_groups": {
+          "muvfl.com": 8,
+          "libretexts.org": 8,
+          "theinspirationedit.com": 8,
+          "ligo.org": 8,
+          "oecd-nea.org": 8,
+          "novusbio.com": 8,
+          "spar-international.com": 8,
+          "freelance.ru": 8,
+          "gofundme.com": 8,
+          "flexshopper.com": 8
+        }
+      },
+      "phishing": {
+        "n": 31584,
+        "path_depth_ge1_frac": 0.45982142857142855,
+        "path_depth_mean": 0.9663120567375887,
+        "url_bytes_len": {
+          "mean": 42.53403622087133,
+          "p10": 14.0,
+          "median": 34.0,
+          "p90": 74.0,
+          "max": 9256
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 10854,
+        "top5_group_frac": 0.335612968591692,
+        "top_groups": {
+          "pages.dev": 6050,
+          "vercel.app": 2687,
+          "icefactory.cl": 954,
+          "roblox.com.ml": 530,
+          "framer.app": 379,
+          "replit.app": 320,
+          "typedream.app": 291,
+          "roblox.com.mu": 273,
+          "arcadejafet.cl": 266,
+          "roblox.com.bi": 262
+        }
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
+      "output_csv": "data/external/external_primary_keep_phish_domains_2026-09-08.csv",
+      "benign_cleaning": "keep_phish_domains"
+    },
+    "primary_no_hosting_blocklist": {
+      "benign": {
+        "n": 60824,
+        "path_depth_ge1_frac": 0.939464684992766,
+        "path_depth_mean": 2.2218696567144547,
+        "url_bytes_len": {
+          "mean": 62.87646323819545,
+          "p10": 25.0,
+          "median": 51.0,
+          "p90": 104.0,
+          "max": 1911
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 9108,
+        "top5_group_frac": 0.0006576351440220965,
+        "top_groups": {
+          "muvfl.com": 8,
+          "libretexts.org": 8,
+          "theinspirationedit.com": 8,
+          "ligo.org": 8,
+          "oecd-nea.org": 8,
+          "novusbio.com": 8,
+          "spar-international.com": 8,
+          "freelance.ru": 8,
+          "flexshopper.com": 8,
+          "knowunity.de": 8
+        }
+      },
+      "phishing": {
+        "n": 31584,
+        "path_depth_ge1_frac": 0.45982142857142855,
+        "path_depth_mean": 0.9663120567375887,
+        "url_bytes_len": {
+          "mean": 42.53403622087133,
+          "p10": 14.0,
+          "median": 34.0,
+          "p90": 74.0,
+          "max": 9256
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 10854,
+        "top5_group_frac": 0.335612968591692,
+        "top_groups": {
+          "pages.dev": 6050,
+          "vercel.app": 2687,
+          "icefactory.cl": 954,
+          "roblox.com.ml": 530,
+          "framer.app": 379,
+          "replit.app": 320,
+          "typedream.app": 291,
+          "roblox.com.mu": 273,
+          "arcadejafet.cl": 266,
+          "roblox.com.bi": 262
+        }
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
+      "output_csv": "data/external/external_primary_no_hosting_blocklist_2026-09-08.csv",
+      "benign_cleaning": "no_hosting_blocklist"
+    },
+    "primary_ccunranked": {
+      "benign": {
+        "n": 64641,
+        "path_depth_ge1_frac": 0.9713185130180536,
+        "path_depth_mean": 2.152967930570381,
+        "url_bytes_len": {
+          "mean": 63.226992156680744,
+          "p10": 28.0,
+          "median": 52.0,
+          "p90": 103.0,
+          "max": 1770
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 41041,
+        "top5_group_frac": 0.0006188023081326094,
+        "top_groups": {
+          "yellowpages.co.th": 8,
+          "webflow.com": 8,
+          "thairath.co.th": 8,
+          "netmeds.com": 8,
+          "thejc.com": 8,
+          "littlesis.org": 8,
+          "odbm.org": 8,
+          "advice.co.th": 8,
+          "news1.kr": 8,
+          "google.co.uk": 8
+        }
+      },
+      "phishing": {
+        "n": 31584,
+        "path_depth_ge1_frac": 0.45982142857142855,
+        "path_depth_mean": 0.9663120567375887,
+        "url_bytes_len": {
+          "mean": 42.53403622087133,
+          "p10": 14.0,
+          "median": 34.0,
+          "p90": 74.0,
+          "max": 9256
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 10854,
+        "top5_group_frac": 0.335612968591692,
+        "top_groups": {
+          "pages.dev": 6050,
+          "vercel.app": 2687,
+          "icefactory.cl": 954,
+          "roblox.com.ml": 530,
+          "framer.app": 379,
+          "replit.app": 320,
+          "typedream.app": 291,
+          "roblox.com.mu": 273,
+          "arcadejafet.cl": 266,
+          "roblox.com.bi": 262
+        }
+      },
+      "gate_passed": true,
+      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
+      "output_csv": "data/external/external_primary_ccunranked_2026-09-08.csv",
+      "benign_cleaning": "clean"
+    },
+    "ext_b2": {
+      "benign": {
+        "n": 47268,
+        "path_depth_ge1_frac": 0.0,
+        "path_depth_mean": 0.0,
+        "url_bytes_len": {
+          "mean": 12.351865955826351,
+          "p10": 8.0,
+          "median": 12.0,
+          "p90": 17.0,
+          "max": 66
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 47268,
+        "top5_group_frac": 0.00010577980875010578,
+        "top_groups": {
+          "cloudflare.com": 1,
+          "akamai.net": 1,
+          "ezviz7.com": 1,
+          "fbcdn.net": 1,
+          "dzen.ru": 1,
+          "domaincontrol.com": 1,
+          "googlevideo.com": 1,
+          "hicloudcam.com": 1,
+          "akamaiedge.net": 1,
+          "gtld-servers.net": 1
+        }
+      },
+      "phishing": {
+        "n": 554995,
+        "path_depth_ge1_frac": 0.7598230614690222,
+        "path_depth_mean": 2.098463950125677,
+        "url_bytes_len": {
+          "mean": 71.5096802673898,
+          "p10": 18.0,
+          "median": 46.0,
+          "p90": 131.0,
+          "max": 9256
+        },
+        "scheme_frac": 1.8018180343967062e-06,
+        "n_groups": 227570,
+        "top5_group_frac": 0.0891143163451923,
+        "top_groups": {
+          "pages.dev": 21792,
+          "vercel.app": 11459,
+          "r2.dev": 6599,
+          "qwo231sdx.club": 5322,
+          "gitbook.io": 4286,
+          "fleek.co": 3510,
+          "ewp.live": 3166,
+          "deliverylifesupport.com": 1768,
+          "whatsmapp.download": 1749,
+          "attemplate.com": 1728
+        }
+      },
+      "gate_passed": false,
+      "gate_note": "경고: benign 경로 보유율(0.000)이 phishing(0.760)보다 낮다. WebPhish와 같은 방향의 편향이므로 전이 실험은 검증이 아니다.",
+      "output_csv": "data/external/external_b2_2026-09-08.csv",
+      "benign_cleaning": "clean"
+    }
   },
   "dedup_stats": {
     "n_raw": 895564,

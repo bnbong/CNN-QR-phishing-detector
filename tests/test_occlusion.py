@@ -168,6 +168,7 @@ def test_occlude_stratum_end_to_end(setup: Setup, tmp_path) -> None:
     assert res["n_test"] == te.size
     assert set(res["conditions"]) == {
         "phishing_motif", "benign_motif", "random", "random_benign_matched",
+        "random_matched", "random_matched_benign",
     }
     for name, block in res["conditions"].items():
         assert set(block) >= {
@@ -199,3 +200,91 @@ def test_occlusion_changes_logits(setup: Setup) -> None:
         top = int(np.bincount(ids.astype(np.int64)).argmax())
         flipped.append(flip_centers(x, match_centers(val, dm, [top], 3)))
     assert not np.allclose(base, batch_logits(setup.model, flipped))
+
+
+# --------------------------------------- review_02 4: topology-matched random control
+def _dm_and_values(n: int = 25, seed: int = 0):
+    rng = np.random.default_rng(seed)
+    dm = np.zeros((n, n), dtype=bool)
+    dm[1 : n - 1, 1 : n - 1] = True
+    vals = rng.integers(0, 2, size=(n, n)).astype(np.float64)
+    return vals, dm
+
+
+def test_matched_random_centers_matches_quadrant_and_density():
+    from qrphish.occlusion import _quadrant, local_black_density, matched_random_centers
+
+    vals, dm = _dm_and_values()
+    pool = window_centers(dm, 3)
+    rng = np.random.default_rng(0)
+    tgt = pool[rng.choice(len(pool), size=20, replace=False)]
+
+    got, n_relaxed = matched_random_centers(vals, dm, tgt, np.random.default_rng(1), 3)
+    assert got.shape == tgt.shape
+    assert n_relaxed == 0
+    # 중복 없음
+    assert len({tuple(c) for c in got.tolist()}) == len(got)
+    # 사분면 일치 + 국소 흑색 밀도 ±1
+    n = dm.shape[0]
+    assert np.array_equal(_quadrant(got, n), _quadrant(tgt, n))
+    d_got = local_black_density(vals, got, 3)
+    d_tgt = local_black_density(vals, tgt, 3)
+    assert np.all(np.abs(d_got - d_tgt) <= 1)
+    # 모두 유효한 창 중심(데이터 모듈로만 이루어진 창)이어야 한다
+    pool_set = {tuple(c) for c in pool.tolist()}
+    assert all(tuple(c) in pool_set for c in got.tolist())
+
+
+def test_matched_random_centers_is_deterministic_and_handles_empty():
+    from qrphish.occlusion import matched_random_centers
+
+    vals, dm = _dm_and_values(seed=2)
+    tgt = window_centers(dm, 3)[:8]
+    a, _ = matched_random_centers(vals, dm, tgt, np.random.default_rng(9), 3)
+    b, _ = matched_random_centers(vals, dm, tgt, np.random.default_rng(9), 3)
+    assert np.array_equal(a, b)
+    empty, relaxed = matched_random_centers(
+        vals, dm, np.zeros((0, 2), dtype=np.int64), np.random.default_rng(0), 3
+    )
+    assert empty.shape == (0, 2) and relaxed == 0
+
+
+def test_matched_random_centers_relaxes_when_pool_is_small():
+    """후보가 모자라면 사분면 제약만 남기고 그 횟수를 기록한다."""
+    from qrphish.occlusion import matched_random_centers
+
+    n = 11
+    dm = np.zeros((n, n), dtype=bool)
+    dm[0:5, 0:5] = True  # 좌상단 사분면에만 창이 생긴다
+    vals = np.zeros((n, n), dtype=np.float64)
+    vals[0:3, 0:3] = 1.0  # (1,1) 창만 밀도 9, 나머지는 훨씬 낮다
+    pool = window_centers(dm, 3)
+    assert len(pool) >= 4
+    # 밀도 9인 창은 하나뿐이므로 두 번째 요청부터는 밀도 제약을 풀 수밖에 없다.
+    tgt = np.repeat(np.array([[1, 1]], dtype=np.int64), len(pool) + 3, axis=0)
+    got, relaxed = matched_random_centers(vals, dm, tgt, np.random.default_rng(0), 3)
+    # target center (1,1)은 후보 풀에서 배제되므로 최대 len(pool) - 1개만 고를 수 있다.
+    assert len(got) == len(pool) - 1
+    assert (1, 1) not in {tuple(c) for c in got.tolist()}
+    assert len({tuple(c) for c in got.tolist()}) == len(got)
+    assert relaxed > 0
+
+
+def test_matched_random_centers_excludes_motif_centers():
+    """대조군은 실제 motif center(자기 자신도, exclude로 넘긴 반대 클래스도) 고르지 않는다."""
+    from qrphish.occlusion import matched_random_centers
+
+    rng = np.random.default_rng(0)
+    vals = (rng.random((21, 21)) > 0.5).astype(np.float64)
+    dm = np.ones((21, 21), dtype=bool)
+    pool = window_centers(dm, 3)
+    tgt = pool[:15]          # phishing motif center
+    other = pool[15:30]      # benign motif center
+
+    got, _ = matched_random_centers(
+        vals, dm, tgt, np.random.default_rng(3), 3, exclude=np.concatenate([tgt, other])
+    )
+    picked = {tuple(c) for c in got.tolist()}
+    assert picked.isdisjoint({tuple(c) for c in tgt.tolist()})
+    assert picked.isdisjoint({tuple(c) for c in other.tolist()})
+    assert len(got) == len(tgt)

@@ -2,11 +2,17 @@
 
 수집 소스는 2026-09-08 실측 결과에 맞춰 확정했다.
 
-- phishing 주 소스: Phishing.Database ``phishing-links-ACTIVE.txt`` (MIT, 약 79만 줄).
-  ACTIVE 파일의 최신 커밋이 2025-12-22이므로 "살아있는 피싱"이 아니라 **아카이브**로 취급한다.
-- phishing 보조: OpenPhish public_feed의 최근 커밋 이력을 누적한 시간 분리 held-out.
+- phishing **주** 소스(primary): OpenPhish public_feed의 최근 90일 커밋 이력을 누적한 것
+  (고유 URL 약 4.4만). 수집 시점과 시간 축이 맞아 진짜 temporal/domain shift 검증이 된다.
+  외부 test는 크기보다 독립성·신선도·출처 명확성이 중요하다(리뷰 02).
+- phishing 보조 소스(secondary robustness): Phishing.Database ``phishing-links-ACTIVE.txt``
+  (MIT, 약 79만 줄). ACTIVE 파일의 최신 커밋이 2025-12-22이므로 "살아있는 피싱"이 아니라
+  **아카이브**로 취급한다.
 - benign 주 소스: Common Crawl ``CC-MAIN-2026-34`` columnar index parquet의 row group 부분 읽기 결과를
-  Tranco(list ``GQJ9K``) 상위 도메인과 eTLD+1 조인한 것.
+  Tranco(list ``GQJ9K``) 상위 도메인과 eTLD+1 조인한 것. primary와 secondary는 **같은 benign 행**을
+  쓴다(정제를 합집합에서 한 번만 한다 — :func:`split_by_source`).
+- benign 민감도 세트: 같은 CC row group에서 Tranco 조인을 **빼고** 뽑은 표본. "benign = 인기
+  웹사이트"라는 축(popularity confound)이 결과를 만드는지 본다.
 - benign 대조군(EXT-B2): Tranco 맨 도메인(경로 없음).
 
 PhishTank(Cloudflare 403)와 URLhaus(malware 전용)는 제외했다.
@@ -45,6 +51,7 @@ __all__ = [
     "COLLECT_DATE",
     "USER_AGENT",
     "HOSTING_BLOCKLIST",
+    "BENIGN_CLEANING_MODES",
     "SourceSpec",
     "SOURCES",
     "strip_scheme",
@@ -56,6 +63,7 @@ __all__ = [
     "fetch_commoncrawl",
     "build_external_dataset",
     "load_external",
+    "split_by_source",
     "dedup_against",
     "bias_diagnostics",
     "sha256_file",
@@ -89,6 +97,18 @@ HOSTING_BLOCKLIST: frozenset[str] = frozenset(
 # --------------------------------------------------------------------------------------
 # 소스 레지스트리
 # --------------------------------------------------------------------------------------
+
+
+#: benign 정제 절제 3조건 (리뷰 02 — "benign cleaning sensitivity"는 권장이 아니라 필수).
+#:
+#: - ``clean``: 기본. phishing eTLD+1 위의 benign 제거 + 공유 호스팅/단축기 블록리스트 제거.
+#: - ``keep_phish_domains``: phishing 도메인 위의 benign을 남긴다.
+#: - ``no_hosting_blocklist``: 공유 호스팅/단축기 블록리스트를 적용하지 않는다.
+BENIGN_CLEANING_MODES: tuple[str, ...] = (
+    "clean",
+    "keep_phish_domains",
+    "no_hosting_blocklist",
+)
 
 
 @dataclass(frozen=True)
@@ -132,6 +152,18 @@ SOURCES: dict[str, SourceSpec] = {
         ),
         env_key=None,
         license_note=f"Common Crawl terms-of-use, crawl {CC_CRAWL_ID}",
+    ),
+    "commoncrawl_unranked": SourceSpec(
+        name="commoncrawl_unranked",
+        label=0,
+        kind="parquet_join",
+        url_template=(
+            "https://data.commoncrawl.org/crawl-data/{crawl}/cc-index-table.paths.gz"
+        ),
+        env_key=None,
+        license_note=(
+            f"Common Crawl terms-of-use, crawl {CC_CRAWL_ID} (Tranco 조인 없음 — 민감도 세트)"
+        ),
     ),
     "tranco": SourceSpec(
         name="tranco",
@@ -500,12 +532,18 @@ def fetch_commoncrawl(
     per_domain_cap: int = 5,
     max_row_groups_per_part: int = 1,
     seed: int = 0,
+    unranked_sample: int | None = None,
 ) -> dict:
     """CC columnar index parquet의 row group을 부분 읽기해 benign 후보를 만든다.
 
     S3 버킷 리스팅은 403이므로 `cc-index-table.paths.gz`로 part 경로를 얻는다.
     `fetch_status==200 & mime==text/html` 필터 후 `url_host_registered_domain`을 Tranco 상위
     도메인과 조인해 남긴다. 도메인당 `per_domain_cap`개로 상한을 건다.
+
+    ``unranked_sample``을 주면 **Tranco 조인을 거치지 않은** benign 표본을 같은 row group에서
+    함께 떨군다(리뷰 02 — popularity confound 민감도 세트). 도메인당 상한은 조인본과 같다.
+    조인을 빼면 WebPhish·피싱 피드와 겹치는 도메인이 benign에 섞일 위험이 커지므로 이 세트는
+    주 결과가 아니라 민감도 세트로만 쓴다.
 
     parquet 파티션은 호스트(SURT) 순으로 정렬되어 있어 **한 part의 row group 하나는 도메인 몇백 개만
     담는다.** 도메인 다양성을 확보하려면 row group을 한 part에 몰지 말고 여러 part에 흩어야 한다
@@ -578,9 +616,27 @@ def fetch_commoncrawl(
     cc = pd.concat(frames, ignore_index=True)
     n_cc_raw = int(len(cc))
     cc["domain"] = cc["url_host_registered_domain"].astype("string").str.lower()
+    cc_all = cc
     if tranco_domains is not None:
         cc = cc[cc["domain"].isin(tranco_domains)]
     n_after_join = int(len(cc))
+
+    unranked_path: str | None = None
+    unranked_raw: str | None = None
+    n_unranked = 0
+    if unranked_sample:
+        # 조인 **이전** 프레임에서 뽑는다. 도메인당 상한은 조인본과 같게 걸어 도메인 편중을 막는다.
+        unr = cc_all.sample(frac=1.0, random_state=seed + 1)
+        unr = unr.groupby("domain", sort=False).head(per_domain_cap)
+        unr = unr.head(int(unranked_sample))
+        n_unranked = int(len(unr))
+        up = raw_dir.parent / f"commoncrawl_unranked_urls_{date}.csv"
+        pd.DataFrame({"url": unr["url"].tolist()}).to_csv(up, index=False)
+        ur = raw_dir / f"cc_unranked_urls_{date}.csv.gz"
+        pd.DataFrame({"url": unr["url"].tolist()}).to_csv(
+            ur, index=False, compression="gzip"
+        )
+        unranked_path, unranked_raw = str(up), str(ur)
 
     cc = cc.sample(frac=1.0, random_state=seed)
     cc = cc.groupby("domain", sort=False).head(per_domain_cap)
@@ -607,6 +663,15 @@ def fetch_commoncrawl(
         "n_after_domain_cap": int(len(cc)),
         "per_domain_cap": per_domain_cap,
         "tranco_list_id": TRANCO_LIST_ID if tranco_domains is not None else None,
+        "unranked_parsed_path": unranked_path,
+        "unranked_raw_path": unranked_raw,
+        "n_unranked": n_unranked,
+        "unranked_note": (
+            "Tranco 조인을 뺀 benign 표본(민감도 세트). 인기도 confound는 줄지만 피싱·"
+            "WebPhish 도메인 오염 위험이 커진다."
+        )
+        if unranked_path
+        else None,
         "license_note": spec.license_note,
     }
 
@@ -739,6 +804,7 @@ def load_external(
     hosting_blocklist: frozenset[str] = HOSTING_BLOCKLIST,
     drop_hosting_from_benign: bool = True,
     drop_benign_on_phish_domains: bool = True,
+    benign_cleaning: str | None = None,
     extractor: Any = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """외부 수집 CSV(들)를 읽어 `load_webphish`와 **동일한 컬럼 규약**으로 돌려준다.
@@ -746,11 +812,27 @@ def load_external(
     반환 컬럼: url, label, group, url_len, url_bytes_len, path_depth (+ source).
     두 번째 값은 제거 통계 + 편향 진단 dict.
 
+    ``benign_cleaning``은 benign 정제 절제 3조건(:data:`BENIGN_CLEANING_MODES`)을 한 인자로
+    고른다. 주면 ``drop_*`` 불리언보다 우선한다.
+
+    - ``"clean"``: 둘 다 적용(기본과 동일).
+    - ``"keep_phish_domains"``: phishing eTLD+1 위의 benign을 남긴다.
+    - ``"no_hosting_blocklist"``: 공유 호스팅/단축기 블록리스트를 적용하지 않는다.
+
     ``drop_benign_on_phish_domains``(설계 1.4절 1)는 phishing으로 등장한 eTLD+1을 benign에서
-    지운다. 라벨 잡음을 줄이지만 benign을 실제보다 깨끗하게 만들어 F-a를 낙관 편향시킬 수
-    있으므로, 민감도 분석용으로 끌 수 있게 옵션으로 둔다. 제거 건수는 항상
-    ``stats["n_dropped_phish_domain_from_benign"]``에 남는다.
+    지운다. 라벨 잡음은 줄지만 benign이 실제보다 깨끗해진다. benign 쪽 라벨 오염은 일반적으로
+    성능을 감쇠시키는 방향으로 예상되지만 단조성이 보장되지는 않으므로(오염이 체계적일 때
+    AUROC가 오히려 오를 수도 있다), 방향을 가정하지 말고 세 조건을 모두 돌려 비교한다.
+    제거 건수는 조건과 무관하게 항상 ``stats["n_benign_on_phish_domains"]``에 남는다.
     """
+    if benign_cleaning is not None:
+        if benign_cleaning not in BENIGN_CLEANING_MODES:
+            raise ValueError(
+                f"benign_cleaning은 {BENIGN_CLEANING_MODES} 중 하나여야 한다 "
+                f"(got {benign_cleaning!r})"
+            )
+        drop_hosting_from_benign = benign_cleaning != "no_hosting_blocklist"
+        drop_benign_on_phish_domains = benign_cleaning != "keep_phish_domains"
     paths = (
         [Path(csv_path)]
         if isinstance(csv_path, (str, Path))
@@ -847,8 +929,42 @@ def load_external(
     stats["by_source"] = {
         str(k): int(v) for k, v in df["source"].value_counts().items()
     }
+    stats["benign_cleaning"] = str(
+        benign_cleaning
+        if benign_cleaning is not None
+        else (
+            "clean"
+            if (drop_hosting_from_benign and drop_benign_on_phish_domains)
+            else "custom"
+        )
+    )
+    stats["drop_hosting_from_benign"] = bool(drop_hosting_from_benign)
     stats["bias_diagnostics"] = bias_diagnostics(df)
     return df, stats
+
+
+def split_by_source(
+    df: pd.DataFrame, keep: Sequence[str]
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """``load_external`` 결과에서 주어진 소스의 행만 남기고 통계를 다시 낸다.
+
+    primary(OpenPhish)와 secondary(Phishing.Database)는 **같은 benign 행 집합**을 써야
+    비교가 성립한다. 그러려면 정제(라벨 충돌·중복·phishing 도메인 위 benign 제거)를 두 세트에
+    따로 돌리면 안 된다 — phishing 소스가 다르면 제거되는 benign도 달라지기 때문이다.
+    그래서 phishing 소스를 합집합으로 한 번 정제한 뒤, 여기서 소스로만 잘라 낸다.
+    """
+    want = {str(s).strip() for s in keep if str(s).strip()}
+    sub = df[df["source"].astype(str).isin(want)].reset_index(drop=True).copy()
+    stats: dict[str, Any] = {
+        "kept_sources": sorted(want),
+        "n_final": int(len(sub)),
+        "n_final_benign": int((sub["label"] == 0).sum()),
+        "n_final_phishing": int((sub["label"] == 1).sum()),
+        "n_groups": int(sub["group"].nunique()),
+        "by_source": {str(k): int(v) for k, v in sub["source"].value_counts().items()},
+        "bias_diagnostics": bias_diagnostics(sub),
+    }
+    return sub, stats
 
 
 def write_json(path: str | Path, obj: Any) -> None:

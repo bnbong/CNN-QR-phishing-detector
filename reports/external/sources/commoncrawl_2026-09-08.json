@@ -128,12 +128,16 @@
     }
   ],
   "n_parts_available": 300,
-  "fetched_at": "2026-09-08T01:47:21.128881+00:00",
-  "sha256": "c827ec8593c0caa2dfc028a7e5696d9728cca04db285cba130b746b2aa9d68a9",
+  "fetched_at": "2026-09-08T04:19:49.157941+00:00",
+  "sha256": "9f7c8522d9401dc54d607ad4c257c047a1072a648c69bc6cad64e12a4a79c405",
   "n_raw": 35960699,
   "n_after_tranco_join": 9447020,
   "n_after_domain_cap": 62520,
   "per_domain_cap": 8,
   "tranco_list_id": "GQJ9K",
+  "unranked_parsed_path": "data/external/commoncrawl_unranked_urls_2026-09-08.csv",
+  "unranked_raw_path": "data/external/raw/cc_unranked_urls_2026-09-08.csv.gz",
+  "n_unranked": 65000,
+  "unranked_note": "Tranco 조인을 뺀 benign 표본(민감도 세트). 인기도 confound는 줄지만 피싱·WebPhish 도메인 오염 위험이 커진다.",
   "license_note": "Common Crawl terms-of-use, crawl CC-MAIN-2026-34"
 }

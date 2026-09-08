@@ -169,7 +169,7 @@ def hypotheses(
             continue
         typer.echo(
             f"{t['hypothesis']} {t['stratum']}: est={t['estimate']:+.3f} "
-            f"p_holm={t.get('p_holm')} reject={t.get('reject')}"
+            f"pseudo_p_holm={t.get('pseudo_p_holm')} reject={t.get('reject')}"
         )
     typer.echo(f"-> {res['path']}")
 

@@ -110,7 +110,7 @@ def test_compare_conditions_paired_when_split_shared(synthetic) -> None:
     assert r["paired"] is True
     assert r["delta_auroc"] > 0
     assert r["delta_ci"][0] <= r["delta_auroc"] <= r["delta_ci"][1]
-    assert 0.0 < r["p_value"] <= 1.0
+    assert 0.0 < r["pseudo_p"] <= 1.0
     assert Path(r["path"]).exists()
 
 
@@ -144,7 +144,7 @@ def test_run_hypothesis_tests_smoke(synthetic) -> None:
     # 참조 기준 예측(preds_test_charngram.npz)이 없는 옛 산출물이므로 H2는 기술 통계다.
     assert by_id["H2"]["paired"] is False
     assert by_id["H2"]["descriptive_only"] is True
-    assert np.isnan(by_id["H2"]["p_value"])
+    assert np.isnan(by_id["H2"]["pseudo_p"])
     assert "Bayes 최적 분류기가 아니다" in by_id["H2"]["caveat"]
     assert by_id["H3"]["paired"] is False  # L-none vs L-exact는 표본이 다르다
     assert by_id["H4"]["paired"] is True
@@ -152,13 +152,13 @@ def test_run_hypothesis_tests_smoke(synthetic) -> None:
         assert isinstance(t["ci_excludes_null"], bool)
         if t.get("descriptive_only"):
             # Holm family에서 제외된다.
-            assert t["p_holm"] is None and t["reject"] is None
+            assert t["pseudo_p_holm"] is None and t["reject"] is None
             continue
-        assert 0.0 < t["p_value"] <= 1.0
-        assert t["p_holm"] >= t["p_value"] - 1e-12
+        assert 0.0 < t["pseudo_p"] <= 1.0
+        assert t["pseudo_p_holm"] >= t["pseudo_p"] - 1e-12
         assert isinstance(t["reject"], bool)
         # 판정과 CI가 일치해야 한다(p < alpha ⟺ 95% CI가 0을 배제).
-        assert (t["p_value"] < out["alpha"]) == t["ci_excludes_null"]
+        assert (t["pseudo_p"] < out["alpha"]) == t["ci_excludes_null"]
     assert out["n_tests_in_family"] == 3
     assert out["correction"] == "holm"
     assert json.loads(Path(out["path"]).read_text(encoding="utf-8"))["tests"]
@@ -186,7 +186,7 @@ def test_h2_is_paired_when_reference_predictions_exist(synthetic, tmp_path) -> N
     assert h2["paired"] is True
     assert h2["descriptive_only"] is False
     assert h2["estimate"] > 0 and h2["ci"][0] > 0
-    assert 0.0 < h2["p_value"] <= 1.0
+    assert 0.0 < h2["pseudo_p"] <= 1.0
     assert out["n_tests_in_family"] == 4  # H2가 family에 들어온다
 
 

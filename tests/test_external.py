@@ -351,7 +351,14 @@ def test_fetch_tranco_smoke(tmp_path, monkeypatch):
 
 
 def test_sources_registry_shape():
-    assert set(ext.SOURCES) == {"phishdb", "openphish", "commoncrawl", "tranco"}
+    assert set(ext.SOURCES) == {
+        "phishdb",
+        "openphish",
+        "commoncrawl",
+        "commoncrawl_unranked",
+        "tranco",
+    }
+    assert ext.SOURCES["commoncrawl_unranked"].label == 0
     assert ext.SOURCES["phishdb"].label == 1
     assert ext.SOURCES["commoncrawl"].label == 0
     assert "MIT" in ext.SOURCES["phishdb"].license_note
@@ -417,3 +424,79 @@ def test_external_nested_scheme_url_keeps_group(tmp_path):
     df, _ = ext.load_external(p)
     assert "<empty>" not in set(df["group"])
     assert set(df.loc[df["label"] == 0, "group"]) == {"good.example"}
+
+
+# --------------------------------------------------- benign 정제 절제 3조건 (리뷰 02)
+def _cleaning_csv(tmp_path):
+    return _write(
+        tmp_path / "clean.csv",
+        [
+            ("spam", "http://shared.example/evil", "openphish", ""),
+            ("ham", "http://shared.example/nice", "commoncrawl", ""),
+            ("ham", "http://foo.000webhostapp.com/a", "commoncrawl", ""),
+            ("ham", "http://clean.example/nice", "commoncrawl", ""),
+        ],
+    )
+
+
+def test_benign_cleaning_clean_drops_both(tmp_path):
+    df, stats = ext.load_external(_cleaning_csv(tmp_path), benign_cleaning="clean")
+    assert stats["benign_cleaning"] == "clean"
+    assert set(df["url"]) == {"shared.example/evil", "clean.example/nice"}
+
+
+def test_benign_cleaning_keep_phish_domains(tmp_path):
+    df, stats = ext.load_external(
+        _cleaning_csv(tmp_path), benign_cleaning="keep_phish_domains"
+    )
+    assert stats["n_dropped_phish_domain_from_benign"] == 0
+    assert stats["n_benign_on_phish_domains"] == 1  # 건수는 조건과 무관하게 남는다
+    assert stats["n_dropped_hosting_blocklist"] == 1
+    assert "shared.example/nice" in set(df["url"])
+
+
+def test_benign_cleaning_no_hosting_blocklist(tmp_path):
+    df, stats = ext.load_external(
+        _cleaning_csv(tmp_path), benign_cleaning="no_hosting_blocklist"
+    )
+    assert stats["n_dropped_hosting_blocklist"] == 0
+    assert stats["drop_hosting_from_benign"] is False
+    assert "foo.000webhostapp.com/a" in set(df["url"])
+    assert "shared.example/nice" not in set(df["url"])  # 이쪽 정제는 그대로 적용
+
+
+def test_benign_cleaning_rejects_unknown_mode(tmp_path):
+    with pytest.raises(ValueError, match="benign_cleaning"):
+        ext.load_external(_cleaning_csv(tmp_path), benign_cleaning="nope")
+
+
+def test_benign_cleaning_modes_are_the_three_required_conditions():
+    assert ext.BENIGN_CLEANING_MODES == (
+        "clean",
+        "keep_phish_domains",
+        "no_hosting_blocklist",
+    )
+
+
+# ------------------------------------------- primary/secondary는 같은 benign 행 집합
+def test_split_by_source_keeps_benign_identical(tmp_path):
+    """phishing 소스가 달라도 benign 행 집합은 같아야 한다 (리뷰 02 — OpenPhish primary)."""
+    p = _write(
+        tmp_path / "u.csv",
+        [
+            ("spam", "http://op.example/a", "openphish", ""),
+            ("spam", "http://db.example/b", "phishdb", ""),
+            ("ham", "http://benign1.example/x", "commoncrawl", ""),
+            ("ham", "http://benign2.example/y", "commoncrawl", ""),
+        ],
+    )
+    union, _ = ext.load_external(p)
+    primary, st_p = ext.split_by_source(union, ["openphish", "commoncrawl"])
+    secondary, st_s = ext.split_by_source(union, ["phishdb", "commoncrawl"])
+    ben_p = set(primary.loc[primary["label"] == 0, "url"])
+    ben_s = set(secondary.loc[secondary["label"] == 0, "url"])
+    assert ben_p == ben_s == {"benign1.example/x", "benign2.example/y"}
+    assert set(primary.loc[primary["label"] == 1, "url"]) == {"op.example/a"}
+    assert set(secondary.loc[secondary["label"] == 1, "url"]) == {"db.example/b"}
+    assert st_p["n_final"] == st_s["n_final"] == 3
+    assert "gate_passed" in st_p["bias_diagnostics"]

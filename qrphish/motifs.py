@@ -32,6 +32,8 @@ __all__ = [
     "group_bootstrap_weights",
     "motif_enrichment",
     "combine_seed_enrichments",
+    "shuffle_within_qr",
+    "shuffle_within_qr_bytes",
 ]
 
 C_GRID = (0.01, 0.1, 1.0, 10.0)
@@ -323,6 +325,9 @@ def motif_enrichment(
 ) -> dict:
     """motif별 클래스 평균 빈도 + 존재율 오즈비 + 그룹 클러스터 부트스트랩 CI.
 
+    CI는 **순수 백분위 CI**다(:func:`qrphish.evaluate.cluster_bootstrap`과 같다).
+    점추정이 CI 밖으로 나가더라도 인위적으로 경계를 넓히지 않는다.
+
     Args:
         H: ``(N, 2**(size*size))`` 정규화 빈도 행렬. **train split만** 넣는다
             (발견은 train에서만 한다는 규약).
@@ -356,9 +361,6 @@ def motif_enrichment(
         vals = _log_odds(A, Cc, N1, N0)  # (n_boot, m)
         lo = np.quantile(vals, alpha / 2, axis=0)
         hi = np.quantile(vals, 1 - alpha / 2, axis=0)
-        # evaluate.cluster_bootstrap과 같은 관례: 점추정이 CI 밖이면 CI를 넓힌다.
-        lo = np.minimum(lo, point)
-        hi = np.maximum(hi, point)
     else:
         lo = hi = np.full(m, np.nan)
 
@@ -473,3 +475,104 @@ def combine_seed_enrichments(
         "top_phishing": top_ph[:top_k],
         "top_benign": top_bn[:top_k],
     }
+
+
+# ------------------------------------------------------------------ within-QR null
+# review_02 "2. motif가 정말 공간적 co-occurrence인가" 대응.
+#
+# 3x3 히스토그램 LR이 잘 맞는다고 해서 곧바로 "국소 공간 의존성이 있다"고 말할 수는 없다.
+# phishing/benign의 **주변부 비트·바이트 조성**만 달라도 3x3 빈도 분포는 따라 달라진다.
+# 아래 두 null은 조성을 보존한 채 공간 배치만 깨서 그 몫을 분리한다.
+#
+#   shuffle_within_qr        데이터 모듈 값을 QR 안에서 완전 무작위 순열 → 0/1 개수만 보존.
+#   shuffle_within_qr_bytes  8비트 코드워드 **순서**만 섞는다 → 바이트 조성(코드워드 다중집합)
+#                            까지 보존하면서 배치만 깬다. 더 강한 null이다.
+#
+# 둘 다 기능 패턴(파인더·타이밍·정렬)은 건드리지 않으므로 격자 골격은 그대로다.
+
+
+def shuffle_within_qr(
+    grid_values: np.ndarray, data_mask: np.ndarray, seed: Any = 0
+) -> np.ndarray:
+    """QR 한 장의 **데이터 모듈 값만** 그 QR 안에서 무작위 순열한 격자.
+
+    데이터 모듈의 0/1 **개수**는 정확히 보존되고(=검은 모듈 비율 동일), 기능 패턴 모듈은
+    값도 위치도 그대로다. 같은 ``seed``에서 결정적이다.
+
+    Args:
+        grid_values: ``(n, n)`` 모듈 값(0/1). 히스토그램에 넣는 격자와 같은 표현이어야
+            한다(마스크가 걸린 격자를 넣으면 마스크 도메인의 검은 모듈 비율이 보존된다).
+        data_mask: ``(n, n)`` 데이터 모듈 마스크.
+
+    Returns:
+        ``(n, n)`` bool 격자.
+    """
+    vals = _as_bool_grid(grid_values, "grid_values")
+    mask = _as_bool_grid(data_mask, "data_mask")
+    if vals.shape != mask.shape:
+        raise ValueError(f"grid_values{vals.shape}와 data_mask{mask.shape}의 모양이 다르다")
+    out = vals.copy()
+    idx = np.flatnonzero(mask.reshape(-1))
+    if idx.size < 2:
+        return out
+    rng = np.random.default_rng(seed)
+    flat = out.reshape(-1)
+    flat[idx] = flat[idx][rng.permutation(idx.size)]
+    return out
+
+
+def shuffle_within_qr_bytes(
+    grid_values: np.ndarray,
+    placement_order: np.ndarray,
+    seed: Any = 0,
+    *,
+    mask_flip: np.ndarray | None = None,
+    codeword_bits: int = 8,
+) -> np.ndarray:
+    """8비트 코드워드 **순서**만 섞은 격자 — 바이트 조성 보존 null.
+
+    ``placement_order``의 i번째 원소가 i번째 데이터 비트가 놓이는 ``(row, col)``이다
+    (:func:`qrphish.mapping.bit_placement_order`). 이 순서를 ``codeword_bits`` 개씩 묶어
+    코드워드로 보고, **코드워드 슬롯 배정만** 무작위로 바꾼다. 코드워드 내부 비트 순서는
+    유지하므로 바이트의 다중집합(=바이트 히스토그램)은 정확히 보존되고 공간 배치만 깨진다.
+    ``codeword_bits``로 나누어떨어지지 않는 꼬리 비트(remainder bits)는 제자리에 둔다.
+
+    Args:
+        grid_values: ``(n, n)`` 모듈 값. 보통 마스크가 걸린 격자다.
+        placement_order: ``(K, 2)`` 정수 좌표. ``grid_values``와 **같은 좌표계**여야 한다
+            (중앙 정렬 패딩을 썼다면 호출자가 offset을 더해 넘긴다).
+        mask_flip: 주면 ``values ^ mask_flip``으로 마스크를 되돌린 뒤 코드워드를 섞고 다시
+            같은 마스크를 건다. QR 마스크는 위치 의존이라 코드워드를 옮기면 마스크 도메인의
+            비트가 바뀌는데, 이 인자를 주면 **원 데이터 도메인**의 바이트 조성이 보존된다.
+        codeword_bits: 코드워드 비트 수(기본 8).
+
+    Returns:
+        ``(n, n)`` bool 격자. 같은 ``seed``에서 결정적이다.
+    """
+    vals = _as_bool_grid(grid_values, "grid_values")
+    order = np.asarray(placement_order, dtype=np.int64)
+    if order.ndim != 2 or order.shape[1] != 2:
+        raise ValueError(f"placement_order는 (K, 2)여야 한다 (got {order.shape})")
+    if codeword_bits < 1:
+        raise ValueError(f"codeword_bits는 1 이상이어야 한다 (got {codeword_bits})")
+
+    work = vals
+    if mask_flip is not None:
+        flip = _as_bool_grid(mask_flip, "mask_flip")
+        if flip.shape != vals.shape:
+            raise ValueError(f"mask_flip{flip.shape}와 grid_values{vals.shape}의 모양이 다르다")
+        work = vals ^ flip
+
+    n_cw = int(order.shape[0]) // int(codeword_bits)
+    if n_cw < 2:
+        return vals.copy()
+    coords = order[: n_cw * codeword_bits].reshape(n_cw, codeword_bits, 2)
+    bits = work[coords[..., 0], coords[..., 1]]  # (n_cw, codeword_bits)
+    rng = np.random.default_rng(seed)
+    perm = rng.permutation(n_cw)
+
+    out = work.copy()
+    out[coords[..., 0], coords[..., 1]] = bits[perm]
+    if mask_flip is not None:
+        out = out ^ np.asarray(mask_flip, dtype=bool)
+    return out

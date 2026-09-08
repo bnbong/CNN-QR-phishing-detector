@@ -313,6 +313,9 @@ MOTIF_ROWS = [
     ("patch 2×2 히스토그램 LR", "patch2"),
     ("patch 3×3 히스토그램 LR", "patch3"),
     ("patch 3×3 spatial pyramid LR", "pyramid3"),
+    # within-QR null (review_02 2절): 조성은 보존하고 공간 배치만 깬 대조.
+    ("patch 3×3 · within-QR 모듈 셔플 null", "patch3_shuffle_module"),
+    ("patch 3×3 · 코드워드 순서 셔플 null", "patch3_shuffle_codeword"),
     ("patch 3×3 · 라벨 셔플 (바닥)", "patch3_labelshuffle"),
 ]
 
@@ -326,8 +329,9 @@ def motif_cell(motifs: dict[str, dict], stratum: str, key: str) -> str:
     rep = (motifs.get(stratum, {}).get("representations") or {}).get(key)
     if not rep:
         return "—"
-    # motif 러너의 results.json은 표현별 dict 안에만 집계값을 담는다(최상위 pooling 필드 없음).
-    # auroc_pooled/auroc_pooled_ci가 짝을 이루므로 점추정도 같은 풀링에서 읽어야 CI와 맞는다.
+    # 표현별 dict 안의 auroc_pooled/auroc_pooled_ci는 시드 층화 클러스터 부트스트랩
+    # (results.json 최상위 pooling = seed_stratified)이라 CNN 표와 같은 estimator다.
+    # 짝을 이루므로 점추정도 같은 풀링에서 읽어야 CI와 맞는다.
     lo, hi = (rep.get("auroc_pooled_ci") or [None, None])[:2]
     point = rep.get("auroc_pooled")
     if point is None:
@@ -362,6 +366,92 @@ def motif_table() -> str:
     )
     return strata_table("표현 / 모델", rows)
 
+
+def load_campaign() -> dict[str, dict]:
+    """``reports/campaign/{stratum}/results.json``. 안 돌렸으면 빈 dict.
+
+    G 재설계(review_02 3절)는 조건 id 하위 디렉터리를 쓰지 않는다 — 조건은 주 조건으로
+    고정돼 있고 바뀌는 것은 그룹 키가 아니라 A/B 학습 집합뿐이다.
+    """
+    out: dict[str, dict] = {}
+    root = REPORTS / "campaign"
+    if not root.exists():
+        return out
+    for path in sorted(root.glob("*/results.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if "error" in data:
+            continue
+        out[str(data.get("stratum", path.parent.name))] = data
+    return out
+
+
+def _campaign_delta(block: dict | None) -> str:
+    if not block:
+        return "—"
+    lo, hi = (block.get("delta_ci") or [None, None])[:2]
+    return f"{float(block['delta_auroc']):+.3f} [{f3(lo)}, {f3(hi)}]"
+
+
+def _campaign_mean(camp: dict, stratum: str, path: tuple[str, ...]) -> str:
+    """시드별 per_seed 값의 평균. 없으면 '—'."""
+    rows = [r for r in camp.get(stratum, {}).get("per_seed", []) if "error" not in r]
+    vals: list[float] = []
+    for row in rows:
+        node: dict | float | None = row
+        for key in path:
+            if not isinstance(node, dict) or key not in node:
+                node = None
+                break
+            node = node[key]
+        if node is not None and not isinstance(node, dict):
+            vals.append(float(node))
+    return f"{sum(vals) / len(vals):.0f}" if vals else "—"
+
+
+def campaign_table() -> str:
+    """고정 캠페인 test 집합 위의 쌍체 A/B 비교 (G 재설계).
+
+    주 지표는 ``ΔAUROC = A_sm − B``다. ``A_sm``은 형제 행을 전부 유지한 채 비형제를
+    덜어 ``|train| = |train_B|``로 맞춘 A-sizematched이므로, Δ에서 학습 표본 수 효과가
+    빠진다. 크기를 맞추지 않은 ``A − B``는 보조 행으로 함께 싣는다. 세 모델이 **같은 T**를
+    평가하므로 전부 쌍체다. 옛 template_split의 비쌍체 비교(평가 대상 88% 교체)를 대체한다.
+
+    ``*_leaky_vs_contrast``는 "A의 train에 형제가 있는 누출 행 + 누출 행이 하나도 없는
+    클래스의 행 전부(대조)"만 남긴 Δ다. 누출 행만 남기면 사실상 단일 클래스가 되어
+    AUROC가 정의되지 않기 때문이며, 표본 구성이 달라 전체 T Δ와 크기를 직접 비교하면 안 된다.
+    """
+    camp = load_campaign()
+    if not camp:
+        return ""
+    agg = {s: (camp.get(s, {}).get("aggregate") or {}) for s in STRATA}
+    rows: list[tuple[str, list[str]]] = [
+        ("AUROC — Model A_sm (누출 허용, 크기 매칭)", [f3((agg[s].get("cnn_sm") or {}).get("auroc_A")) for s in STRATA]),
+        ("AUROC — Model B (완전 격리)", [f3((agg[s].get("cnn_sm") or {}).get("auroc_B")) for s in STRATA]),
+        ("**ΔAUROC (A_sm−B), 쌍체 95% CI** — 주 지표", [_campaign_delta(agg[s].get("cnn_sm")) for s in STRATA]),
+        ("순열 p (클러스터, 양측)", [f3((agg[s].get("cnn_sm") or {}).get("perm_p")) for s in STRATA]),
+        ("ΔAUROC — 누출 행 대 무누출 클래스 대조 (A_sm−B)",
+         [_campaign_delta(agg[s].get("cnn_sm_leaky_vs_contrast")) for s in STRATA]),
+        ("AUROC — Model A (크기 미매칭, 보조)", [f3((agg[s].get("cnn") or {}).get("auroc_A")) for s in STRATA]),
+        ("ΔAUROC (A−B), 쌍체 95% CI — 보조", [_campaign_delta(agg[s].get("cnn")) for s in STRATA]),
+        ("ΔAUROC — 누출 행 대 무누출 클래스 대조 (A−B)",
+         [_campaign_delta(agg[s].get("cnn_leaky_vs_contrast")) for s in STRATA]),
+        ("Δ char n-gram LR (A_sm−B)", [_campaign_delta(agg[s].get("charngram_lr_sm")) for s in STRATA]),
+        ("Δ byte-hist LR (A_sm−B)", [_campaign_delta(agg[s].get("bytehist_lr_sm")) for s in STRATA]),
+        ("T 표본 수", [_campaign_mean(camp, s, ("n_test",)) for s in STRATA]),
+        ("그중 A train에 형제가 있는 행", [_campaign_mean(camp, s, ("n_test_leaky",)) for s in STRATA]),
+        (
+            "A train의 T 템플릿 중복 행 수",
+            [_campaign_mean(camp, s, ("split", "overlap", "n_template_overlap_in_train", "A"))
+             for s in STRATA],
+        ),
+        (
+            "B train의 T 템플릿 중복 행 수",
+            [_campaign_mean(camp, s, ("split", "overlap", "n_template_overlap_in_train", "B"))
+             for s in STRATA],
+        ),
+        ("판정 (A_sm−B 기준)", [str((agg[s].get("cnn_sm") or {}).get("verdict", "—")) for s in STRATA]),
+    ]
+    return strata_table("지표", rows)
 
 def _load_phase(name: str, condition: str = BASE) -> dict[str, dict]:
     """``reports/{name}/{condition_id}/{stratum}/results.json``. 안 돌렸으면 빈 dict.
@@ -425,11 +515,14 @@ OCC_CONDS = [
     ("random (phishing 개수 맞춤)", "random"),
     ("benign motif", "benign_motif"),
     ("random (benign 개수 맞춤)", "random_benign_matched"),
+    # topology-matched 대조(review_02 4절): 개수 + 사분면 + 국소 흑색 밀도까지 맞춘다.
+    ("random (phishing topology 맞춤)", "random_matched"),
+    ("random (benign topology 맞춤)", "random_matched_benign"),
 ]
 
 
 def table_occlusion() -> str:
-    """인과 절제 — 조건별 ΔAUROC, 평균 로짓 변화, 뒤집은 모듈 수."""
+    """인과 절제 — 조건별 ΔAUROC, 평균 로짓 변화, 개입한 모듈 수."""
     occ = _load_phase("occlusion")
     if not occ:
         return ""
@@ -471,7 +564,7 @@ def table_occlusion() -> str:
             f"\n**{s}** (원본 AUROC {f3(agg.get('auroc_original'))})\n\n"
             + table(
                 ["조건", "ΔAUROC", "시드별 CI 평균", "로짓 Δ", "로짓 Δ(phishing)",
-                 "로짓 Δ(benign)", "뒤집은 모듈 수", "CI가 0을 제외한 시드"],
+                 "로짓 Δ(benign)", "개입한 모듈 수", "CI가 0을 제외한 시드"],
                 rows,
             )
         )
@@ -487,7 +580,7 @@ H_LABEL = {
 
 
 def _p(value: float) -> str:
-    """Holm 보정 p값. 2000회 부트스트랩의 해상도(1/2001)를 넘어가면 부등호로 쓴다."""
+    """pseudo-p(Holm 보정) / 순열 p 표기. 2000회 재표집 해상도(1/2001) 아래는 부등호로 쓴다."""
     v = float(value)
     if v < 0.001:
         return "<0.001"
@@ -495,7 +588,11 @@ def _p(value: float) -> str:
 
 
 def hypotheses_table() -> str:
-    """H1~H4 판정 표 — 층별 추정치·95% CI·Holm 보정 p·판정.
+    """H1 ~ H4 판정 표 — 층별 추정치·95% CI·Holm 보정 pseudo-p·순열 p·판정.
+
+    pseudo-p는 부트스트랩 백분위 CI를 역전시켜 정의한 값이지 영가설 분포에서 나온 정식
+    p값이 아니다(``hypotheses.json``의 ``p_definition`` 참고). 쌍체 예측이 있는 H1·H4에는
+    그룹 단위 교환 순열 검정의 정식 p값을 "순열 p" 열에 함께 싣는다.
 
     ``reports/hypotheses.json``은 시드 층화 클러스터 부트스트랩(``pooling:
     seed_stratified``)으로 만든 값이다. 시드별로 AUROC를 계산해 평균하므로
@@ -521,12 +618,13 @@ def hypotheses_table() -> str:
                     s,
                     f"{float(t['estimate']):+.3f}",
                     f"[{float(lo):+.3f}, {float(hi):+.3f}]",
-                    _p(t["p_holm"]),
+                    _p(t["pseudo_p_holm"]) if t.get("pseudo_p_holm") is not None else "—",
+                    _p(t["perm_p"]) if t.get("perm_p") is not None else "—",
                     "기각" if t.get("reject") else "비기각",
                 ]
             )
     return table(
-        ["가설", "층", "ΔAUROC 추정치", "95% CI", "p (Holm)", "판정"],
+        ["가설", "층", "ΔAUROC 추정치", "95% CI", "pseudo-p (Holm)", "순열 p", "판정"],
         rows,
     )
 
@@ -574,7 +672,7 @@ def load_motif_replication() -> dict[tuple[str, str], dict]:
     root = REPORTS / "transfer"
     if not root.exists():
         return out
-    for path in sorted(root.glob("*/motif_replication/*/replication.json")):
+    for path in sorted(root.glob("*/motif_replication*/*/replication.json")):
         tag = path.parent.parent.parent.name
         try:
             out[(tag, path.parent.name)] = json.loads(path.read_text(encoding="utf-8"))
@@ -583,8 +681,46 @@ def load_motif_replication() -> dict[tuple[str, str], dict]:
     return out
 
 
+SET_ORDER = (
+    ("primary_ccunranked", "primary · CC unranked benign(민감도)"),
+    ("ccunranked", "primary · CC unranked benign(민감도)"),
+    ("keep_phish_domains", "primary · benign 정제 절제: 피싱 도메인 유지"),
+    ("no_hosting_blocklist", "primary · benign 정제 절제: 호스팅 블록리스트 미적용"),
+    ("secondary", "secondary · Phishing.Database(robustness)"),
+    ("b2", "EXT-B2 · Tranco 맨 도메인 대조군"),
+    ("primary", "primary · OpenPhish 90일 × CC×Tranco benign"),
+)
+
+
+def set_label(tag: str, res: dict) -> str:
+    """외부 세트 이름을 태그(와 결과의 ``benign_cleaning``)에서 읽는다.
+
+    수집 CLI가 내는 파일명 규약(``external_{set}_{date}.csv``)이 그대로 source_tag로
+    넘어온다는 전제다. 못 맞추면 태그를 그대로 쓴다.
+    """
+    t = str(tag).lower()
+    cleaning = (res.get("data") or {}).get("benign_cleaning")
+    for key, label in SET_ORDER:
+        if key in t:
+            return label
+    if cleaning and cleaning != "clean":
+        return f"primary · benign 정제 절제: {cleaning}"
+    return str(tag)
+
+
+def _set_rank(label: str) -> int:
+    for i, (_, lab) in enumerate(SET_ORDER):
+        if lab == label:
+            return i
+    return len(SET_ORDER)
+
+
 def transfer_table() -> str:
-    """F-a/F-b/F-c × 층 × {CNN, 텍스트 기준선, 순열 바닥선} + motif 재현성 (설계 6절).
+    """F-a/F-b/F-c × 외부 세트 × 층 × {CNN, 텍스트 기준선, 순열 바닥선} (설계 6절).
+
+    세트는 primary(OpenPhish) / secondary(Phishing.Database) / CC unranked benign /
+    benign 정제 절제 3조건으로 나눠 적는다. F-a는 평가 cohort(fixed·per_seed)도 함께
+    적는다 — 고정 cohort가 주 결과, 시드별 cohort는 F-b와의 쌍체 비교용이다.
 
     바닥선은 그룹 단위 라벨 순열의 97.5 백분위다. CNN AUROC의 CI 하한이 이 값 이하면
     "우연과 구분 불가"(collapse)다.
@@ -592,37 +728,35 @@ def transfer_table() -> str:
     data = load_transfer()
     if not data:
         return ""
-    tags = sorted({k[0] for k in data})
     out: list[str] = []
-    for tag in tags:
-        strata = sorted({k[2] for k in data if k[0] == tag})
-        rows: list[list[str]] = []
-        for mode in ("a", "b", "c"):
-            for st in strata:
-                r = data.get((tag, mode, st))
-                if not r or "error" in r:
-                    continue
-                m = r.get("model", {})
-                ci = m.get("auroc_pooled_ci") or [None, None]
-                nb = r.get("null_permutation", {})
-                base = r.get("baselines", {})
-                rows.append(
-                    [
-                        TRANSFER_MODE_LABEL.get(mode, mode),
-                        st,
-                        f3(m.get("auroc_mean")),
-                        f"[{f3(ci[0])}, {f3(ci[1])}]",
-                        f3(nb.get("ci_upper")),
-                        *[f3((base.get(k) or {}).get("auroc")) for k, _ in TRANSFER_BASELINES],
-                        str(r.get("verdict", {}).get("label", "—")),
-                    ]
-                )
-        if not rows:
+    rows: list[list[str]] = []
+    for (tag, mode, st), r in data.items():
+        if not r or "error" in r:
             continue
-        out.append(f"**외부 소스 `{tag}`**\n")
+        m = r.get("model", {})
+        ci = m.get("auroc_pooled_ci") or [None, None]
+        nb = r.get("null_permutation", {})
+        base = r.get("baselines", {})
+        run = TRANSFER_MODE_LABEL.get(mode.replace("_fixed", ""), mode)
+        if mode.startswith("a"):
+            run += " (고정 cohort)" if mode == "a_fixed" else " (시드별 cohort)"
+        rows.append(
+            [
+                set_label(tag, r),
+                run,
+                st,
+                f3(m.get("auroc_mean")),
+                f"[{f3(ci[0])}, {f3(ci[1])}]",
+                f3(nb.get("ci_upper")),
+                *[f3((base.get(k) or {}).get("auroc")) for k, _ in TRANSFER_BASELINES],
+                str(r.get("verdict", {}).get("label", "—")),
+            ]
+        )
+    if rows:
+        rows.sort(key=lambda r: (_set_rank(r[0]), r[1], r[2]))
         out.append(
             table(
-                ["실행", "층", "CNN AUROC", "95% CI", "순열 바닥선(97.5%)",
+                ["외부 세트", "실행", "층", "CNN AUROC", "95% CI", "순열 바닥선(97.5%)",
                  *[label for _, label in TRANSFER_BASELINES], "판정"],
                 rows,
             )
@@ -668,8 +802,9 @@ SECTIONS = [
     ("Bag-of-QR-patches (Q1 직접 측정)", motif_table),
     ("어휘 프로브 (RQ2 · D안)", table_probes),
     ("인과 motif 절제 (RQ3 · C안)", table_occlusion),
-    ("가설 검정 판정 (H1~H4)", hypotheses_table),
+    ("가설 검정 판정 (H1 ~ H4)", hypotheses_table),
     ("외부 검증 전이 (F) · motif 재현성", transfer_table),
+    ("템플릿 누출 쌍체 비교 (G 재설계 · 고정 캠페인 T)", campaign_table),
 ]
 
 

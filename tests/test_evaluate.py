@@ -359,3 +359,69 @@ def test_seed_stratified_resamples_groups_across_seeds_together() -> None:
     pick = np.array([0, 0])  # 그룹 "a"를 두 번
     assert sorted(blocks[0]["rows"][_block_indices(blocks[0], pick)]) == [0, 0, 1, 1]
     assert sorted(blocks[1]["rows"][_block_indices(blocks[1], pick)]) == [4, 4]
+
+
+# ------------------------------ review_02 6: 클러스터 인식 순열 검정 (정식 p값)
+def test_paired_cluster_permutation_test_detects_real_difference():
+    from qrphish.evaluate import paired_cluster_permutation_test
+
+    rng = np.random.default_rng(0)
+    n_g, per_g = 40, 6
+    groups = np.repeat([f"g{i}" for i in range(n_g)], per_g)
+    y = rng.integers(0, 2, size=n_g * per_g)
+    noise = rng.normal(0, 1, size=y.size)
+    p_a = 1 / (1 + np.exp(-(2.5 * y + noise)))  # 강한 예측
+    p_b = 1 / (1 + np.exp(-(0.2 * y + noise)))  # 약한 예측
+    r = paired_cluster_permutation_test(y, p_a, p_b, groups, n_perm=500, seed=0)
+    assert r["estimate"] > 0
+    assert r["perm_p"] < 0.05
+    assert r["n_valid"] == 500
+    assert r["alternative"] == "greater"
+
+
+def test_paired_cluster_permutation_test_null_is_not_significant():
+    from qrphish.evaluate import paired_cluster_permutation_test
+
+    rng = np.random.default_rng(1)
+    groups = np.repeat([f"g{i}" for i in range(30)], 6)
+    y = rng.integers(0, 2, size=groups.size)
+    p = 1 / (1 + np.exp(-(1.0 * y + rng.normal(0, 1, size=y.size))))
+    # 두 예측이 동일하면 Δ=0이고 순열 p는 크게 나온다.
+    r = paired_cluster_permutation_test(y, p, p.copy(), groups, n_perm=300, seed=0)
+    assert r["estimate"] == pytest.approx(0.0)
+    assert r["perm_p"] > 0.5
+
+
+def test_paired_cluster_permutation_test_is_deterministic():
+    from qrphish.evaluate import paired_cluster_permutation_test
+
+    rng = np.random.default_rng(2)
+    groups = np.repeat([f"g{i}" for i in range(20)], 5)
+    y = rng.integers(0, 2, size=groups.size)
+    p_a = rng.random(y.size)
+    p_b = rng.random(y.size)
+    kw = dict(n_perm=200, seed=3)
+    r1 = paired_cluster_permutation_test(y, p_a, p_b, groups, **kw)
+    r2 = paired_cluster_permutation_test(y, p_a, p_b, groups, **kw)
+    assert r1 == r2
+    r3 = paired_cluster_permutation_test(y, p_a, p_b, groups, n_perm=200, seed=4)
+    assert r3["estimate"] == r1["estimate"]  # 관측치는 시드와 무관
+
+
+def test_paired_cluster_permutation_test_seed_stratified_and_validation():
+    from qrphish.evaluate import paired_cluster_permutation_test
+
+    rng = np.random.default_rng(5)
+    groups = np.tile(np.repeat([f"g{i}" for i in range(20)], 4), 2)
+    seeds = np.repeat([0, 1], groups.size // 2)
+    y = rng.integers(0, 2, size=groups.size)
+    p_a = 1 / (1 + np.exp(-(2.0 * y + rng.normal(0, 1, size=y.size))))
+    p_b = rng.random(y.size)
+    r = paired_cluster_permutation_test(
+        y, p_a, p_b, groups, n_perm=300, seeds=seeds, seed=0
+    )
+    assert r["estimate"] > 0 and r["perm_p"] < 0.05
+    with pytest.raises(ValueError):
+        paired_cluster_permutation_test(y, p_a, p_b, groups[:-1], n_perm=10)
+    with pytest.raises(ValueError):
+        paired_cluster_permutation_test(y, p_a, p_b, groups, n_perm=10, alternative="x")
