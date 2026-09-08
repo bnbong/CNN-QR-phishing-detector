@@ -1,0 +1,333 @@
+{
+  "schema_version": 2,
+  "phase": "transfer",
+  "mode": "a",
+  "source_tag": "external_primary_2026-09-08",
+  "condition_id": "norm-exact-data_only-fixed-small_cnn",
+  "stratum": "v2",
+  "git_sha": "605278af73b81c797fd134494a5c8650347c61d4",
+  "qrphish_version": "0.1.0",
+  "created_at": "2026-09-08T11:49:15.988899+00:00",
+  "config": {
+    "seed_list": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "data": {
+      "csv_path": "/content/drive/MyDrive/qrphish/webphish.csv",
+      "category_col": "Category",
+      "url_col": "Data",
+      "positive_label": "spam"
+    },
+    "qr": {
+      "ec": "L",
+      "optimize": 0,
+      "border": 0,
+      "mask_mode": "fixed",
+      "mask_pattern": 0,
+      "pad_mode": "spec"
+    },
+    "condition": {
+      "url_mode": "norm",
+      "length_match": "exact",
+      "length_bucket": 1,
+      "features": "data_only",
+      "path_filter": false,
+      "shuffle_positions": false
+    },
+    "strata": [
+      "v2",
+      "v3",
+      "v4",
+      "v5plus"
+    ],
+    "stratum_rules": {
+      "primary_min_per_class": 1000,
+      "secondary_min_per_class": 300
+    },
+    "split": {
+      "ratios": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "max_group_frac": 0.05,
+      "group_key": "etld1",
+      "template_threshold": 0.7,
+      "template_shingle": 3,
+      "min_template_tokens": 3
+    },
+    "model": {
+      "arch": "small_cnn",
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "batch_size": 256,
+      "max_epochs": 60,
+      "patience": 8,
+      "class_weight": "balanced",
+      "amp": true
+    },
+    "eval": {
+      "n_bootstrap": 2000,
+      "primary_metric": "auroc"
+    },
+    "output_dir": "/content/drive/MyDrive/qrphish_out_v2/artifacts",
+    "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
+  },
+  "data": {
+    "n_total": 15480,
+    "n_benign": 7740,
+    "n_phishing": 7740,
+    "base_rate": 0.5,
+    "n_groups": 7459,
+    "tier": "primary",
+    "eval_rows": "all",
+    "split_diagnostics": {
+      "top5_test_group_frac": 0.19711191335740072
+    },
+    "length_match": {
+      "bucket": 1,
+      "all_identical": true
+    },
+    "external_loader": "transfer._load_external_fallback(already_normalized)",
+    "benign_cleaning": null,
+    "cohort": "per_seed",
+    "cohort_seed": null,
+    "bias_diagnostics": {
+      "external": {
+        "benign": 0.8683462532299742,
+        "phishing": 0.33733850129198967
+      },
+      "webphish": {
+        "benign": 0.9975243439511471,
+        "phishing": 0.44314243274467735
+      },
+      "ok": true,
+      "checked": true
+    },
+    "baseline_seed": 0,
+    "bias_gate": {
+      "source": "collection",
+      "gate_passed": true,
+      "path": "reports/external/bias_diagnostics.json",
+      "block": "main",
+      "note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
+      "recomputed_transfer_stage": true
+    },
+    "gate_notes": {}
+  },
+  "model": {
+    "auroc_mean": 0.7443791568334114,
+    "auroc_sd": 0.00888939306277624,
+    "auroc_per_seed": [
+      0.7480185151800438,
+      0.7544634209912616,
+      0.7481861258020349,
+      0.7315522055297834,
+      0.7396755166639336
+    ],
+    "auroc_pooled": 0.7443791568334114,
+    "auroc_pooled_ci": [
+      0.7237055184880015,
+      0.7647431925666099
+    ],
+    "pooling": "seed_stratified",
+    "auprc_mean": 0.7232140276408927,
+    "f1_at_val_threshold": 0.7113107633912421,
+    "acc_at_val_threshold": 0.6708278908452459,
+    "threshold_source": "webphish_val",
+    "thresholds": [
+      0.38955465443213627,
+      0.06376051004618814,
+      0.5453393557300305,
+      0.008853717273330846,
+      0.5100878989159944
+    ],
+    "n_boot": 2000,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "null_permutation": {
+    "auroc_mean": 0.4980197744708137,
+    "ci": [
+      0.45227508251694964,
+      0.5418283290664221
+    ],
+    "ci_upper": 0.5418283290664221,
+    "n_perm": 200,
+    "n_valid": 200,
+    "unit": "etld1_group"
+  },
+  "baselines": {
+    "charngram_lr": {
+      "auroc": 0.8379710420714568,
+      "ci": [
+        0.8063103675105894,
+        0.8696511178639214
+      ],
+      "fit_on": "webphish_train",
+      "n": 15480
+    },
+    "bytehist_lr": {
+      "auroc": 0.8182669811509724,
+      "ci": [
+        0.7638413433074639,
+        0.8554098961850868
+      ],
+      "fit_on": "webphish_train",
+      "n": 15480
+    },
+    "length_lr": {
+      "auroc": 0.5,
+      "ci": [
+        0.5,
+        0.5
+      ],
+      "fit_on": "webphish_train",
+      "n": 15480
+    },
+    "version_lr": {
+      "auroc": 0.5,
+      "ci": [
+        0.5,
+        0.5
+      ],
+      "fit_on": "webphish_train",
+      "n": 15480
+    },
+    "motif_patch3_lr": {
+      "auroc": 0.6356694271161091,
+      "ci": [
+        0.6191997665195331,
+        0.6528983817188507
+      ],
+      "fit_on": "webphish_train",
+      "n": 8000
+    },
+    "motif_pyramid3_lr": {
+      "auroc": 0.6392303093898534,
+      "ci": [
+        0.6231513277691437,
+        0.6575282562588375
+      ],
+      "fit_on": "webphish_train",
+      "n": 8000
+    }
+  },
+  "comparison_to_in_domain": {
+    "in_domain_auroc": 0.8718063340250195,
+    "delta": -0.12742717719160812,
+    "paired": false,
+    "delta_ci": [
+      null,
+      null
+    ],
+    "transfer_gap_to_text": 0.0935918852380454
+  },
+  "verdict": {
+    "label": "reproduced_weak",
+    "gates_passed": {
+      "length_lr_neutral": true,
+      "version_lr_neutral": true,
+      "bias_direction_ok": true,
+      "group_concentration_ok": true
+    },
+    "criteria_version": "prereg_v1"
+  },
+  "cohort": "per_seed",
+  "motif_replication": {
+    "K": 20,
+    "size": 3,
+    "n_motifs_used": 512,
+    "topk_motifs_webphish": [
+      339,
+      417,
+      295,
+      298,
+      158,
+      353,
+      130,
+      145,
+      460,
+      173,
+      39,
+      126,
+      95,
+      433,
+      179,
+      401,
+      334,
+      18,
+      316,
+      317
+    ],
+    "topk_motifs_external": [
+      339,
+      280,
+      164,
+      366,
+      266,
+      83,
+      469,
+      439,
+      224,
+      301,
+      493,
+      294,
+      295,
+      93,
+      370,
+      153,
+      147,
+      248,
+      210,
+      250
+    ],
+    "spearman_logodds": {
+      "rho": 0.31627254137054966,
+      "ci": [
+        0.16687518909645688,
+        0.384908546498146
+      ],
+      "n_motifs_used": 512
+    },
+    "sign_match_rate": {
+      "value": 0.8,
+      "ci": [
+        0.55,
+        0.9512500000000003
+      ],
+      "null": 0.5
+    },
+    "jaccard_topk": {
+      "value": 0.05263157894736842,
+      "null_mean": 0.019336360652150122,
+      "null_ci": [
+        0.0,
+        0.08108108108108109
+      ]
+    },
+    "ablation": null,
+    "verdict": {
+      "label": "partial",
+      "criteria": {
+        "spearman": false,
+        "sign_match": true,
+        "jaccard": false
+      },
+      "n_passed": 1,
+      "criteria_version": "prereg_v1"
+    },
+    "n_rows": 8000,
+    "webphish_enrichment": "/content/drive/MyDrive/qrphish_out_v2/reports/motifs/norm-exact-data_only-fixed/v2/enrichment.json"
+  },
+  "runtime_sec": 161.7
+}

@@ -4,8 +4,9 @@
   "n_tests_in_family": 12,
   "correction": "holm",
   "pooling": "seed_stratified",
-  "decision_rule": "판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. p값은 그 CI를 역전시켜 정의했고(가장 작은 alpha에서 CI가 0을 배제), Holm 보정은 이 p값에 건다. descriptive_only 항목은 family에서 제외한다.",
-  "generated_at": "2026-09-08T01:03:02.306899+00:00",
+  "p_definition": "bootstrap-tail pseudo-p (CI inversion); not a formal null-distribution p-value",
+  "decision_rule": "판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. pseudo_p는 그 CI를 역전시켜 정의했고(가장 작은 alpha에서 CI가 0을 배제), Holm 보정(pseudo_p_holm)은 이 값에 건다. descriptive_only 항목은 family에서 제외한다. 쌍체 예측이 있는 비교(H1·H4)에는 그룹 단위 교환 순열 검정의 정식 p값을 perm_p로 함께 싣는다.",
+  "generated_at": "2026-09-08T11:06:15.610011+00:00",
   "tests": [
     {
       "hypothesis": "H1",
@@ -18,13 +19,14 @@
         0.34379227029988385,
         0.4018026299311408
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "pooling": "seed_stratified",
       "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "perm_p": 0.0004997501249375312,
       "ci_excludes_null": true,
-      "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "pseudo_p_holm": 0.01199400299850075,
+      "reject": true
     },
     {
       "hypothesis": "H2",
@@ -37,14 +39,15 @@
         0.07634641178972223,
         0.12216791465109866
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "descriptive_only": false,
       "pooling": "seed_stratified",
       "caveat": "참조 기준은 강한 텍스트 베이스라인이지 Bayes 최적 분류기가 아니다. CNN이 이를 넘더라도 누출의 증거가 아니다. 참조 기준의 test 예측을 함께 흔든 쌍체 비교다.",
       "ci_excludes_null": true,
+      "pseudo_p_holm": 0.01199400299850075,
       "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "perm_p": null
     },
     {
       "hypothesis": "H3",
@@ -57,13 +60,14 @@
         -0.023467205414043513,
         0.0355295084662497
       ],
+      "pseudo_p": 0.7586206896551724,
       "paired": false,
       "pooling": "seed_stratified",
       "caveat": "두 조건의 test 표본 집합이 다르다(표본 수·클래스 구성·URL 집합이 함께 변한다). 따라서 이 차이는 단일 개입의 효과가 아니며 쌍체 비교도 불가능하다.",
       "ci_excludes_null": false,
+      "pseudo_p_holm": 1.0,
       "reject": false,
-      "pseudo_p": 0.7586206896551724,
-      "pseudo_p_holm": 1.0
+      "perm_p": null
     },
     {
       "hypothesis": "H4",
@@ -76,13 +80,14 @@
         0.08243544328213176,
         0.1346825958100747
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "pooling": "seed_stratified",
       "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "perm_p": 0.0004997501249375312,
       "ci_excludes_null": true,
-      "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "pseudo_p_holm": 0.01199400299850075,
+      "reject": true
     },
     {
       "hypothesis": "H1",
@@ -95,13 +100,14 @@
         0.2646544862282395,
         0.34617493251502274
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "pooling": "seed_stratified",
       "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "perm_p": 0.0004997501249375312,
       "ci_excludes_null": true,
-      "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "pseudo_p_holm": 0.01199400299850075,
+      "reject": true
     },
     {
       "hypothesis": "H2",
@@ -114,14 +120,15 @@
         0.12411819309994813,
         0.195422913091765
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "descriptive_only": false,
       "pooling": "seed_stratified",
       "caveat": "참조 기준은 강한 텍스트 베이스라인이지 Bayes 최적 분류기가 아니다. CNN이 이를 넘더라도 누출의 증거가 아니다. 참조 기준의 test 예측을 함께 흔든 쌍체 비교다.",
       "ci_excludes_null": true,
+      "pseudo_p_holm": 0.01199400299850075,
       "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "perm_p": null
     },
     {
       "hypothesis": "H3",
@@ -134,13 +141,14 @@
         -0.05253481331106088,
         0.0599695605975129
       ],
+      "pseudo_p": 0.9315342328835582,
       "paired": false,
       "pooling": "seed_stratified",
       "caveat": "두 조건의 test 표본 집합이 다르다(표본 수·클래스 구성·URL 집합이 함께 변한다). 따라서 이 차이는 단일 개입의 효과가 아니며 쌍체 비교도 불가능하다.",
       "ci_excludes_null": false,
+      "pseudo_p_holm": 1.0,
       "reject": false,
-      "pseudo_p": 0.9315342328835582,
-      "pseudo_p_holm": 1.0
+      "perm_p": null
     },
     {
       "hypothesis": "H4",
@@ -153,13 +161,14 @@
         0.10768291055957539,
         0.17925046137492942
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "pooling": "seed_stratified",
       "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "perm_p": 0.0004997501249375312,
       "ci_excludes_null": true,
-      "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "pseudo_p_holm": 0.01199400299850075,
+      "reject": true
     },
     {
       "hypothesis": "H1",
@@ -172,13 +181,14 @@
         0.25325904130667715,
         0.3390568188351617
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "pooling": "seed_stratified",
       "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "perm_p": 0.0004997501249375312,
       "ci_excludes_null": true,
-      "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "pseudo_p_holm": 0.01199400299850075,
+      "reject": true
     },
     {
       "hypothesis": "H2",
@@ -191,14 +201,15 @@
         0.15584907002157705,
         0.22078024879121033
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "descriptive_only": false,
       "pooling": "seed_stratified",
       "caveat": "참조 기준은 강한 텍스트 베이스라인이지 Bayes 최적 분류기가 아니다. CNN이 이를 넘더라도 누출의 증거가 아니다. 참조 기준의 test 예측을 함께 흔든 쌍체 비교다.",
       "ci_excludes_null": true,
+      "pseudo_p_holm": 0.01199400299850075,
       "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "perm_p": null
     },
     {
       "hypothesis": "H3",
@@ -211,13 +222,14 @@
         -0.023669682158668295,
         0.07113396141607368
       ],
+      "pseudo_p": 0.3458270864567716,
       "paired": false,
       "pooling": "seed_stratified",
       "caveat": "두 조건의 test 표본 집합이 다르다(표본 수·클래스 구성·URL 집합이 함께 변한다). 따라서 이 차이는 단일 개입의 효과가 아니며 쌍체 비교도 불가능하다.",
       "ci_excludes_null": false,
+      "pseudo_p_holm": 1.0,
       "reject": false,
-      "pseudo_p": 0.3458270864567716,
-      "pseudo_p_holm": 1.0
+      "perm_p": null
     },
     {
       "hypothesis": "H4",
@@ -230,13 +242,14 @@
         0.11490526488643915,
         0.18083172923314414
       ],
+      "pseudo_p": 0.0009995002498750624,
       "paired": true,
       "pooling": "seed_stratified",
       "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "perm_p": 0.0004997501249375312,
       "ci_excludes_null": true,
-      "reject": true,
-      "pseudo_p": 0.0009995002498750624,
-      "pseudo_p_holm": 0.01199400299850075
+      "pseudo_p_holm": 0.01199400299850075,
+      "reject": true
     }
   ]
 }

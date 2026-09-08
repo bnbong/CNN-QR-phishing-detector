@@ -1,0 +1,462 @@
+{
+  "schema_version": 2,
+  "phase": "transfer",
+  "mode": "b",
+  "source_tag": "external_primary_2026-09-08",
+  "condition_id": "norm-exact-data_only-fixed-small_cnn",
+  "stratum": "v3",
+  "git_sha": "605278af73b81c797fd134494a5c8650347c61d4",
+  "qrphish_version": "0.1.0",
+  "created_at": "2026-09-08T12:00:36.421555+00:00",
+  "config": {
+    "seed_list": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "data": {
+      "csv_path": "/content/drive/MyDrive/qrphish/webphish.csv",
+      "category_col": "Category",
+      "url_col": "Data",
+      "positive_label": "spam"
+    },
+    "qr": {
+      "ec": "L",
+      "optimize": 0,
+      "border": 0,
+      "mask_mode": "fixed",
+      "mask_pattern": 0,
+      "pad_mode": "spec"
+    },
+    "condition": {
+      "url_mode": "norm",
+      "length_match": "exact",
+      "length_bucket": 1,
+      "features": "data_only",
+      "path_filter": false,
+      "shuffle_positions": false
+    },
+    "strata": [
+      "v2",
+      "v3",
+      "v4",
+      "v5plus"
+    ],
+    "stratum_rules": {
+      "primary_min_per_class": 1000,
+      "secondary_min_per_class": 300
+    },
+    "split": {
+      "ratios": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "max_group_frac": 0.05,
+      "group_key": "etld1",
+      "template_threshold": 0.7,
+      "template_shingle": 3,
+      "min_template_tokens": 3
+    },
+    "model": {
+      "arch": "small_cnn",
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "batch_size": 256,
+      "max_epochs": 60,
+      "patience": 8,
+      "class_weight": "balanced",
+      "amp": true
+    },
+    "eval": {
+      "n_bootstrap": 2000,
+      "primary_metric": "auroc"
+    },
+    "output_dir": "/content/drive/MyDrive/qrphish_out_v2/artifacts",
+    "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
+  },
+  "data": {
+    "n_total": 1740,
+    "n_benign": 870,
+    "n_phishing": 870,
+    "base_rate": 0.5,
+    "n_groups": 720,
+    "tier": "secondary",
+    "eval_rows": "test",
+    "split_diagnostics": {
+      "top5_test_group_frac": null
+    },
+    "n_train": 11440,
+    "bias_gate": {
+      "source": "collection",
+      "gate_passed": true,
+      "path": "reports/external/bias_diagnostics.json",
+      "block": "main",
+      "note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
+      "recomputed_transfer_stage": true
+    },
+    "gate_notes": {
+      "group_concentration_ok": "top5_test_group_frac이 없어 0으로 본다."
+    }
+  },
+  "model": {
+    "auroc_mean": 0.917932887918073,
+    "auroc_sd": 0.01742321107019395,
+    "auroc_per_seed": [
+      0.9205152596115735,
+      0.8961943214758179,
+      0.905921880377565,
+      0.9262681213136741,
+      0.9407648568117339
+    ],
+    "auroc_pooled": 0.917932887918073,
+    "auroc_pooled_ci": [
+      0.891400668035725,
+      0.9371232079068519
+    ],
+    "pooling": "seed_stratified",
+    "auprc_mean": 0.9235488182627997,
+    "f1_at_val_threshold": 0.8312883497966123,
+    "acc_at_val_threshold": 0.8304387719565742,
+    "threshold_source": "external_val",
+    "thresholds": [
+      0.15564935953299822,
+      0.07722462527089381,
+      0.6578924653581442,
+      0.7403928735484814,
+      0.3662966332323632
+    ],
+    "n_boot": 2000,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "null_permutation": {
+    "auroc_mean": 0.4908396913743627,
+    "ci": [
+      0.3788693103991739,
+      0.612690455454317
+    ],
+    "ci_upper": 0.612690455454317,
+    "n_perm": 200,
+    "n_valid": 200,
+    "unit": "etld1_group"
+  },
+  "baselines": {
+    "charngram_lr": {
+      "auroc": 0.9883458845289999,
+      "ci": [
+        0.9794273902018915,
+        0.9941754991077095
+      ],
+      "fit_on": "external_train",
+      "n": 1740
+    },
+    "bytehist_lr": {
+      "auroc": 0.8228458184700752,
+      "ci": [
+        0.7272287598670626,
+        0.879017906449576
+      ],
+      "fit_on": "external_train",
+      "n": 1740
+    },
+    "length_lr": {
+      "auroc": 0.5,
+      "ci": [
+        0.4021238811891342,
+        0.6269420283365548
+      ],
+      "fit_on": "external_train",
+      "n": 1740
+    },
+    "version_lr": {
+      "auroc": 0.5,
+      "ci": [
+        0.5,
+        0.5
+      ],
+      "fit_on": "external_train",
+      "n": 1740
+    }
+  },
+  "comparison_to_in_domain": {
+    "in_domain_auroc": 0.8136102834431069,
+    "delta": 0.10432260447496611,
+    "paired": false,
+    "delta_ci": [
+      null,
+      null
+    ],
+    "transfer_gap_to_text": 0.07041299661092681
+  },
+  "verdict": {
+    "label": "reproduced_strong",
+    "gates_passed": {
+      "length_lr_neutral": true,
+      "version_lr_neutral": true,
+      "bias_direction_ok": true,
+      "group_concentration_ok": true
+    },
+    "criteria_version": "prereg_v1"
+  },
+  "per_seed_train": [
+    {
+      "seed": 0,
+      "best_epoch": 11,
+      "preds_test": "seed0/preds_test.npz",
+      "threshold": 0.15564935953299822,
+      "test": {
+        "auroc": 0.9205152596115735,
+        "auprc": 0.9266022283109699,
+        "f1": 0.8314337132573485,
+        "acc": 0.8385057471264368,
+        "auroc_ci": [
+          0.8901187712623063,
+          0.9478994677243956
+        ],
+        "f1_ci": [
+          0.7609864708417962,
+          0.8828555074826787
+        ]
+      },
+      "val": {
+        "auroc": 0.9414591430974191
+      },
+      "group_perf_iqr": 0.0,
+      "stratum_tier": "primary",
+      "n_after_match": 15698,
+      "length_match": {
+        "bucket": 1,
+        "per_split": {
+          "train": {
+            "n": 11440,
+            "n_benign": 5720,
+            "n_phishing": 5720,
+            "histograms_identical": true
+          },
+          "val": {
+            "n": 2518,
+            "n_benign": 1259,
+            "n_phishing": 1259,
+            "histograms_identical": true
+          },
+          "test": {
+            "n": 1740,
+            "n_benign": 870,
+            "n_phishing": 870,
+            "histograms_identical": true
+          }
+        },
+        "all_identical": true
+      }
+    },
+    {
+      "seed": 1,
+      "best_epoch": 19,
+      "preds_test": "seed1/preds_test.npz",
+      "threshold": 0.07722462527089381,
+      "test": {
+        "auroc": 0.8961943214758179,
+        "auprc": 0.8989975776859193,
+        "f1": 0.8049645390070922,
+        "acc": 0.810126582278481,
+        "auroc_ci": [
+          0.8558016434843775,
+          0.9354054545423048
+        ],
+        "f1_ci": [
+          0.7282575135529659,
+          0.8667278776996161
+        ]
+      },
+      "val": {
+        "auroc": 0.9409276245188731
+      },
+      "group_perf_iqr": 0.19999999999999996,
+      "stratum_tier": "primary",
+      "n_after_match": 15740,
+      "length_match": {
+        "bucket": 1,
+        "per_split": {
+          "train": {
+            "n": 11484,
+            "n_benign": 5742,
+            "n_phishing": 5742,
+            "histograms_identical": true
+          },
+          "val": {
+            "n": 2518,
+            "n_benign": 1259,
+            "n_phishing": 1259,
+            "histograms_identical": true
+          },
+          "test": {
+            "n": 1738,
+            "n_benign": 869,
+            "n_phishing": 869,
+            "histograms_identical": true
+          }
+        },
+        "all_identical": true
+      }
+    },
+    {
+      "seed": 2,
+      "best_epoch": 19,
+      "preds_test": "seed2/preds_test.npz",
+      "threshold": 0.6578924653581442,
+      "test": {
+        "auroc": 0.905921880377565,
+        "auprc": 0.915203684566192,
+        "f1": 0.8141912206855081,
+        "acc": 0.8165083135391924,
+        "auroc_ci": [
+          0.8668938346658488,
+          0.9375712004914567
+        ],
+        "f1_ci": [
+          0.7223078183552204,
+          0.8755929039981847
+        ]
+      },
+      "val": {
+        "auroc": 0.9444867486267264
+      },
+      "group_perf_iqr": 0.008928571428571397,
+      "stratum_tier": "primary",
+      "n_after_match": 15622,
+      "length_match": {
+        "bucket": 1,
+        "per_split": {
+          "train": {
+            "n": 11420,
+            "n_benign": 5710,
+            "n_phishing": 5710,
+            "histograms_identical": true
+          },
+          "val": {
+            "n": 2518,
+            "n_benign": 1259,
+            "n_phishing": 1259,
+            "histograms_identical": true
+          },
+          "test": {
+            "n": 1684,
+            "n_benign": 842,
+            "n_phishing": 842,
+            "histograms_identical": true
+          }
+        },
+        "all_identical": true
+      }
+    },
+    {
+      "seed": 3,
+      "best_epoch": 8,
+      "preds_test": "seed3/preds_test.npz",
+      "threshold": 0.7403928735484814,
+      "test": {
+        "auroc": 0.9262681213136741,
+        "auprc": 0.931504003511727,
+        "f1": 0.8406533575317604,
+        "acc": 0.8256552819698173,
+        "auroc_ci": [
+          0.8738205410258469,
+          0.9501312504429887
+        ],
+        "f1_ci": [
+          0.716613414378537,
+          0.9010558944040316
+        ]
+      },
+      "val": {
+        "auroc": 0.9164336703560306
+      },
+      "group_perf_iqr": 0.5,
+      "stratum_tier": "primary",
+      "n_after_match": 15724,
+      "length_match": {
+        "bucket": 1,
+        "per_split": {
+          "train": {
+            "n": 11462,
+            "n_benign": 5731,
+            "n_phishing": 5731,
+            "histograms_identical": true
+          },
+          "val": {
+            "n": 1744,
+            "n_benign": 872,
+            "n_phishing": 872,
+            "histograms_identical": true
+          },
+          "test": {
+            "n": 2518,
+            "n_benign": 1259,
+            "n_phishing": 1259,
+            "histograms_identical": true
+          }
+        },
+        "all_identical": true
+      }
+    },
+    {
+      "seed": 4,
+      "best_epoch": 10,
+      "preds_test": "seed4/preds_test.npz",
+      "threshold": 0.3662966332323632,
+      "test": {
+        "auroc": 0.9407648568117339,
+        "auprc": 0.9454365972391895,
+        "f1": 0.8651989185013519,
+        "acc": 0.8613979348689436,
+        "auroc_ci": [
+          0.901924380113242,
+          0.95897868270374
+        ],
+        "f1_ci": [
+          0.7583247120491068,
+          0.9137858261128234
+        ]
+      },
+      "val": {
+        "auroc": 0.9093014437188454
+      },
+      "group_perf_iqr": 0.25,
+      "stratum_tier": "primary",
+      "n_after_match": 15690,
+      "length_match": {
+        "bucket": 1,
+        "per_split": {
+          "train": {
+            "n": 11426,
+            "n_benign": 5713,
+            "n_phishing": 5713,
+            "histograms_identical": true
+          },
+          "val": {
+            "n": 1746,
+            "n_benign": 873,
+            "n_phishing": 873,
+            "histograms_identical": true
+          },
+          "test": {
+            "n": 2518,
+            "n_benign": 1259,
+            "n_phishing": 1259,
+            "histograms_identical": true
+          }
+        },
+        "all_identical": true
+      }
+    }
+  ],
+  "runtime_sec": 243.6
+}

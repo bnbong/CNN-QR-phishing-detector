@@ -667,15 +667,25 @@ def load_transfer() -> dict[tuple[str, str, str], dict]:
     return out
 
 
-def load_motif_replication() -> dict[tuple[str, str], dict]:
-    out: dict[tuple[str, str], dict] = {}
+def load_motif_replication() -> dict[tuple[str, str, str], dict]:
+    """``reports/transfer/{tag}/motif_replication*/{stratum}/replication.json``.
+
+    ``motif_replication``(시드별 cohort)과 ``motif_replication_fixed``(고정 cohort)는
+    같은 (tag, stratum)이라도 평가 대상이 다르므로 cohort를 키에 넣어 따로 저장한다
+    (안 그러면 나중에 훑은 쪽이 먼저 것을 덮어쓴다).
+    """
+    out: dict[tuple[str, str, str], dict] = {}
     root = REPORTS / "transfer"
     if not root.exists():
         return out
     for path in sorted(root.glob("*/motif_replication*/*/replication.json")):
         tag = path.parent.parent.parent.name
+        run_dir = path.parent.parent.name
+        cohort = "fixed" if run_dir == "motif_replication_fixed" else "per_seed"
         try:
-            out[(tag, path.parent.name)] = json.loads(path.read_text(encoding="utf-8"))
+            out[(tag, cohort, path.parent.name)] = json.loads(
+                path.read_text(encoding="utf-8")
+            )
         except json.JSONDecodeError:
             continue
     return out
@@ -763,26 +773,40 @@ def transfer_table() -> str:
         )
     rep = load_motif_replication()
     if rep:
-        rows = []
-        for (tag, st), d in sorted(rep.items()):
+        COHORT_LABEL = {"fixed": "고정", "per_seed": "시드별"}
+
+        def _rep_row_values(d: dict) -> tuple:
+            sp, sm, jc = d["spearman_logodds"], d["sign_match_rate"], d["jaccard_topk"]
+            return (
+                f"{f3(sp['rho'])} [{f3(sp['ci'][0])}, {f3(sp['ci'][1])}]",
+                f"{f3(sm['value'])} [{f3(sm['ci'][0])}, {f3(sm['ci'][1])}]",
+                f"{f3(jc['value'])} (귀무 상한 {f3(jc['null_ci'][1])})",
+                str(d.get("verdict", {}).get("label", "—")),
+            )
+
+        by_tag_st: dict[tuple[str, str], dict[str, dict]] = {}
+        for (tag, cohort, st), d in rep.items():
             if "error" in d or "skipped" in d:
                 continue
-            sp, sm, jc = d["spearman_logodds"], d["sign_match_rate"], d["jaccard_topk"]
-            rows.append(
-                [
-                    tag,
-                    st,
-                    f"{f3(sp['rho'])} [{f3(sp['ci'][0])}, {f3(sp['ci'][1])}]",
-                    f"{f3(sm['value'])} [{f3(sm['ci'][0])}, {f3(sm['ci'][1])}]",
-                    f"{f3(jc['value'])} (귀무 상한 {f3(jc['null_ci'][1])})",
-                    str(d.get("verdict", {}).get("label", "—")),
-                ]
-            )
+            by_tag_st.setdefault((tag, st), {})[cohort] = d
+
+        rows = []
+        for (tag, st), by_cohort in sorted(by_tag_st.items()):
+            values = {c: _rep_row_values(d) for c, d in by_cohort.items()}
+            if len(values) == 2 and values.get("fixed") == values.get("per_seed"):
+                cohort_label = "고정(=시드별 동일)"
+                rows.append([tag, cohort_label, st, *values["fixed"]])
+            else:
+                for cohort in ("fixed", "per_seed"):
+                    if cohort in values:
+                        rows.append(
+                            [tag, COHORT_LABEL[cohort], st, *values[cohort]]
+                        )
         if rows:
             out.append("**motif 재현성 (설계 4절)**\n")
             out.append(
                 table(
-                    ["소스", "층", "Spearman ρ (512종)", "부호 일치율 (상위 20)",
+                    ["소스", "cohort", "층", "Spearman ρ (512종)", "부호 일치율 (상위 20)",
                      "Jaccard (상위 20)", "판정"],
                     rows,
                 )

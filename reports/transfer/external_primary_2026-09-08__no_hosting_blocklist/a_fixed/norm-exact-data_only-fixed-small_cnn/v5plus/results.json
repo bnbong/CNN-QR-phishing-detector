@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "phase": "transfer",
+  "mode": "a",
+  "source_tag": "external_primary_2026-09-08__no_hosting_blocklist",
+  "condition_id": "norm-exact-data_only-fixed-small_cnn",
+  "stratum": "v5plus",
+  "error": "RuntimeError('F-a v5plus: 모든 시드 실패 (5/5) — run_transfer가 이 층을 건너뛰고 다음 단계(F-b)로 진행한다')",
+  "data": {},
+  "model": {},
+  "null_permutation": {},
+  "baselines": {},
+  "comparison_to_in_domain": {},
+  "verdict": {
+    "label": "descriptive_only",
+    "gates_passed": {},
+    "criteria_version": "prereg_v1"
+  },
+  "runtime_sec": 13.1
+}

@@ -1,0 +1,8 @@
+{
+  "n_final": 96225,
+  "n_final_benign": 64641,
+  "n_final_phishing": 31584,
+  "n_groups": 51895,
+  "dedup_against_webphish": false,
+  "loader": "transfer._load_external_fallback(already_normalized)"
+}

@@ -1,0 +1,86 @@
+{
+  "K": 20,
+  "size": 3,
+  "n_motifs_used": 512,
+  "topk_motifs_webphish": [
+    381,
+    339,
+    15,
+    295,
+    393,
+    179,
+    275,
+    158,
+    301,
+    480,
+    77,
+    369,
+    78,
+    492,
+    248,
+    31,
+    316,
+    317,
+    449,
+    129
+  ],
+  "topk_motifs_external": [
+    187,
+    157,
+    251,
+    380,
+    306,
+    129,
+    179,
+    371,
+    250,
+    488,
+    458,
+    381,
+    507,
+    239,
+    169,
+    204,
+    472,
+    504,
+    325,
+    76
+  ],
+  "spearman_logodds": {
+    "rho": 0.1611250228882709,
+    "ci": [
+      0.06827687217115277,
+      0.1853411867818805
+    ],
+    "n_motifs_used": 512
+  },
+  "sign_match_rate": {
+    "value": 0.6,
+    "ci": [
+      0.45,
+      0.7012500000000003
+    ],
+    "null": 0.5
+  },
+  "jaccard_topk": {
+    "value": 0.08108108108108109,
+    "null_mean": 0.019336360652150122,
+    "null_ci": [
+      0.0,
+      0.08108108108108109
+    ]
+  },
+  "ablation": null,
+  "verdict": {
+    "label": "failed",
+    "criteria": {
+      "spearman": false,
+      "sign_match": false,
+      "jaccard": false
+    },
+    "n_passed": 0,
+    "criteria_version": "prereg_v1"
+  },
+  "n_rows": 8000,
+  "webphish_enrichment": "/content/drive/MyDrive/qrphish_out_v2/reports/motifs/norm-exact-data_only-fixed/v3/enrichment.json"
+}
