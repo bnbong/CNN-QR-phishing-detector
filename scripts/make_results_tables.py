@@ -476,6 +476,43 @@ def table_occlusion() -> str:
     return "\n".join(out)
 
 
+H_LABEL = {
+    "H1": "CNN > 라벨 셔플 바닥",
+    "H2": "디코딩 텍스트 참조 기준 > CNN",
+    "H3": "L-none > L-exact",
+    "H4": "정상 배치 > shuffle-pos",
+}
+
+
+def hypotheses_table() -> str:
+    """H1~H4 판정 표 — 방향과 기각 여부만.
+
+    추정치·CI·p값은 시드 간 점수 척도 불일치로 왜곡돼 있어 싣지 않는다
+    (시드 층화 부트스트랩으로 재집계 예정). 효과의 부호와 Holm 보정 후
+    판정 방향만 보고한다.
+    """
+    path = REPORTS / "hypotheses.json"
+    if not path.exists():
+        return ""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    tests = {(t["hypothesis"], t["stratum"]): t for t in data.get("tests", [])}
+    if not tests:
+        return ""
+    rows = []
+    for h in ("H1", "H2", "H3", "H4"):
+        cells = []
+        for s in STRATA:
+            t = tests.get((h, s))
+            if t is None:
+                cells.append("—")
+                continue
+            sign = "+" if float(t["estimate"]) > 0 else "−"
+            verdict = "기각" if t.get("reject") else "비기각"
+            cells.append(f"{sign} / {verdict}")
+        rows.append((f"{h}. {H_LABEL[h]}", cells))
+    return strata_table("가설 (방향 / Holm 보정 후 판정)", rows)
+
+
 SECTIONS = [
     ("T2 층별 표본 수와 채택 등급", table_counts),
     ("T3 주 결과", table_main),
@@ -487,6 +524,7 @@ SECTIONS = [
     ("Bag-of-QR-patches (Q1 직접 측정)", motif_table),
     ("어휘 프로브 (RQ2 · D안)", table_probes),
     ("인과 motif 절제 (RQ3 · C안)", table_occlusion),
+    ("가설 검정 판정 (H1~H4)", hypotheses_table),
 ]
 
 

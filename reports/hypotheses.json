@@ -1,0 +1,229 @@
+{
+  "alpha": 0.05,
+  "n_boot": 2000,
+  "n_tests_in_family": 12,
+  "correction": "holm",
+  "decision_rule": "판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. p값은 그 CI를 역전시켜 정의했고(가장 작은 alpha에서 CI가 0을 배제), Holm 보정은 이 p값에 건다. descriptive_only 항목은 family에서 제외한다.",
+  "generated_at": "2026-09-07T14:28:57.871074+00:00",
+  "tests": [
+    {
+      "hypothesis": "H1",
+      "stratum": "v2",
+      "statement": "길이·버전을 통제한 뒤에도 CNN AUROC가 라벨 셔플 바닥보다 높다.",
+      "cond_a": "norm-exact-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn-labelshuffle",
+      "estimate": 0.37201879307481645,
+      "ci": [
+        0.3444497892519996,
+        0.3991974196781962
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    },
+    {
+      "hypothesis": "H2",
+      "stratum": "v2",
+      "statement": "디코딩 텍스트 참조 기준이 CNN보다 높다(갭이 남는다).",
+      "cond_a": "charngram_lr (decoded-text reference)",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn",
+      "estimate": 0.09939984327049678,
+      "ci": [
+        0.07693007125972293,
+        0.12651420196618776
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "descriptive_only": false,
+      "caveat": "참조 기준은 강한 텍스트 베이스라인이지 Bayes 최적 분류기가 아니다. CNN이 이를 넘더라도 누출의 증거가 아니다. 참조 기준의 test 예측을 함께 흔든 쌍체 비교다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    },
+    {
+      "hypothesis": "H3",
+      "stratum": "v2",
+      "statement": "길이 매칭을 풀면(L-none) CNN AUROC가 L-exact보다 높다.",
+      "cond_a": "norm-none-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn",
+      "estimate": -0.13518378809896758,
+      "ci": [
+        -0.16829151414183766,
+        -0.10139891055631252
+      ],
+      "p_value": 1.0,
+      "paired": false,
+      "caveat": "두 조건의 test 표본 집합이 다르다(표본 수·클래스 구성·URL 집합이 함께 변한다). 따라서 이 차이는 단일 개입의 효과가 아니며 쌍체 비교도 불가능하다.",
+      "ci_excludes_null": true,
+      "p_holm": 1.0,
+      "reject": false
+    },
+    {
+      "hypothesis": "H4",
+      "stratum": "v2",
+      "statement": "원래 모듈 배치가 위치 셔플보다 CNN에게 유리하다.",
+      "cond_a": "norm-exact-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn-shufflepos",
+      "estimate": 0.14621931059463278,
+      "ci": [
+        0.11532663215644362,
+        0.1789922537240655
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    },
+    {
+      "hypothesis": "H1",
+      "stratum": "v3",
+      "statement": "길이·버전을 통제한 뒤에도 CNN AUROC가 라벨 셔플 바닥보다 높다.",
+      "cond_a": "norm-exact-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn-labelshuffle",
+      "estimate": 0.30239023351280314,
+      "ci": [
+        0.2118813667902716,
+        0.3868786929698227
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    },
+    {
+      "hypothesis": "H2",
+      "stratum": "v3",
+      "statement": "디코딩 텍스트 참조 기준이 CNN보다 높다(갭이 남는다).",
+      "cond_a": "charngram_lr (decoded-text reference)",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn",
+      "estimate": 0.16752070576222722,
+      "ci": [
+        0.13127122156625137,
+        0.21781793078009082
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "descriptive_only": false,
+      "caveat": "참조 기준은 강한 텍스트 베이스라인이지 Bayes 최적 분류기가 아니다. CNN이 이를 넘더라도 누출의 증거가 아니다. 참조 기준의 test 예측을 함께 흔든 쌍체 비교다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    },
+    {
+      "hypothesis": "H3",
+      "stratum": "v3",
+      "statement": "길이 매칭을 풀면(L-none) CNN AUROC가 L-exact보다 높다.",
+      "cond_a": "norm-none-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn",
+      "estimate": 0.0065084686244764045,
+      "ci": [
+        -0.05456329877822115,
+        0.07179284498839708
+      ],
+      "p_value": 0.8655672163918041,
+      "paired": false,
+      "caveat": "두 조건의 test 표본 집합이 다르다(표본 수·클래스 구성·URL 집합이 함께 변한다). 따라서 이 차이는 단일 개입의 효과가 아니며 쌍체 비교도 불가능하다.",
+      "ci_excludes_null": false,
+      "p_holm": 1.0,
+      "reject": false
+    },
+    {
+      "hypothesis": "H4",
+      "stratum": "v3",
+      "statement": "원래 모듈 배치가 위치 셔플보다 CNN에게 유리하다.",
+      "cond_a": "norm-exact-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn-shufflepos",
+      "estimate": 0.17777720164597033,
+      "ci": [
+        0.14294481182384586,
+        0.2112119963829788
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    },
+    {
+      "hypothesis": "H1",
+      "stratum": "v4",
+      "statement": "길이·버전을 통제한 뒤에도 CNN AUROC가 라벨 셔플 바닥보다 높다.",
+      "cond_a": "norm-exact-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn-labelshuffle",
+      "estimate": 0.25129379980102406,
+      "ci": [
+        0.1885039881482638,
+        0.3141679673470779
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    },
+    {
+      "hypothesis": "H2",
+      "stratum": "v4",
+      "statement": "디코딩 텍스트 참조 기준이 CNN보다 높다(갭이 남는다).",
+      "cond_a": "charngram_lr (decoded-text reference)",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn",
+      "estimate": 0.23429363043824392,
+      "ci": [
+        0.19911827645611946,
+        0.2718193709309858
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "descriptive_only": false,
+      "caveat": "참조 기준은 강한 텍스트 베이스라인이지 Bayes 최적 분류기가 아니다. CNN이 이를 넘더라도 누출의 증거가 아니다. 참조 기준의 test 예측을 함께 흔든 쌍체 비교다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    },
+    {
+      "hypothesis": "H3",
+      "stratum": "v4",
+      "statement": "길이 매칭을 풀면(L-none) CNN AUROC가 L-exact보다 높다.",
+      "cond_a": "norm-none-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn",
+      "estimate": 0.029242737738754188,
+      "ci": [
+        -0.020429558538287783,
+        0.078254419443403
+      ],
+      "p_value": 0.26286856571714146,
+      "paired": false,
+      "caveat": "두 조건의 test 표본 집합이 다르다(표본 수·클래스 구성·URL 집합이 함께 변한다). 따라서 이 차이는 단일 개입의 효과가 아니며 쌍체 비교도 불가능하다.",
+      "ci_excludes_null": false,
+      "p_holm": 0.7886056971514244,
+      "reject": false
+    },
+    {
+      "hypothesis": "H4",
+      "stratum": "v4",
+      "statement": "원래 모듈 배치가 위치 셔플보다 CNN에게 유리하다.",
+      "cond_a": "norm-exact-data_only-fixed-small_cnn",
+      "cond_b": "norm-exact-data_only-fixed-small_cnn-shufflepos",
+      "estimate": 0.1675352847576541,
+      "ci": [
+        0.11673073875032207,
+        0.21594949462391386
+      ],
+      "p_value": 0.0009995002498750624,
+      "paired": true,
+      "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다.",
+      "ci_excludes_null": true,
+      "p_holm": 0.01199400299850075,
+      "reject": true
+    }
+  ]
+}

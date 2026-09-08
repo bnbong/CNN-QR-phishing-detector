@@ -19,7 +19,7 @@
       4
     ],
     "data": {
-      "csv_path": "data/webphish.csv",
+      "csv_path": "/content/drive/MyDrive/qrphish/webphish.csv",
       "category_col": "Category",
       "url_col": "Data",
       "positive_label": "spam"
@@ -72,13 +72,13 @@
       "n_bootstrap": 2000,
       "primary_metric": "auroc"
     },
-    "output_dir": "artifacts",
-    "reports_dir": "reports"
+    "output_dir": "/content/drive/MyDrive/qrphish_out_v2/artifacts",
+    "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
   },
   "provenance": {
-    "git_sha": "8e4c609ad8ab3e2356a125ab477e4e8d44b7b5dc",
+    "git_sha": "78849487ddc238c309a12e794ce4c5f1dcdee293",
     "qrphish_version": "0.1.0",
-    "timestamp": "2026-09-07T10:34:13.416916+00:00"
+    "timestamp": "2026-09-07T14:45:18.611069+00:00"
   },
   "data": {
     "n_total": 2714,
@@ -129,11 +129,11 @@
     },
     "patch3_labelshuffle": {
       "auroc_mean": 0.530320211734437,
-      "auroc_sd_across_seeds": 0.03611455081709182,
-      "auroc_pooled": 0.5277303663408208,
+      "auroc_sd_across_seeds": 0.036114550817091806,
+      "auroc_pooled": 0.5277577483471917,
       "auroc_pooled_ci": [
-        0.4985018355109183,
-        0.5555925826301475
+        0.4985279014823087,
+        0.5556374839542051
       ],
       "n_pooled": 1986,
       "f1_mean": 0.6655767379422315,
@@ -214,13 +214,13 @@
           "dim": 512
         },
         "patch3_labelshuffle": {
-          "auroc": 0.489825,
-          "auprc": 0.5147098379533784,
+          "auroc": 0.48982500000000007,
+          "auprc": 0.5150328981118113,
           "f1": 0.6666666666666666,
           "acc": 0.5,
           "auroc_ci": [
-            0.4332565111349845,
-            0.5568647236260322
+            0.43342995651007876,
+            0.5567470120238341
           ],
           "C": 10.0,
           "dim": 512
@@ -584,5 +584,5 @@
       }
     }
   ],
-  "runtime_sec": 78.3
+  "runtime_sec": 161.9
 }

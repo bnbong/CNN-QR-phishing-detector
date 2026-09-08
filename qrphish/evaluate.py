@@ -17,10 +17,15 @@ __all__ = [
     "f1_at",
     "acc_at",
     "cluster_bootstrap",
+    "cluster_bootstrap_by_seed",
+    "precompute_cluster_resamples",
+    "bootstrap_with_resamples",
     "group_bootstrap",
     "percentile_ci",
     "paired_cluster_bootstrap",
+    "paired_cluster_bootstrap_by_seed",
     "unpaired_delta_bootstrap",
+    "unpaired_delta_bootstrap_by_seed",
     "bootstrap_p_value",
     "holm",
     "pick_threshold",
@@ -178,6 +183,97 @@ def cluster_bootstrap(
     return {"point": point, "lo": lo, "hi": hi, "n_valid": n_valid, "samples": vals}
 
 
+def precompute_cluster_resamples(
+    groups: np.ndarray, n_boot: int = 200, seed: int = 0
+) -> list[np.ndarray]:
+    """그룹 단위 복원추출 인덱스를 **한 번만** 만들어 재사용하도록 돌려준다.
+
+    :func:`cluster_bootstrap`은 호출될 때마다 같은 규약으로 리샘플 인덱스를 다시
+    만든다. 같은 test 행·같은 그룹 배열 위에서 지표만 바꿔 수십·수백 번 부트스트랩할
+    때(프로브 스위트: 목표 x {실제, 셔플, 무작위 초기화}) 이 인덱스 생성이 비용의
+    대부분을 차지한다. 인덱스를 공유해도 각 부트스트랩 표본은 여전히 그룹 단위
+    복원추출이고, 조건 간에 **같은 리샘플**을 쓰므로 오히려 비교가 쌍체가 된다.
+
+    리샘플 규약은 :func:`cluster_bootstrap`과 동일하다
+    (``rng.integers(0, n_g, size=n_g)`` 후 그룹 슬라이스 연결).
+    """
+    per_group = _group_slices(groups)
+    n_g = len(per_group)
+    rng = np.random.default_rng(seed)
+    out: list[np.ndarray] = []
+    empty = np.array([], dtype=np.int64)
+    for _ in range(int(n_boot)):
+        if n_g == 0:
+            out.append(empty)
+            continue
+        pick = rng.integers(0, n_g, size=n_g)
+        out.append(np.concatenate([per_group[g] for g in pick]))
+    return out
+
+
+def _auroc_resampler(y: np.ndarray, p: np.ndarray) -> Callable[[np.ndarray], float]:
+    """리샘플 인덱스 → AUROC. 전체 test에 대해 값 순위를 **한 번만** 계산해 재사용한다.
+
+    ``roc_auc_score``를 리샘플마다 부르면 정렬·검증 오버헤드가 리샘플 수만큼 붙는다.
+    대신 test 예측값을 한 번 유일값으로 묶어(``inv``) 리샘플마다 ``bincount``로
+    값별 개수/양성 개수를 세고, 동점 평균 순위 공식으로 AUROC를 직접 만든다.
+    동점 처리까지 ``roc_auc_score``와 같은 값을 낸다(테스트로 고정).
+    """
+    y = np.asarray(y).astype(np.float64).reshape(-1)
+    p = np.asarray(p, dtype=np.float64).reshape(-1)
+    _, inv = np.unique(p, return_inverse=True)
+    inv = inv.astype(np.int64)
+    k = int(inv.max()) + 1 if inv.size else 0
+
+    def fn(idx: np.ndarray) -> float:
+        if idx.size == 0 or k == 0:
+            return float("nan")
+        codes = inv[idx]
+        cnt = np.bincount(codes, minlength=k).astype(np.float64)
+        pos = np.bincount(codes, weights=y[idx], minlength=k).astype(np.float64)
+        n_pos = float(pos.sum())
+        n_neg = float(cnt.sum() - n_pos)
+        if n_pos <= 0 or n_neg <= 0:
+            return float("nan")
+        below = np.concatenate(([0.0], np.cumsum(cnt)[:-1]))
+        rank_sum = float(np.sum(pos * (below + (cnt + 1.0) / 2.0)))
+        return float((rank_sum - n_pos * (n_pos + 1.0) / 2.0) / (n_pos * n_neg))
+
+    return fn
+
+
+def bootstrap_with_resamples(
+    y: np.ndarray,
+    p: np.ndarray,
+    resamples,
+    metric_fn: Callable[[np.ndarray, np.ndarray], float],
+    alpha: float = 0.05,
+) -> dict:
+    """미리 만들어 둔 리샘플 인덱스로 백분위 CI를 만든다.
+
+    ``resamples``는 :func:`precompute_cluster_resamples`의 반환값(인덱스 배열의 목록)
+    이거나 ``(flat, offsets)`` 형태로 이어 붙인 쌍이다(프로세스 간 전달 비용을 줄이려고
+    프로브가 쓰는 형태). 결과 스키마는 :func:`cluster_bootstrap`과 같다.
+    """
+    y = np.asarray(y)
+    p = np.asarray(p, dtype=np.float64)
+    if isinstance(resamples, tuple) and len(resamples) == 2:
+        flat, offsets = resamples
+        resamples = [flat[offsets[i] : offsets[i + 1]] for i in range(len(offsets) - 1)]
+    point = float(metric_fn(y, p))
+    fast = _auroc_resampler(y, p) if metric_fn is auroc else None
+    vals = np.empty(len(resamples), dtype=np.float64)
+    for b, idx in enumerate(resamples):
+        if idx.size == 0:
+            vals[b] = float("nan")
+        elif fast is not None:
+            vals[b] = fast(idx)
+        else:
+            vals[b] = metric_fn(y[idx], p[idx])
+    lo, hi, n_valid = percentile_ci(vals, alpha)
+    return {"point": point, "lo": lo, "hi": hi, "n_valid": n_valid, "samples": vals}
+
+
 def group_bootstrap(
     groups: np.ndarray,
     stat_fn: Callable[[np.ndarray], float],
@@ -296,6 +392,223 @@ def unpaired_delta_bootstrap(
         "paired": False,
         "point_a": ra["point"],
         "point_b": rb["point"],
+    }
+
+
+
+# ------------------------------------------------------- 시드 층화 클러스터 부트스트랩
+# 시드마다 **다른 모델**이 학습되므로 점수의 척도(로짓 오프셋·스케일)가 시드마다 다르다.
+# 5시드의 test 예측을 (seed, row)로 이어 붙여 AUROC를 하나 계산하면 시드 간 순위가
+# 섞이면서 값이 체계적으로 낮아진다(시드 평균 AUROC 0.877 vs 풀링 0.73 같은 괴리).
+# 그래서 여기서는 **리샘플 단위는 그룹(eTLD+1), 지표는 시드별로 계산한 뒤 시드 평균**으로
+# 정의한다. 같은 그룹이 여러 시드의 test에 걸쳐 있으면 함께 뽑힌다(그룹 id로 리샘플한 뒤
+# 시드별로 분리). 점추정도 같은 정의(시드별 지표의 평균)라 표의 ``auroc_mean``과 일치한다.
+
+_EMPTY_IDX = np.array([], dtype=np.int64)
+
+
+def _mean_over_seeds(vals) -> float:
+    """시드별 지표의 평균. 한 클래스만 남은 시드(NaN)는 빼고 평균낸다."""
+    a = np.asarray(list(vals), dtype=np.float64)
+    a = a[~np.isnan(a)]
+    return float(a.mean()) if a.size else float("nan")
+
+
+def _seed_blocks(groups: np.ndarray, seeds: np.ndarray) -> tuple[int, list[dict]]:
+    """(그룹 수, 시드별 블록). 블록은 그룹 코드 → 그 시드 안의 지역 인덱스를 들고 있다.
+
+    그룹 코드는 **전 시드 공통**이다(그래야 한 번의 리샘플이 모든 시드에 같은 그룹
+    집합을 적용한다). 시드에 없는 그룹은 ``code_map``에서 -1이라 자동으로 빠진다.
+    """
+    groups = np.asarray(groups)
+    seeds = np.asarray(seeds)
+    if groups.size != seeds.size:
+        raise ValueError("groups와 seeds 길이가 다르다")
+    _, gcode = np.unique(groups, return_inverse=True)
+    n_codes = int(gcode.max()) + 1 if gcode.size else 0
+    blocks: list[dict] = []
+    for s in np.unique(seeds):
+        rows = np.nonzero(seeds == s)[0]
+        codes = gcode[rows]
+        order = np.argsort(codes, kind="stable")
+        csorted = codes[order]
+        present = np.unique(csorted)
+        starts = np.searchsorted(csorted, present, side="left")
+        ends = np.searchsorted(csorted, present, side="right")
+        code_map = np.full(n_codes, -1, dtype=np.int64)
+        code_map[present] = np.arange(present.size)
+        blocks.append(
+            {
+                "seed": s,
+                "rows": rows,
+                "slices": [order[a:b] for a, b in zip(starts, ends, strict=True)],
+                "code_map": code_map,
+            }
+        )
+    return n_codes, blocks
+
+
+def _block_indices(block: dict, pick: np.ndarray) -> np.ndarray:
+    """리샘플된 그룹 코드 → 그 시드 안의 지역 행 인덱스."""
+    sel = block["code_map"][pick]
+    sel = sel[sel >= 0]
+    if sel.size == 0:
+        return _EMPTY_IDX
+    slices = block["slices"]
+    return np.concatenate([slices[j] for j in sel])
+
+
+def _block_metric_fns(y, p, blocks, metric_fn) -> list:
+    """시드별 (지역 인덱스 → 지표) 콜러블. AUROC는 순위 재사용 고속 경로를 탄다."""
+    fns = []
+    for blk in blocks:
+        rows = blk["rows"]
+        ys, ps = y[rows], p[rows]
+        if metric_fn is auroc:
+            fns.append(_auroc_resampler(ys, ps))
+        else:
+
+            def fn(idx, ys=ys, ps=ps):
+                return metric_fn(ys[idx], ps[idx]) if idx.size else float("nan")
+
+            fns.append(fn)
+    return fns
+
+
+def cluster_bootstrap_by_seed(
+    y: np.ndarray,
+    p: np.ndarray,
+    groups: np.ndarray,
+    seeds: np.ndarray,
+    metric_fn: Callable[[np.ndarray, np.ndarray], float] = auroc,
+    n_boot: int = 2000,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> dict:
+    """시드 층화 그룹 클러스터 부트스트랩.
+
+    리샘플마다 그룹(eTLD+1)을 복원추출하되, 지표는 **시드별로 계산한 뒤 평균**낸다.
+    점추정도 시드별 지표의 평균이라 ``auroc_mean``과 같은 정의다.
+
+    반환: ``{"point", "lo", "hi", "n_valid", "samples", "per_seed", "seeds", "pooling"}``.
+    동일 ``seed``에서 결정적이다.
+    """
+    y = np.asarray(y)
+    p = np.asarray(p, dtype=np.float64)
+    n_codes, blocks = _seed_blocks(groups, seeds)
+    fns = _block_metric_fns(y, p, blocks, metric_fn)
+    per_seed = [float(metric_fn(y[b["rows"]], p[b["rows"]])) for b in blocks]
+    point = _mean_over_seeds(per_seed)
+
+    rng = np.random.default_rng(seed)
+    vals = np.empty(int(n_boot), dtype=np.float64)
+    for b in range(int(n_boot)):
+        if n_codes == 0:
+            vals[b] = float("nan")
+            continue
+        pick = rng.integers(0, n_codes, size=n_codes)
+        vals[b] = _mean_over_seeds(fn(_block_indices(blk, pick)) for blk, fn in zip(blocks, fns, strict=True))
+    lo, hi, n_valid = percentile_ci(vals, alpha)
+    return {
+        "point": point,
+        "lo": lo,
+        "hi": hi,
+        "n_valid": n_valid,
+        "samples": vals,
+        "per_seed": per_seed,
+        "seeds": [int(b["seed"]) for b in blocks],
+        "pooling": "seed_stratified",
+    }
+
+
+def paired_cluster_bootstrap_by_seed(
+    y: np.ndarray,
+    p_a: np.ndarray,
+    p_b: np.ndarray,
+    groups: np.ndarray,
+    seeds: np.ndarray,
+    metric_fn: Callable[[np.ndarray, np.ndarray], float] = auroc,
+    n_boot: int = 2000,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> dict:
+    """같은 행을 공유하는 두 예측의 Δmetric(a − b), 시드 층화.
+
+    시드별로 Δ를 낸 뒤 시드 평균을 취한다. 두 예측이 동일하면 Δ는 정확히 0이다.
+    """
+    y = np.asarray(y)
+    p_a = np.asarray(p_a, dtype=np.float64)
+    p_b = np.asarray(p_b, dtype=np.float64)
+    if not (y.size == p_a.size == p_b.size == np.asarray(groups).size == np.asarray(seeds).size):
+        raise ValueError("paired_cluster_bootstrap_by_seed: y/p_a/p_b/groups/seeds 길이가 다르다")
+    n_codes, blocks = _seed_blocks(groups, seeds)
+    fns_a = _block_metric_fns(y, p_a, blocks, metric_fn)
+    fns_b = _block_metric_fns(y, p_b, blocks, metric_fn)
+    per_seed_a = [float(metric_fn(y[b["rows"]], p_a[b["rows"]])) for b in blocks]
+    per_seed_b = [float(metric_fn(y[b["rows"]], p_b[b["rows"]])) for b in blocks]
+    per_seed = [a - b for a, b in zip(per_seed_a, per_seed_b, strict=True)]
+    point = _mean_over_seeds(per_seed)
+
+    rng = np.random.default_rng(seed)
+    vals = np.empty(int(n_boot), dtype=np.float64)
+    for b in range(int(n_boot)):
+        if n_codes == 0:
+            vals[b] = float("nan")
+            continue
+        pick = rng.integers(0, n_codes, size=n_codes)
+        deltas = []
+        for blk, fa, fb in zip(blocks, fns_a, fns_b, strict=True):
+            idx = _block_indices(blk, pick)
+            deltas.append(fa(idx) - fb(idx))
+        vals[b] = _mean_over_seeds(deltas)
+    lo, hi, n_valid = percentile_ci(vals, alpha)
+    return {
+        "point": point,
+        "lo": lo,
+        "hi": hi,
+        "n_valid": n_valid,
+        "samples": vals,
+        "paired": True,
+        "per_seed": per_seed,
+        "point_a": _mean_over_seeds(per_seed_a),
+        "point_b": _mean_over_seeds(per_seed_b),
+        "pooling": "seed_stratified",
+    }
+
+
+def unpaired_delta_bootstrap_by_seed(
+    y_a: np.ndarray,
+    p_a: np.ndarray,
+    groups_a: np.ndarray,
+    seeds_a: np.ndarray,
+    y_b: np.ndarray,
+    p_b: np.ndarray,
+    groups_b: np.ndarray,
+    seeds_b: np.ndarray,
+    metric_fn: Callable[[np.ndarray, np.ndarray], float] = auroc,
+    n_boot: int = 2000,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> dict:
+    """표본 집합이 다른 두 조건의 Δmetric(a − b), 시드 층화. 두 조건을 독립 리샘플한다."""
+    ra = cluster_bootstrap_by_seed(
+        y_a, p_a, groups_a, seeds_a, metric_fn, n_boot=n_boot, seed=seed, alpha=alpha
+    )
+    rb = cluster_bootstrap_by_seed(
+        y_b, p_b, groups_b, seeds_b, metric_fn, n_boot=n_boot, seed=seed + 10_000, alpha=alpha
+    )
+    vals = ra["samples"] - rb["samples"]
+    lo, hi, n_valid = percentile_ci(vals, alpha)
+    return {
+        "point": ra["point"] - rb["point"],
+        "lo": lo,
+        "hi": hi,
+        "n_valid": n_valid,
+        "samples": vals,
+        "paired": False,
+        "point_a": ra["point"],
+        "point_b": rb["point"],
+        "pooling": "seed_stratified",
     }
 
 

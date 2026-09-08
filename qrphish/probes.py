@@ -20,7 +20,12 @@ import numpy as np
 import torch
 
 from qrphish.evaluate import auroc as auroc_fn
-from qrphish.evaluate import cluster_bootstrap, group_bootstrap
+from qrphish.evaluate import (
+    bootstrap_with_resamples,
+    cluster_bootstrap,
+    group_bootstrap,
+    precompute_cluster_resamples,
+)
 
 __all__ = [
     "KEYWORDS",
@@ -33,6 +38,7 @@ __all__ = [
     "fit_binary_probe",
     "fit_continuous_probe",
     "run_probe_suite",
+    "PROBE_N_BOOT",
     # group_bootstrap은 evaluate로 옮겼다. 기존 import 경로 호환을 위해 재수출한다.
     "group_bootstrap",
     "metric_name",
@@ -43,6 +49,11 @@ KEYWORDS = (
     "login", "verify", "account", "secure", "update", "signin", "bank",
     "paypal", "confirm", "www", ".com", ".php", ".html", ".net", ".org", "http",
 )
+
+# 부트스트랩 반복 수 기본값. 500 -> 200으로 낮췄다. 목표당 3회(실제/셔플/무작위 초기화)를
+# 120개 목표 x 5시드 x 3층 돌리므로 반복 수가 그대로 벽시계 시간이 된다. 95% 백분위 CI의
+# 꼬리 분위수는 200 리샘플에서도 판정(하한 vs 상한 비교)을 뒤집을 만큼 흔들리지 않는다.
+PROBE_N_BOOT = 200
 
 _SPECIAL_RE = re.compile(r"[^A-Za-z0-9]")
 _IP_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
@@ -211,33 +222,56 @@ def r2_score_fn(y: np.ndarray, p: np.ndarray) -> float:
 
 
 # --------------------------------------------------------------------------- 프로브
+def standardize(z_tr: np.ndarray, *others: np.ndarray) -> tuple[np.ndarray, ...]:
+    """``z_tr``에 맞춘 StandardScaler로 train과 나머지 배열을 한 번에 표준화한다.
+
+    임베딩은 시드·층마다 하나뿐이고 목표만 바뀌므로, 목표마다 스케일러를 다시 적합하는
+    것은 그대로 낭비다(120개 목표 x 3변형 = 360회). 여기서 한 번 적합해 재사용한다.
+    """
+    from sklearn.preprocessing import StandardScaler
+
+    sc = StandardScaler().fit(np.asarray(z_tr, dtype=np.float64))
+    return tuple(
+        np.asarray(sc.transform(np.asarray(a, dtype=np.float64)), dtype=np.float64)
+        for a in (z_tr, *others)
+    )
+
+
 def fit_binary_probe(
-    z_tr: np.ndarray, t_tr: np.ndarray, z_te: np.ndarray, seed: int = 0
+    z_tr: np.ndarray, t_tr: np.ndarray, z_te: np.ndarray, seed: int = 0, scale: bool = True
 ) -> np.ndarray:
-    """표준화 + L2 로지스틱 회귀 → test 결정값. 목표가 단일 클래스면 상수를 돌려준다."""
+    """(표준화 +) L2 로지스틱 회귀 → test 결정값. 목표가 단일 클래스면 상수를 돌려준다.
+
+    ``scale=False``는 호출부가 :func:`standardize`로 이미 표준화한 임베딩을 넘길 때 쓴다.
+    solver는 lbfgs, ``tol=1e-3``, ``max_iter=300``이다. 128차원 · 수만 행의 볼록 문제라
+    lbfgs는 수십 회 안에 수렴하며, 더 조인 tol은 결정값의 순위(AUROC)를 바꾸지 않는다.
+    """
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
     if len(np.unique(t_tr)) < 2:
         return np.zeros(z_te.shape[0], dtype=np.float64)
-    clf = make_pipeline(
-        StandardScaler(),
-        LogisticRegression(max_iter=2000, C=1.0, class_weight="balanced", random_state=seed),
+    lr = LogisticRegression(
+        solver="lbfgs", tol=1e-3, max_iter=300, C=1.0,
+        class_weight="balanced", random_state=seed,
     )
+    clf = make_pipeline(StandardScaler(), lr) if scale else lr
     clf.fit(z_tr, np.asarray(t_tr).astype(int))
     return np.asarray(clf.decision_function(z_te), dtype=np.float64)
 
 
 def fit_continuous_probe(
-    z_tr: np.ndarray, t_tr: np.ndarray, z_te: np.ndarray, alpha: float = 1.0
+    z_tr: np.ndarray, t_tr: np.ndarray, z_te: np.ndarray, alpha: float = 1.0,
+    scale: bool = True,
 ) -> np.ndarray:
-    """표준화 + 릿지 회귀 → test 예측값."""
+    """(표준화 +) 릿지 회귀 → test 예측값."""
     from sklearn.linear_model import Ridge
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
-    reg = make_pipeline(StandardScaler(), Ridge(alpha=alpha))
+    ridge = Ridge(alpha=alpha)
+    reg = make_pipeline(StandardScaler(), ridge) if scale else ridge
     reg.fit(z_tr, np.asarray(t_tr, dtype=np.float64))
     return np.asarray(reg.predict(z_te), dtype=np.float64)
 
@@ -252,21 +286,95 @@ def _score_one(
     seed: int,
     n_boot: int,
     with_ci: bool,
+    resamples=None,
 ) -> dict:
+    """목표 하나·변형 하나의 점추정과 CI.
+
+    ``resamples``가 주어지면 그 리샘플 인덱스를 그대로 쓴다(그룹 리샘플을 목표마다 다시
+    뽑지 않는다). 없으면 예전처럼 ``cluster_bootstrap``으로 즉석에서 뽑는다.
+    임베딩은 호출부에서 이미 표준화됐다고 보고 ``scale=False``로 적합한다.
+    """
     if kind == "binary":
-        pred = fit_binary_probe(z_tr, t_tr, z_te, seed=seed)
+        pred = fit_binary_probe(z_tr, t_tr, z_te, seed=seed, scale=False)
         metric_fn = auroc_fn
     else:
-        pred = fit_continuous_probe(z_tr, t_tr, z_te)
+        pred = fit_continuous_probe(z_tr, t_tr, z_te, scale=False)
         metric_fn = r2_score_fn
     point = float(metric_fn(np.asarray(t_te), pred))
     out = {"score": point}
     if with_ci:
-        cb = cluster_bootstrap(
-            np.asarray(t_te), pred, groups_te, metric_fn, n_boot=n_boot, seed=seed
-        )
+        if resamples is None:
+            cb = cluster_bootstrap(
+                np.asarray(t_te), pred, groups_te, metric_fn, n_boot=n_boot, seed=seed
+            )
+        else:
+            cb = bootstrap_with_resamples(np.asarray(t_te), pred, resamples, metric_fn)
         out["lo"], out["hi"] = float(cb["lo"]), float(cb["hi"])
     return out
+
+
+def _pack_resamples(resamples: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    """리샘플 인덱스 목록 → ``(flat, offsets)``.
+
+    joblib은 큰 **배열** 인자만 메모리맵으로 워커에 넘긴다. 배열 200개짜리 리스트는
+    태스크마다 통째로 피클되므로, 하나로 이어 붙여 메모리맵 대상이 되게 한다.
+    """
+    if not resamples:
+        return np.zeros(0, dtype=np.int64), np.zeros(1, dtype=np.int64)
+    flat = np.concatenate(resamples).astype(np.int64, copy=False)
+    offsets = np.concatenate(([0], np.cumsum([r.size for r in resamples]))).astype(np.int64)
+    return flat, offsets
+
+
+def _probe_one_target(
+    t: ProbeTarget,
+    idx: int,
+    z_tr: np.ndarray,
+    z_te: np.ndarray,
+    z_tr_rand: np.ndarray,
+    z_te_rand: np.ndarray,
+    v_tr: np.ndarray,
+    v_te: np.ndarray,
+    g_tr: np.ndarray,
+    g_te: np.ndarray,
+    seed: int,
+    n_boot: int,
+    flat: np.ndarray,
+    offsets: np.ndarray,
+) -> tuple[str, dict]:
+    """목표 하나의 전체 행(실제/셔플/무작위 초기화 + 유의 판정). 병렬 태스크 단위.
+
+    큰 배열은 모두 **인자로** 받는다. joblib이 1MB 넘는 ndarray 인자를 메모리맵으로
+    바꿔 워커와 공유하므로, 클로저로 잡아 두면 태스크마다 통째로 피클된다.
+    """
+    packed = (flat, offsets)
+    row: dict[str, Any] = {"kind": t.kind, "family": t.family}
+    real = _score_one(t.kind, z_tr, v_tr, z_te, v_te, g_te, seed, n_boot, True, packed)
+    # 셔플 기준선: train/test 각각 그룹 단위로 목표를 갈아끼운다.
+    # 시드는 목표 인덱스에서 파생한다 — 병렬 실행 순서와 무관하게 결정적이고,
+    # 모든 목표가 같은 도너 배치를 공유해 기준선이 함께 치우치는 일도 없다.
+    s_tr = group_shuffle(v_tr, g_tr, seed=10_000 + seed + 7919 * idx)
+    s_te = group_shuffle(v_te, g_te, seed=20_000 + seed + 7919 * idx)
+    shuf = _score_one(t.kind, z_tr, s_tr, z_te, s_te, g_te, seed, n_boot, True, packed)
+    rnd = _score_one(t.kind, z_tr_rand, v_tr, z_te_rand, v_te, g_te, seed, n_boot, True, packed)
+
+    # 학습된 임베딩이 두 기준선을 **둘 다** CI 수준에서 넘어야 유의로 센다.
+    # 무작위 초기화 점추정만 넘는 것으로는 구조/입력만으로 얻어지는 몫을 배제하지 못한다.
+    bar = max(
+        v for v in (shuf["hi"], rnd["hi"]) if np.isfinite(v)
+    ) if np.isfinite(shuf["hi"]) or np.isfinite(rnd["hi"]) else float("nan")
+    sig = bool(np.isfinite(real["lo"]) and np.isfinite(bar) and real["lo"] > bar)
+    return t.name, {
+        **row,
+        "score": real["score"],
+        "ci": [real["lo"], real["hi"]],
+        "shuffle": shuf["score"],
+        "shuffle_ci": [shuf["lo"], shuf["hi"]],
+        "random_init": rnd["score"],
+        "random_init_ci": [rnd["lo"], rnd["hi"]],
+        "above_random_init": bool(np.isfinite(rnd["hi"]) and real["lo"] > rnd["hi"]),
+        "significant": sig,
+    }
 
 
 def run_probe_suite(
@@ -279,8 +387,10 @@ def run_probe_suite(
     te_rows: np.ndarray,
     groups: np.ndarray,
     seed: int = 0,
-    n_boot: int = 500,
+    n_boot: int = PROBE_N_BOOT,
     min_positive: int = 20,
+    n_jobs: int | None = None,
+    progress: bool = False,
 ) -> dict[str, dict]:
     """한 시드의 전체 프로브 결과.
 
@@ -289,17 +399,30 @@ def run_probe_suite(
         targets: 전체 행(층 전체) 기준 목표값.
         tr_rows/te_rows: 층 전체 인덱스 기준의 train/test 행.
         groups: 층 전체 그룹 배열(eTLD+1).
+        n_jobs: joblib 프로세스 수. ``None``이면 목표가 8개 이상일 때만 ``-1``.
+        progress: 목표 진행률을 10% 단위로 출력한다.
 
     Returns:
         ``{target_name: {kind, family, score, ci, shuffle, shuffle_ci, random_init,
         random_init_ci, above_random_init, significant, skipped?}}``
 
     유의 판정은 ``CI 하한 > max(셔플 CI 상한, 무작위 초기화 CI 상한)``이다.
+
+    비용 구조상 두 가지를 시드·층당 한 번만 한다: (1) 그룹 부트스트랩 리샘플 인덱스,
+    (2) 임베딩 표준화. 목표마다 바뀌는 것은 목표값뿐이므로 결과의 의미는 그대로다.
     """
     g_te = np.asarray(groups)[te_rows]
     g_tr = np.asarray(groups)[tr_rows]
+
+    # (1) 리샘플 인덱스를 한 번만 만든다. 모든 목표·변형이 같은 리샘플을 공유한다.
+    packed = _pack_resamples(precompute_cluster_resamples(g_te, n_boot=n_boot, seed=seed))
+    # (2) 표준화도 시드당 한 번. train에 적합한 스케일러를 test에 적용한다(원래 파이프라인과 동일).
+    z_tr_s, z_te_s = standardize(z_tr, z_te)
+    zr_tr_s, zr_te_s = standardize(z_tr_rand, z_te_rand)
+
     res: dict[str, dict] = {}
-    for t in targets:
+    jobs: list[tuple] = []
+    for idx, t in enumerate(targets):
         v_tr, v_te = t.values[tr_rows], t.values[te_rows]
         row: dict[str, Any] = {"kind": t.kind, "family": t.family}
         if t.kind == "binary":
@@ -311,31 +434,51 @@ def run_probe_suite(
         elif float(np.var(v_te)) <= 0:
             res[t.name] = {**row, "skipped": "test에서 목표 분산 0"}
             continue
+        jobs.append((t, idx, v_tr, v_te))
 
-        real = _score_one(t.kind, z_tr, v_tr, z_te, v_te, g_te, seed, n_boot, True)
-        # 셔플 기준선: train/test 각각 그룹 단위로 목표를 갈아끼운다.
-        s_tr = group_shuffle(v_tr, g_tr, seed=10_000 + seed)
-        s_te = group_shuffle(v_te, g_te, seed=20_000 + seed)
-        shuf = _score_one(t.kind, z_tr, s_tr, z_te, s_te, g_te, seed, n_boot, True)
-        rnd = _score_one(t.kind, z_tr_rand, v_tr, z_te_rand, v_te, g_te, seed, n_boot, True)
+    if not jobs:
+        return res
 
-        # 학습된 임베딩이 두 기준선을 **둘 다** CI 수준에서 넘어야 유의로 센다.
-        # 무작위 초기화 점추정만 넘는 것으로는 구조/입력만으로 얻어지는 몫을 배제하지 못한다.
-        bar = max(
-            v for v in (shuf["hi"], rnd["hi"]) if np.isfinite(v)
-        ) if np.isfinite(shuf["hi"]) or np.isfinite(rnd["hi"]) else float("nan")
-        sig = bool(np.isfinite(real["lo"]) and np.isfinite(bar) and real["lo"] > bar)
-        res[t.name] = {
-            **row,
-            "score": real["score"],
-            "ci": [real["lo"], real["hi"]],
-            "shuffle": shuf["score"],
-            "shuffle_ci": [shuf["lo"], shuf["hi"]],
-            "random_init": rnd["score"],
-            "random_init_ci": [rnd["lo"], rnd["hi"]],
-            "above_random_init": bool(np.isfinite(rnd["hi"]) and real["lo"] > rnd["hi"]),
-            "significant": sig,
-        }
+    if n_jobs is None:
+        # 태스크가 몇 개뿐이면 프로세스 기동 비용이 계산보다 크다.
+        n_jobs = -1 if len(jobs) >= 8 else 1
+
+    flat, offsets = packed
+
+    if n_jobs == 1:
+        step = max(len(jobs) // 10, 1)
+        for i, job in enumerate(jobs):
+            t, idx, v_tr, v_te = job
+            name, row = _probe_one_target(
+                t, idx, z_tr_s, z_te_s, zr_tr_s, zr_te_s, v_tr, v_te,
+                g_tr, g_te, seed, n_boot, flat, offsets,
+            )
+            res[name] = row
+            if progress and (i + 1) % step == 0:
+                print(f"      목표 {i + 1}/{len(jobs)} ({100 * (i + 1) // len(jobs)}%)", flush=True)
+    else:
+        from joblib import Parallel, delayed
+
+        # 10% 단위 청크로 끊어 던져 병렬 실행 중에도 진행률이 보이게 한다.
+        chunk = max(len(jobs) // 10, 1)
+        done = 0
+        with Parallel(n_jobs=n_jobs, prefer="processes") as par:
+            for s in range(0, len(jobs), chunk):
+                part = jobs[s : s + chunk]
+                tasks = (
+                    delayed(_probe_one_target)(
+                        t, idx, z_tr_s, z_te_s, zr_tr_s, zr_te_s, v_tr, v_te,
+                        g_tr, g_te, seed, n_boot, flat, offsets,
+                    )
+                    for t, idx, v_tr, v_te in part
+                )
+                for name, row in par(tasks):
+                    res[name] = row
+                done += len(part)
+                if progress:
+                    print(
+                        f"      목표 {done}/{len(jobs)} ({100 * done // len(jobs)}%)", flush=True
+                    )
     return res
 
 

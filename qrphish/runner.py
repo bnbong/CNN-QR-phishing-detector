@@ -37,14 +37,14 @@ from qrphish.evaluate import (
 )
 from qrphish.evaluate import (
     bootstrap_p_value,
-    cluster_bootstrap,
+    cluster_bootstrap_by_seed,
     holm,
     metrics_from_probs,
-    paired_cluster_bootstrap,
+    paired_cluster_bootstrap_by_seed,
     percentile_ci,
     pick_threshold,
     predict_probs,
-    unpaired_delta_bootstrap,
+    unpaired_delta_bootstrap_by_seed,
 )
 from qrphish.models import build_model
 from qrphish.train import pick_device, set_seed, train_model
@@ -59,13 +59,19 @@ __all__ = [
     "compare_conditions",
     "run_hypothesis_tests",
     "aggregate_reports",
+    "reaggregate",
     "run_motifs",
     "load_matrix",
 ]
 
 # v2: text_upper_bound* 필드 폐기(decoded_text_reference*·gap_to_decoded_text로 대체),
 #     auroc_ci_pooled → auroc_pooled/auroc_pooled_ci(시드 통합 클러스터 부트스트랩).
+# v2 이후 pooling 규약 변경: 시드 예측을 (seed,row)로 이어 붙여 AUROC 하나를 내던 방식은
+#     시드마다 점수 척도가 달라 값이 체계적으로 낮았다. 이제 auroc_pooled/auroc_pooled_ci는
+#     **시드 층화**(그룹 리샘플 후 시드별 지표를 평균)로 계산하고 POOLING_MODE로 기록한다.
 SCHEMA_VERSION = 2
+# results.json / 검정 산출물에 남기는 집계 규약 표식.
+POOLING_MODE = "seed_stratified"
 # 참조 기준(char n-gram LR)의 test 예측 파일. H2 쌍체 검정에 쓴다.
 CHARNGRAM_PREDS = "preds_test_charngram.npz"
 # P0가 훑는 (length_match, length_bucket) 격자. 스펙 1.1의 폭을 그대로 쓴다.
@@ -456,12 +462,20 @@ def _load_seed_preds(
     """``preds_test.npz``(test 예측 y/p/group/url)를 읽는다. 없으면 None.
 
     ``filename``으로 참조 기준의 예측(``preds_test_charngram.npz``)도 같은 경로에서 읽는다.
+    ``seed`` 배열이 파일에 없으면(옛 산출물) 파일 경로의 시드 번호로 채운다. 시드 층화
+    집계가 어느 행이 어느 시드에서 나왔는지 알아야 하기 때문이다.
     """
     path = _out_root(cfg) / cid / stratum / f"seed{seed}" / filename
     if not path.exists():
         return None
     with np.load(path, allow_pickle=False) as z:
-        return {k: z[k] for k in ("y", "p", "group", "url")}
+        out = {k: z[k] for k in ("y", "p", "group", "url")}
+        out["seed"] = (
+            np.asarray(z["seed"], dtype=np.int64)
+            if "seed" in z.files
+            else np.full(out["y"].size, int(seed), dtype=np.int64)
+        )
+    return out
 
 
 def _pool_preds(
@@ -469,8 +483,9 @@ def _pool_preds(
 ) -> dict[str, np.ndarray] | None:
     """5시드의 test 예측을 하나로 잇는다.
 
-    시드마다 split이 다르므로 ``(seed, row)``를 개별 표본으로 취급하고, 클러스터 키는
-    시드와 무관한 eTLD+1 그룹 id를 그대로 쓴다(같은 그룹은 어느 시드에서 나왔든 상관).
+    이어 붙이되 ``seed`` 배열을 함께 들고 다닌다. 집계는 시드 층화
+    (:func:`qrphish.evaluate.cluster_bootstrap_by_seed`)로 하므로 어느 행이 어느 시드에서
+    나왔는지가 필요하다. 리샘플 단위는 시드와 무관한 eTLD+1 그룹 id다.
     """
     loaded = [
         (int(s), _load_seed_preds(cfg, cid, stratum, int(s), filename)) for s in seeds
@@ -485,7 +500,7 @@ def _pool_preds(
         "p": np.concatenate([d["p"] for _, d in parts]),
         "group": np.concatenate([d["group"].astype(str) for _, d in parts]),
         "url": np.concatenate([d["url"].astype(str) for _, d in parts]),
-        "seed": np.concatenate([np.full(d["y"].size, int(s)) for s, d in parts]),
+        "seed": np.concatenate([np.asarray(d["seed"], dtype=np.int64) for _, d in parts]),
     }
 
 
@@ -582,6 +597,7 @@ def _run_one_seed(cfg: Any, stratum: str, seed: int, cond_dir: Path, entry: dict
         p=np.asarray(p_te, dtype=np.float64),
         group=np.asarray(groups[ite], dtype=object).astype(str),
         url=meta["url"].to_numpy()[ite].astype(str),
+        seed=np.full(len(ite), int(seed), dtype=np.int64),
     )
 
     out = {
@@ -621,6 +637,7 @@ def _run_one_seed(cfg: Any, stratum: str, seed: int, cond_dir: Path, entry: dict
                     p=np.asarray(pt, dtype=np.float64),
                     group=np.asarray(groups[ite], dtype=object).astype(str),
                     url=meta["url"].to_numpy()[ite].astype(str),
+                    seed=np.full(len(ite), int(seed), dtype=np.int64),
                 )
         except NotImplementedError as exc:
             base_out[name] = {"skipped": str(exc)}
@@ -683,6 +700,23 @@ def run_matrix(cfg: Any, phase: str, matrix_path: Path | str = "configs/matrix.y
     return results
 
 
+def _pooled_auroc(cfg, cid, stratum, seeds, n_boot: int) -> tuple[float, list[float]]:
+    """시드 층화 그룹 클러스터 부트스트랩으로 ``auroc_pooled``/``auroc_pooled_ci``를 낸다.
+
+    리샘플 단위는 eTLD+1 그룹이고, 지표는 시드별로 계산한 뒤 평균낸다. 그래서 점추정은
+    ``auroc_mean``(시드별 AUROC의 평균)과 같은 정의다. 시드 예측을 그냥 이어 붙여
+    AUROC 하나를 내던 옛 방식은 시드마다 점수 척도가 달라 값이 체계적으로 낮았다.
+    """
+    pooled = _pool_preds(cfg, cid, stratum, seeds)
+    if pooled is None:
+        return float("nan"), [float("nan"), float("nan")]
+    cb = cluster_bootstrap_by_seed(
+        pooled["y"], pooled["p"], pooled["group"], pooled["seed"],
+        auroc_fn, n_boot=n_boot, seed=0,
+    )
+    return float(cb["point"]), [float(cb["lo"]), float(cb["hi"])]
+
+
 def _assemble_results(cfg, cid, stratum, phase, entry, per_seed) -> dict:
     """스펙 8절 results.json 스키마."""
     ok = [s for s in per_seed if "error" not in s]
@@ -700,19 +734,11 @@ def _assemble_results(cfg, cid, stratum, phase, entry, per_seed) -> dict:
     text_mean = float(np.nanmean(text_ref)) if text_ref else float("nan")
     auroc_mean = float(np.nanmean(aur)) if aur.size else float("nan")
 
-    # 5시드 test 예측을 모두 모아 그룹 클러스터 부트스트랩으로 CI 하나를 만든다.
+    # 5시드 test 예측을 모아 **시드 층화** 그룹 클러스터 부트스트랩으로 CI 하나를 만든다.
     # (시드별 CI의 하한/상한을 평균내던 옛 auroc_ci_pooled는 정식 CI가 아니라 폐기했다.)
     seeds = list(_get(cfg, "seed_list", [0]))
     n_boot = int(_get(_get(cfg, "eval"), "n_bootstrap", 2000))
-    pooled = _pool_preds(cfg, cid, stratum, seeds)
-    if pooled is None:
-        auroc_pooled, pooled_ci = float("nan"), [float("nan"), float("nan")]
-    else:
-        cb = cluster_bootstrap(
-            pooled["y"], pooled["p"], pooled["group"], auroc_fn, n_boot=n_boot, seed=0
-        )
-        auroc_pooled = cb["point"]
-        pooled_ci = [cb["lo"], cb["hi"]]
+    auroc_pooled, pooled_ci = _pooled_auroc(cfg, cid, stratum, seeds, n_boot)
 
     first = ok[0] if ok else {}
     return {
@@ -736,6 +762,7 @@ def _assemble_results(cfg, cid, stratum, phase, entry, per_seed) -> dict:
             "auroc_sd_across_seeds": float(np.nanstd(aur, ddof=1)) if aur.size > 1 else 0.0,
             "auroc_pooled": auroc_pooled,
             "auroc_pooled_ci": pooled_ci,
+            "pooling": POOLING_MODE,
             "f1_mean": float(np.nanmean(f1)) if f1.size else float("nan"),
             "acc_mean": float(np.nanmean(acc)) if acc.size else float("nan"),
             "decoded_text_reference_auroc": text_mean,
@@ -1022,6 +1049,8 @@ def run_explain(
     ``cam_mass_by_kind``/``char_position_curve``/``n_samples``를 그대로 유지한 채
     키를 추가하기만 한다.
     """
+    import time
+
     if per_class is None:
         per_class = max(int(max_samples) // 2, 1)
     cond_dir = _out_root(cfg) / condition_id_str
@@ -1035,12 +1064,22 @@ def run_explain(
         avail = [s for s in _available_seeds(cfg, condition_id_str, st) if s in set(seeds_cfg)]
         if not avail:
             continue
+        # 층 단위 재개: explain.json이 이미 있으면 건너뛴다.
+        done_path = cond_dir / st / "explain.json"
+        if done_path.exists():
+            print(f"[skip] explain {st} (explain.json 존재)", flush=True)
+            out[st] = json.loads(done_path.read_text(encoding="utf-8"))
+            continue
+        t_st = time.time()
+        print(f"[explain] {st} 시작 — seeds={avail}, per_class={per_class}", flush=True)
         per_seed = []
         for s in avail:
+            t_seed = time.time()
             try:
                 per_seed.append(
                     _explain_one_seed(cfg, condition_id_str, st, s, per_class, use_ig, ig_steps)
                 )
+                print(f"  [explain] {st} seed{s} 종료 ({time.time() - t_seed:.1f}s)", flush=True)
             except Exception as exc:
                 print(f"[ERROR] explain {st} seed{s}: {exc!r}")
                 traceback.print_exc()
@@ -1107,6 +1146,7 @@ def run_explain(
         if cams:
             np.save(cond_dir / st / "mean_cam.npy", np.mean(cams, axis=0))
         out[st] = res
+        print(f"[explain] {st} 종료 ({time.time() - t_st:.1f}s)", flush=True)
 
     # scripts/make_results_tables.py가 읽는 요약본. 층별로 병합해 덮어쓴다.
     summary_path = _reports_dir(cfg) / "explain_summary.json"
@@ -1150,6 +1190,9 @@ def compare_conditions(
 ) -> dict:
     """두 조건의 ΔAUROC(a − b)를 부트스트랩으로 비교한다.
 
+    집계는 시드 층화다: 그룹을 리샘플하되 ΔAUROC는 시드별로 계산한 뒤 평균낸다
+    (시드마다 모델이 달라 점수 척도가 다르므로 시드를 섞어 순위를 매기면 안 된다).
+
     두 조건이 **같은 split을 공유**하면(같은 url_mode·length_match·seed → 같은 분할과
     같은 test 행) 시드별 test 예측을 행 단위로 맞춰 **쌍체** 클러스터 부트스트랩을 쓴다.
     공유하지 않으면(예: L-none vs L-exact) 표본 집합 자체가 다르므로 쌍체가 성립하지
@@ -1172,15 +1215,16 @@ def compare_conditions(
         and bool(np.array_equal(pa["y"], pb["y"]))
     )
     if paired:
-        r = paired_cluster_bootstrap(
-            pa["y"], pa["p"], pb["p"], pa["group"], n_boot=n_boot, seed=0, alpha=alpha
+        r = paired_cluster_bootstrap_by_seed(
+            pa["y"], pa["p"], pb["p"], pa["group"], pa["seed"],
+            n_boot=n_boot, seed=0, alpha=alpha,
         )
         caveat = "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다."
-        auroc_a = float(auroc_fn(pa["y"], pa["p"]))
-        auroc_b = float(auroc_fn(pb["y"], pb["p"]))
+        auroc_a, auroc_b = float(r["point_a"]), float(r["point_b"])
     else:
-        r = unpaired_delta_bootstrap(
-            pa["y"], pa["p"], pa["group"], pb["y"], pb["p"], pb["group"],
+        r = unpaired_delta_bootstrap_by_seed(
+            pa["y"], pa["p"], pa["group"], pa["seed"],
+            pb["y"], pb["p"], pb["group"], pb["seed"],
             n_boot=n_boot, seed=0, alpha=alpha,
         )
         caveat = (
@@ -1203,6 +1247,7 @@ def compare_conditions(
         "alternative": alternative,
         "n_boot": n_boot,
         "n_valid": int(r["n_valid"]),
+        "pooling": POOLING_MODE,
         "caveat": caveat,
     }
     if save:
@@ -1278,6 +1323,7 @@ def run_hypothesis_tests(
                             "ci": cmp["delta_ci"],
                             "p_value": cmp["p_value"],
                             "paired": cmp["paired"],
+                            "pooling": cmp["pooling"],
                             "caveat": cmp["caveat"],
                         }
                     )
@@ -1320,6 +1366,7 @@ def run_hypothesis_tests(
         "n_boot": n_boot,
         "n_tests_in_family": len(runnable),
         "correction": "holm",
+        "pooling": POOLING_MODE,
         "decision_rule": (
             "판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. "
             "p값은 그 CI를 역전시켜 정의했고(가장 작은 alpha에서 CI가 0을 배제), "
@@ -1357,8 +1404,8 @@ def _reference_gap_test(cfg, cid, stratum, n_boot, alpha, seeds) -> dict:
         and bool(np.array_equal(ref_pred["url"], pooled["url"]))
         and bool(np.array_equal(ref_pred["y"], pooled["y"]))
     ):
-        r = paired_cluster_bootstrap(
-            pooled["y"], ref_pred["p"], pooled["p"], pooled["group"],
+        r = paired_cluster_bootstrap_by_seed(
+            pooled["y"], ref_pred["p"], pooled["p"], pooled["group"], pooled["seed"],
             n_boot=n_boot, seed=0, alpha=alpha,
         )
         return {
@@ -1369,6 +1416,7 @@ def _reference_gap_test(cfg, cid, stratum, n_boot, alpha, seeds) -> dict:
             "p_value": bootstrap_p_value(r["samples"], alternative="greater"),
             "paired": True,
             "descriptive_only": False,
+            "pooling": POOLING_MODE,
             "caveat": caveat_base + " 참조 기준의 test 예측을 함께 흔든 쌍체 비교다.",
         }
 
@@ -1380,8 +1428,9 @@ def _reference_gap_test(cfg, cid, stratum, n_boot, alpha, seeds) -> dict:
     )
     if ref is None or (isinstance(ref, float) and np.isnan(ref)):
         raise KeyError(f"{cid}/{stratum}에 decoded_text_reference_auroc이 없다")
-    cb = cluster_bootstrap(
-        pooled["y"], pooled["p"], pooled["group"], auroc_fn, n_boot=n_boot, seed=0, alpha=alpha
+    cb = cluster_bootstrap_by_seed(
+        pooled["y"], pooled["p"], pooled["group"], pooled["seed"],
+        auroc_fn, n_boot=n_boot, seed=0, alpha=alpha,
     )
     samples = float(ref) - cb["samples"]
     lo, hi, _ = percentile_ci(samples, alpha)
@@ -1393,12 +1442,115 @@ def _reference_gap_test(cfg, cid, stratum, n_boot, alpha, seeds) -> dict:
         "p_value": float("nan"),
         "paired": False,
         "descriptive_only": True,
+        "pooling": POOLING_MODE,
         "caveat": (
             caveat_base
             + " 참조 기준의 test 예측이 저장되지 않아 AUROC를 상수로 두었다. "
             "참조 기준 자체의 표본 변동이 빠져 CI가 좁으므로 기술 통계(descriptive gap)로만 "
             "읽고 Holm family에서 제외했다. 재실행하면 쌍체 검정으로 승격된다."
         ),
+    }
+
+
+MOTIF_PREDS_TMPL = "seed{seed}_preds.npz"
+
+
+def _save_motif_preds(sdir: Path, seed: int, preds: dict) -> Path:
+    """motif 표현별 test 예측(y/p/group)을 한 파일에 담는다."""
+    payload: dict[str, np.ndarray] = {}
+    for key, d in preds.items():
+        payload[f"{key}__y"] = np.asarray(d["y"], dtype=np.int64)
+        payload[f"{key}__p"] = np.asarray(d["p"], dtype=np.float64)
+        payload[f"{key}__group"] = np.asarray(d["group"], dtype=object).astype(str)
+    path = sdir / MOTIF_PREDS_TMPL.format(seed=seed)
+    np.savez_compressed(path, **payload)  # type: ignore[arg-type]
+    return path
+
+
+def _load_motif_preds(sdir: Path, seed: int) -> dict[str, dict[str, np.ndarray]] | None:
+    path = sdir / MOTIF_PREDS_TMPL.format(seed=seed)
+    if not path.exists():
+        return None
+    out: dict[str, dict[str, np.ndarray]] = {}
+    with np.load(path, allow_pickle=False) as z:
+        for name in z.files:
+            key, _, field = name.rpartition("__")
+            out.setdefault(key, {})[field] = z[name]
+    return out
+
+
+def reaggregate(cfg: Any, strata: list[str] | None = None) -> dict[str, Any]:
+    """저장된 test 예측에서 ``results.json``의 시드 통합 CI만 다시 계산해 덮어쓴다.
+
+    ``run_matrix``/``run_motifs``는 ``results.json``이 있으면 그 조합을 건너뛰므로, 집계
+    규약이 바뀌어도 재실행만으로는 새 CI가 나오지 않는다. 이 함수는 **학습을 다시 하지
+    않고** ``preds_test.npz``(CNN)와 ``seed{k}_preds.npz``(motif)만 읽어 ``auroc_pooled``·
+    ``auroc_pooled_ci``·``pooling``을 시드 층화 방식으로 다시 쓴다.
+
+    ``aggregate_reports``는 ``results.json``의 aggregate 블록을 읽기만 하므로 반드시
+    **이 함수를 먼저** 부른 뒤에 호출해야 새 CI가 표에 반영된다.
+    """
+    n_boot = int(_get(_get(cfg, "eval"), "n_bootstrap", 2000))
+    want = set(strata) if strata else None
+    updated: list[str] = []
+    skipped: list[dict[str, str]] = []
+
+    for rp in sorted(_out_root(cfg).glob("*/*/results.json")):
+        cid, stratum = rp.parent.parent.name, rp.parent.name
+        if want and stratum not in want:
+            continue
+        r = json.loads(rp.read_text(encoding="utf-8"))
+        seeds = [
+            int(ps["seed"]) for ps in r.get("per_seed", []) if "error" not in ps and "seed" in ps
+        ]
+        if not seeds:
+            skipped.append({"path": str(rp), "reason": "쓸 수 있는 시드가 없다"})
+            continue
+        point, ci = _pooled_auroc(cfg, cid, stratum, seeds, n_boot)
+        if not np.isfinite(point):
+            skipped.append({"path": str(rp), "reason": "preds_test.npz가 없다"})
+            continue
+        agg = r.setdefault("aggregate", {})
+        agg["auroc_pooled"] = point
+        agg["auroc_pooled_ci"] = ci
+        agg["pooling"] = POOLING_MODE
+        rp.write_text(
+            json.dumps(r, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        updated.append(str(rp))
+        print(f"[reagg] {cid}/{stratum} auroc_pooled={point:.4f} CI=[{ci[0]:.4f}, {ci[1]:.4f}]")
+
+    motif_updated: list[str] = []
+    for rp in sorted((_reports_dir(cfg) / "motifs").glob("*/*/results.json")):
+        stratum = rp.parent.name
+        if want and stratum not in want:
+            continue
+        r = json.loads(rp.read_text(encoding="utf-8"))
+        ok = []
+        for ps in r.get("per_seed", []):
+            if "error" in ps or "representations" not in ps:
+                continue
+            preds = _load_motif_preds(rp.parent, int(ps["seed"]))
+            if preds is None:
+                continue
+            ok.append({**ps, "preds": preds})
+        if not ok:
+            skipped.append({"path": str(rp), "reason": "seed*_preds.npz가 없다"})
+            continue
+        r["representations"] = {
+            key: _motif_aggregate(ok, key, n_boot=n_boot) for key in sorted(ok[0]["representations"])
+        }
+        rp.write_text(
+            json.dumps(r, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        motif_updated.append(str(rp))
+        print(f"[reagg] motifs {stratum} 재집계 완료")
+
+    return {
+        "pooling": POOLING_MODE,
+        "updated": updated,
+        "motifs_updated": motif_updated,
+        "skipped": skipped,
     }
 
 
@@ -1423,6 +1575,7 @@ def aggregate_reports(cfg: Any) -> dict[str, Path]:
                 "auroc_pooled": agg.get("auroc_pooled"),
                 "auroc_ci_lo": (agg.get("auroc_pooled_ci") or [None, None])[0],
                 "auroc_ci_hi": (agg.get("auroc_pooled_ci") or [None, None])[1],
+                "pooling": agg.get("pooling"),
                 "f1_mean": agg.get("f1_mean"),
                 "acc_mean": agg.get("acc_mean"),
                 "decoded_text_reference_auroc": agg.get("decoded_text_reference_auroc"),
@@ -1643,27 +1796,31 @@ def _motif_one_seed(cfg: Any, stratum: str, seed: int, cache: dict) -> dict:
 
 
 def _motif_aggregate(per_seed: list[dict], key: str, n_boot: int = 1000) -> dict:
-    """시드 평균 + **5시드 test 예측 풀링** 그룹 클러스터 부트스트랩 CI.
+    """시드 평균 + **시드 층화** 그룹 클러스터 부트스트랩 CI.
 
     ``_assemble_results``의 CNN 쪽 ``auroc_pooled``/``auroc_pooled_ci``와 같은 절차다.
-    시드마다 split이 달라 ``(seed, row)``를 개별 표본으로 두고, 클러스터 키는 시드와
-    무관한 eTLD+1 그룹을 그대로 쓴다. 시드별 CI 경계를 평균하던 옛 ``auroc_ci_pooled``는
-    정식 CI가 아니라 폐기했다.
+    리샘플 단위는 시드와 무관한 eTLD+1 그룹이고, AUROC는 시드별로 계산한 뒤 평균낸다
+    (시드마다 LR 모델이 달라 점수 척도가 다르므로 시드를 섞어 순위를 매기면 안 된다).
+    시드별 CI 경계를 평균하던 옛 ``auroc_ci_pooled``는 정식 CI가 아니라 폐기했다.
     """
     ok = [s for s in per_seed if "error" not in s]
     a = np.array([s["representations"][key]["auroc"] for s in ok], dtype=float)
-    parts = [s["preds"][key] for s in ok if key in s.get("preds", {})]
+    parts = [(s, s["preds"][key]) for s in ok if key in s.get("preds", {})]
     if parts:
-        cb = cluster_bootstrap(
-            np.concatenate([d["y"] for d in parts]),
-            np.concatenate([d["p"] for d in parts]),
-            np.concatenate([d["group"] for d in parts]),
+        cb = cluster_bootstrap_by_seed(
+            np.concatenate([d["y"] for _, d in parts]),
+            np.concatenate([d["p"] for _, d in parts]),
+            np.concatenate([d["group"] for _, d in parts]),
+            np.concatenate(
+                [np.full(np.asarray(d["y"]).size, int(m["seed"]), dtype=np.int64)
+                 for m, d in parts]
+            ),
             auroc_fn,
             n_boot=n_boot,
             seed=0,
         )
         auroc_pooled, pooled_ci = cb["point"], [cb["lo"], cb["hi"]]
-        n_pooled = int(sum(d["y"].size for d in parts))
+        n_pooled = int(sum(np.asarray(d["y"]).size for _, d in parts))
     else:
         auroc_pooled, pooled_ci, n_pooled = float("nan"), [float("nan"), float("nan")], 0
     return {
@@ -1671,6 +1828,7 @@ def _motif_aggregate(per_seed: list[dict], key: str, n_boot: int = 1000) -> dict
         "auroc_sd_across_seeds": float(np.nanstd(a, ddof=1)) if a.size > 1 else 0.0,
         "auroc_pooled": auroc_pooled,
         "auroc_pooled_ci": pooled_ci,
+        "pooling": POOLING_MODE,
         "n_pooled": n_pooled,
         "f1_mean": float(np.nanmean([s["representations"][key]["f1"] for s in ok])) if ok else float("nan"),
         "acc_mean": float(np.nanmean([s["representations"][key]["acc"] for s in ok])) if ok else float("nan"),
@@ -1698,12 +1856,21 @@ def run_motifs(cfg: Any, strata: list[str] | None = None) -> dict:
     out: dict[str, Any] = {}
 
     for stratum in todo:
+        done_path = _phase_dir(cfg, "motifs", cid, stratum) / "results.json"
+        if done_path.exists():
+            print(f"[skip] motifs {stratum} (results.json 존재)", flush=True)
+            out[stratum] = json.loads(done_path.read_text(encoding="utf-8"))
+            continue
+        print(f"[motifs] {stratum} 시작 — seeds={seeds}", flush=True)
         t0 = time.time()
         cache: dict[str, Any] = {}
         per_seed = []
         for s in seeds:
             try:
+                t_seed = time.time()
                 per_seed.append(_motif_one_seed(cfg, stratum, s, cache))
+                print(f"  [motifs] {stratum} seed{s} 종료 ({time.time() - t_seed:.1f}s)",
+                      flush=True)
             except Exception as exc:
                 print(f"[ERROR] motifs {stratum} seed{s}: {exc!r}")
                 traceback.print_exc()
@@ -1713,6 +1880,10 @@ def run_motifs(cfg: Any, strata: list[str] | None = None) -> dict:
             out[stratum] = {"error": "no usable seed"}
             continue
         sdir = _phase_dir(cfg, "motifs", cid, stratum)
+        # 재집계(:func:`reaggregate`)가 학습을 다시 돌리지 않고 CI만 다시 낼 수 있도록
+        # 시드별 test 예측을 남긴다. CNN 쪽 preds_test.npz와 같은 역할이다.
+        for blk in ok:
+            _save_motif_preds(sdir, int(blk["seed"]), blk["preds"])
 
         res = {
             "schema_version": SCHEMA_VERSION,
@@ -1780,6 +1951,7 @@ def run_motifs(cfg: Any, strata: list[str] | None = None) -> dict:
             json.dumps(enr, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
         )
         out[stratum] = res
+        print(f"[motifs] {stratum} 종료 ({res['runtime_sec']}s)", flush=True)
     return out
 
 
@@ -1821,7 +1993,7 @@ def _probe_one_seed(cfg: Any, cid: str, stratum: str, seed: int, ngrams: list[st
 
     res = run_probe_suite(
         z_tr, z_te, z_tr_r, z_te_r, targets, tr_rows, te_rows, groups,
-        seed=seed, n_boot=n_boot,
+        seed=seed, n_boot=n_boot, progress=True,
     )
     return {
         "seed": seed,
@@ -1903,13 +2075,21 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
     """
     import time
 
+    from qrphish.probes import PROBE_N_BOOT
+
     cid = MAIN_CONDITION
     seeds = [int(s) for s in _get(cfg, "seed_list", [0])]
-    n_boot = min(int(_get(_get(cfg, "eval"), "n_bootstrap", 2000)), 500)
+    n_boot = min(int(_get(_get(cfg, "eval"), "n_bootstrap", 2000)), PROBE_N_BOOT)
     todo = list(strata) if strata else list(_get(cfg, "strata", ["v2", "v3", "v4"]))
 
     out: dict[str, Any] = {}
     for stratum in todo:
+        # 층 단위 재개: 이미 끝난 층은 다시 돌지 않는다(중단·재개).
+        done_path = _phase_dir(cfg, "probes", cid, stratum) / "results.json"
+        if done_path.exists():
+            print(f"[skip] probes {stratum} (results.json 존재)", flush=True)
+            out[stratum] = json.loads(done_path.read_text(encoding="utf-8"))
+            continue
         avail = [s for s in _available_seeds(cfg, cid, stratum) if s in set(seeds)]
         if not avail:
             # dropped 층(P0에서 표본 부족으로 학습을 돌리지 않은 층)은 체크포인트가 없다.
@@ -1932,14 +2112,36 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
             traceback.print_exc()
             out[stratum] = {"error": repr(exc)}
             continue
+        print(
+            f"[probes] {stratum} 시작 — seeds={avail}, 목표 {len(ngrams)}개 n-gram + 고정 목표, "
+            f"n_boot={n_boot}",
+            flush=True,
+        )
+        sdir = _phase_dir(cfg, "probes", cid, stratum)
         per_seed = []
         for s in avail:
+            # 시드 단위 재개: seed{k}.json이 있으면 그 시드는 다시 계산하지 않는다.
+            cache_path = sdir / f"seed{s}.json"
+            if cache_path.exists():
+                print(f"[skip] probes {stratum} seed{s} (seed{s}.json 존재)", flush=True)
+                per_seed.append(json.loads(cache_path.read_text(encoding="utf-8")))
+                continue
+            t_seed = time.time()
+            print(f"  [probes] {stratum} seed{s} 시작", flush=True)
             try:
-                per_seed.append(_probe_one_seed(cfg, cid, stratum, s, ngrams, n_boot))
+                block = _probe_one_seed(cfg, cid, stratum, s, ngrams, n_boot)
             except Exception as exc:
                 print(f"[ERROR] probes {stratum} seed{s}: {exc!r}")
                 traceback.print_exc()
-                per_seed.append({"seed": s, "error": repr(exc)})
+                block = {"seed": s, "error": repr(exc)}
+            if "error" not in block:
+                cache_path.write_text(
+                    json.dumps(block, ensure_ascii=False, default=str), encoding="utf-8"
+                )
+            per_seed.append(block)
+            print(
+                f"  [probes] {stratum} seed{s} 종료 ({time.time() - t_seed:.1f}s)", flush=True
+            )
         ok = [d for d in per_seed if "error" not in d]
         if not ok:
             out[stratum] = {"error": per_seed[0].get("error", "no usable seed")}
@@ -1966,6 +2168,7 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
                 "timestamp": datetime.now(UTC).isoformat(),
             },
             "data": {"n_train": ok[0]["n_train"], "n_test": ok[0]["n_test"]},
+            "n_boot": int(n_boot),
             "ngrams": list(ngrams),
             "targets": agg,
             "summary": {
@@ -1990,11 +2193,15 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
             ],
             "runtime_sec": round(time.time() - t0, 1),
         }
-        sdir = _phase_dir(cfg, "probes", cid, stratum)
         (sdir / "results.json").write_text(
             json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
         )
         out[stratum] = res
+        print(
+            f"[probes] {stratum} 종료 ({res['runtime_sec']}s) — "
+            f"유의 {len(sig)}/{len(lex)}",
+            flush=True,
+        )
     return out
 
 
@@ -2053,6 +2260,11 @@ def run_occlusion(
 
     out: dict[str, Any] = {}
     for stratum in todo:
+        done_path = _phase_dir(cfg, "occlusion", cid, stratum) / "results.json"
+        if done_path.exists():
+            print(f"[skip] occlusion {stratum} (results.json 존재)", flush=True)
+            out[stratum] = json.loads(done_path.read_text(encoding="utf-8"))
+            continue
         enr_path = _reports_dir(cfg) / "motifs" / motif_cid / stratum / "enrichment.json"
         if not enr_path.exists():
             # run_motifs가 돌지 않은 층(MOTIF_STRATA 밖이거나 dropped)은 건너뛴다.
@@ -2075,8 +2287,10 @@ def run_occlusion(
             out[stratum] = {"skipped": msg}
             continue
         t0 = time.time()
+        print(f"[occlusion] {stratum} 시작 — seeds={avail}, n_boot={n_boot}", flush=True)
         per_seed = []
         for s in avail:
+            t_seed = time.time()
             try:
                 model, ds, arr, meta = _load_trained(cfg, cid, stratum, s)
                 te_rows = np.nonzero(arr["split"].astype(int) == 2)[0]
@@ -2092,6 +2306,8 @@ def run_occlusion(
                 continue
             block["seed"] = int(s)
             per_seed.append(block)
+            print(f"  [occlusion] {stratum} seed{s} 종료 ({time.time() - t_seed:.1f}s)",
+                  flush=True)
         if not any("error" not in b for b in per_seed):
             out[stratum] = {"error": "no usable seed", "per_seed": per_seed}
             print(f"[ERROR] occlusion {stratum}: 모든 시드 실패")
@@ -2128,4 +2344,5 @@ def run_occlusion(
             json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
         )
         out[stratum] = res
+        print(f"[occlusion] {stratum} 종료 ({res['runtime_sec']}s)", flush=True)
     return out

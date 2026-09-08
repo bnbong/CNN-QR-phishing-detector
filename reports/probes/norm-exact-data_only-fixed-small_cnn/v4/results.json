@@ -1,0 +1,2968 @@
+{
+  "schema_version": 2,
+  "experiment": "lexical_probe",
+  "condition_id": "norm-exact-data_only-fixed-small_cnn",
+  "stratum": "v4",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "config": {
+    "seed_list": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "data": {
+      "csv_path": "/content/drive/MyDrive/qrphish/webphish.csv",
+      "category_col": "Category",
+      "url_col": "Data",
+      "positive_label": "spam"
+    },
+    "qr": {
+      "ec": "L",
+      "optimize": 0,
+      "border": 0,
+      "mask_mode": "fixed",
+      "mask_pattern": 0,
+      "pad_mode": "spec"
+    },
+    "condition": {
+      "url_mode": "norm",
+      "length_match": "exact",
+      "length_bucket": 1,
+      "features": "data_only",
+      "path_filter": false,
+      "shuffle_positions": false
+    },
+    "strata": [
+      "v2",
+      "v3",
+      "v4",
+      "v5plus"
+    ],
+    "stratum_rules": {
+      "primary_min_per_class": 1000,
+      "secondary_min_per_class": 300
+    },
+    "split": {
+      "ratios": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "max_group_frac": 0.05
+    },
+    "model": {
+      "arch": "small_cnn",
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "batch_size": 256,
+      "max_epochs": 60,
+      "patience": 8,
+      "class_weight": "balanced",
+      "amp": true
+    },
+    "eval": {
+      "n_bootstrap": 2000,
+      "primary_metric": "auroc"
+    },
+    "output_dir": "/content/drive/MyDrive/qrphish_out_v2/artifacts",
+    "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
+  },
+  "provenance": {
+    "git_sha": "78849487ddc238c309a12e794ce4c5f1dcdee293",
+    "qrphish_version": "0.1.0",
+    "timestamp": "2026-09-07T16:42:31.685251+00:00"
+  },
+  "data": {
+    "n_train": 1932,
+    "n_test": 400
+  },
+  "ngrams": [
+    ".co",
+    "com",
+    "om/",
+    "htm",
+    ".ht",
+    "tml",
+    "es/",
+    "ion",
+    ".ph",
+    "ing",
+    "php",
+    "ent",
+    "tio",
+    "log",
+    "ter",
+    "/in",
+    "age",
+    "ind",
+    "ome",
+    "s.c",
+    "net",
+    "gin",
+    "200",
+    "hom",
+    "web",
+    "pro",
+    "ate",
+    "e.c",
+    "nte",
+    "nde",
+    "ati",
+    "con",
+    "ogi",
+    "dex",
+    "000",
+    ".ne",
+    "pag",
+    "res",
+    "edu",
+    "art",
+    "mai",
+    "ine",
+    "ex.",
+    "the",
+    "ser",
+    "/20",
+    "app",
+    "lin",
+    "org",
+    ".ed",
+    "er.",
+    "int",
+    "ost",
+    "pdf",
+    "ail",
+    "t.c",
+    "ste",
+    "les",
+    "/co",
+    "ice",
+    "ile",
+    "du/",
+    "ess",
+    "nt/",
+    "ers",
+    "tes",
+    "/lo",
+    "co.",
+    "sta",
+    "in/",
+    ".or",
+    "/te",
+    "/wp",
+    "est",
+    "et/",
+    "for",
+    "ort",
+    "/pr",
+    "ons",
+    "pet",
+    "tor",
+    ".pd",
+    "es.",
+    "new",
+    "wp-",
+    "ect",
+    ".uk",
+    "ame",
+    "on.",
+    "rg/",
+    "rti",
+    "ces",
+    "tic",
+    "ope",
+    "tec",
+    "/ho",
+    "ge.",
+    "ist",
+    "ont",
+    "ure"
+  ],
+  "targets": {
+    "digit_ratio": {
+      "kind": "continuous",
+      "metric": "r2",
+      "family": "lexical",
+      "n_seeds": 5,
+      "score": 0.22749945849976685,
+      "score_sd": 0.0543272157714408,
+      "ci": [
+        0.07887458249473404,
+        0.3374069278800781
+      ],
+      "shuffle": -0.11670817540921896,
+      "shuffle_ci": [
+        -0.2502969661630403,
+        -0.051249047889034706
+      ],
+      "random_init": 0.02795775723401863,
+      "random_init_ci": [
+        -0.8174181629573312,
+        0.43933611283021035
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "dot_count": {
+      "kind": "continuous",
+      "metric": "r2",
+      "family": "lexical",
+      "n_seeds": 5,
+      "score": -0.06476556178126751,
+      "score_sd": 0.05934119700229785,
+      "ci": [
+        -0.18914660244621112,
+        0.03138905500146287
+      ],
+      "shuffle": -0.10373215837575009,
+      "shuffle_ci": [
+        -0.2292288152190313,
+        -0.027669416246864274
+      ],
+      "random_init": -0.09501474350106964,
+      "random_init_ci": [
+        -0.2836087679953001,
+        0.002203511223323569
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "has_digit": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "structure",
+      "n_seeds": 5,
+      "score": 0.6605382769485608,
+      "score_sd": 0.030177850883483976,
+      "ci": [
+        0.5934529669516662,
+        0.7263457430118629
+      ],
+      "shuffle": 0.5041167916229876,
+      "shuffle_ci": [
+        0.43221632277923183,
+        0.5787830846031045
+      ],
+      "random_init": 0.695663054253495,
+      "random_init_ci": [
+        0.6290545546757198,
+        0.760801903765032
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "has_hyphen": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "structure",
+      "n_seeds": 5,
+      "score": 0.5698369955849186,
+      "score_sd": 0.04976784690834239,
+      "ci": [
+        0.5024293726367193,
+        0.6449885907967647
+      ],
+      "shuffle": 0.495686149782704,
+      "shuffle_ci": [
+        0.4265028124622492,
+        0.5635972886565115
+      ],
+      "random_init": 0.5785775583475831,
+      "random_init_ci": [
+        0.5084579213464425,
+        0.6470563121576622
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "has_path": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "has_query": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "structure",
+      "n_seeds": 5,
+      "score": 0.5947286837313083,
+      "score_sd": 0.061617864538811955,
+      "ci": [
+        0.5112796150833949,
+        0.6856682058049222
+      ],
+      "shuffle": 0.49292164533325444,
+      "shuffle_ci": [
+        0.38829711618853346,
+        0.5971011494413776
+      ],
+      "random_init": 0.5971089122357107,
+      "random_init_ci": [
+        0.5148570265996041,
+        0.6740403071181412
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ip_host": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:.com": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "keyword",
+      "n_seeds": 5,
+      "score": 0.5809618270541884,
+      "score_sd": 0.025134557389336808,
+      "ci": [
+        0.5087862067803623,
+        0.6496784597202062
+      ],
+      "shuffle": 0.48901473105293025,
+      "shuffle_ci": [
+        0.4232706907981738,
+        0.5594495996948996
+      ],
+      "random_init": 0.5606569985489618,
+      "random_init_ci": [
+        0.49366122723208206,
+        0.6274450414417434
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "keyword:.html": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "keyword",
+      "n_seeds": 5,
+      "score": 0.6550186532240486,
+      "score_sd": 0.015181835840333946,
+      "ci": [
+        0.5811340302287153,
+        0.7295716824086295
+      ],
+      "shuffle": 0.504902598831473,
+      "shuffle_ci": [
+        0.43052206091839595,
+        0.5808434544397028
+      ],
+      "random_init": 0.621185922556304,
+      "random_init_ci": [
+        0.5523254717665109,
+        0.6922915499728741
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "keyword:.net": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:.org": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "keyword",
+      "n_seeds": 3,
+      "score": 0.6190479116302291,
+      "score_sd": 0.033958785999332206,
+      "ci": [
+        0.4896580785188971,
+        0.7236558992630489
+      ],
+      "shuffle": 0.5138807047986736,
+      "shuffle_ci": [
+        0.391153054685028,
+        0.632253917098817
+      ],
+      "random_init": 0.5345464216840138,
+      "random_init_ci": [
+        0.4000452008408431,
+        0.6468395378076994
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "keyword:.php": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "keyword",
+      "n_seeds": 5,
+      "score": 0.6687326867278796,
+      "score_sd": 0.04461331710848064,
+      "ci": [
+        0.5819949532513334,
+        0.7491532848889697
+      ],
+      "shuffle": 0.5081697312258472,
+      "shuffle_ci": [
+        0.4262294883130446,
+        0.5847021714684573
+      ],
+      "random_init": 0.549192127904662,
+      "random_init_ci": [
+        0.4629203129895353,
+        0.6364408689508783
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "keyword:account": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:bank": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:confirm": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:http": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:login": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "keyword",
+      "n_seeds": 5,
+      "score": 0.7241196968709048,
+      "score_sd": 0.053576015537197916,
+      "ci": [
+        0.6163124642024614,
+        0.8262150958657084
+      ],
+      "shuffle": 0.5095726061243424,
+      "shuffle_ci": [
+        0.39381180540423666,
+        0.6329165116612905
+      ],
+      "random_init": 0.6021034428277391,
+      "random_init_ci": [
+        0.48266090838873976,
+        0.7095991528755083
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "keyword:paypal": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:secure": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:signin": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:update": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:verify": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "keyword:www": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "keyword",
+      "n_seeds": 4,
+      "score": 0.6528534539494204,
+      "score_sd": 0.10764656741091162,
+      "ci": [
+        0.5025523950744004,
+        0.7867557077463752
+      ],
+      "shuffle": 0.5086698863887311,
+      "shuffle_ci": [
+        0.3831342735770483,
+        0.6319191638331919
+      ],
+      "random_init": 0.6399215718548212,
+      "random_init_ci": [
+        0.5167628762505226,
+        0.7663900866613798
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "label:phishing": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "label",
+      "n_seeds": 5,
+      "score": 0.8040893642195307,
+      "score_sd": 0.009601460754609912,
+      "ci": [
+        0.7425644179853672,
+        0.859730500526479
+      ],
+      "shuffle": 0.5178503480633991,
+      "shuffle_ci": [
+        0.4526218640547023,
+        0.5817248213771536
+      ],
+      "random_init": 0.5797776321553014,
+      "random_init_ci": [
+        0.5081776787296803,
+        0.6533058153632936
+      ],
+      "n_seeds_significant": 5,
+      "significant": true,
+      "above_random_init": true
+    },
+    "ngram:.co": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5955390081125536,
+      "score_sd": 0.03222485154312173,
+      "ci": [
+        0.5276526804009415,
+        0.6629913405736354
+      ],
+      "shuffle": 0.4983885654884621,
+      "shuffle_ci": [
+        0.42952434790479116,
+        0.5731305053859843
+      ],
+      "random_init": 0.5460940550226924,
+      "random_init_ci": [
+        0.47502491112032497,
+        0.6210081967351299
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:.ed": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6949858219812433,
+      "score_sd": 0.02968057525327611,
+      "ci": [
+        0.5770715314221041,
+        0.791033386736674
+      ],
+      "shuffle": 0.4545373622609558,
+      "shuffle_ci": [
+        0.2539601611485868,
+        0.5826709018305409
+      ],
+      "random_init": 0.49090752508069063,
+      "random_init_ci": [
+        0.38940835914279126,
+        0.637799362722377
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:.ht": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6549248768470494,
+      "score_sd": 0.024632097685639523,
+      "ci": [
+        0.5844333970773217,
+        0.7240459836261371
+      ],
+      "shuffle": 0.47863063638317904,
+      "shuffle_ci": [
+        0.4086939913467078,
+        0.5516340572234425
+      ],
+      "random_init": 0.629467849379474,
+      "random_init_ci": [
+        0.564732648194369,
+        0.6963432301811661
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:.ne": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:.or": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.6022597821949647,
+      "score_sd": 0.06134753493042054,
+      "ci": [
+        0.44804180477301614,
+        0.7238083579505714
+      ],
+      "shuffle": 0.5112627672690858,
+      "shuffle_ci": [
+        0.38889532367781987,
+        0.6301768336124502
+      ],
+      "random_init": 0.524942177483838,
+      "random_init_ci": [
+        0.3882514505677781,
+        0.6407296942326213
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:.pd": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.7077376950725558,
+      "score_sd": 0.061063146802576,
+      "ci": [
+        0.5815670372017673,
+        0.7837159115943113
+      ],
+      "shuffle": 0.4737252683359062,
+      "shuffle_ci": [
+        0.3302727858152586,
+        0.6394488028982084
+      ],
+      "random_init": 0.5741950698263285,
+      "random_init_ci": [
+        0.4718033164116352,
+        0.7296712830471662
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:.ph": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6614735787599815,
+      "score_sd": 0.03834640877172904,
+      "ci": [
+        0.5717650272806256,
+        0.7422762167812799
+      ],
+      "shuffle": 0.5057285717746438,
+      "shuffle_ci": [
+        0.4255260108728276,
+        0.5828151840518937
+      ],
+      "random_init": 0.5459499804884325,
+      "random_init_ci": [
+        0.46614667486487155,
+        0.628543586666112
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:.uk": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 2,
+      "score": 0.619855057167986,
+      "score_sd": 0.04065505716798595,
+      "ci": [
+        0.4571365312368198,
+        0.7274871414624462
+      ],
+      "shuffle": 0.5261435074338092,
+      "shuffle_ci": [
+        0.35418306888482665,
+        0.6727804311719108
+      ],
+      "random_init": 0.5206888302550572,
+      "random_init_ci": [
+        0.3889948186099609,
+        0.6334336612804944
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:/20": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6114848950856577,
+      "score_sd": 0.05898559328983758,
+      "ci": [
+        0.4801988111643495,
+        0.7826509981485705
+      ],
+      "shuffle": 0.4935986444346196,
+      "shuffle_ci": [
+        0.35488344469891436,
+        0.6332082046395339
+      ],
+      "random_init": 0.5752688879998104,
+      "random_init_ci": [
+        0.45498239490148007,
+        0.7633564252166508
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:/co": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.49861777401417984,
+      "score_sd": 0.053414648521191516,
+      "ci": [
+        0.3912439750638742,
+        0.6161974886156492
+      ],
+      "shuffle": 0.5269156705154344,
+      "shuffle_ci": [
+        0.3857965028624077,
+        0.6281081520314069
+      ],
+      "random_init": 0.5488973745413273,
+      "random_init_ci": [
+        0.4403205229722828,
+        0.661295073724675
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:/ho": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:/in": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5751969297629227,
+      "score_sd": 0.04198135351456374,
+      "ci": [
+        0.4874428025911836,
+        0.6563891310562422
+      ],
+      "shuffle": 0.5034415591098338,
+      "shuffle_ci": [
+        0.4234163763448494,
+        0.5910511373661976
+      ],
+      "random_init": 0.547076114314834,
+      "random_init_ci": [
+        0.46480228014245634,
+        0.6248782689545994
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:/lo": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.6355009962118386,
+      "score_sd": 0.10929879989240654,
+      "ci": [
+        0.5228085582873488,
+        0.7420564237913734
+      ],
+      "shuffle": 0.4569518869300606,
+      "shuffle_ci": [
+        0.3378345727325385,
+        0.6003254529526485
+      ],
+      "random_init": 0.5941639515345979,
+      "random_init_ci": [
+        0.4772594469182201,
+        0.6979420417187066
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:/pr": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.6311688015018607,
+      "score_sd": 0.033512296097625335,
+      "ci": [
+        0.435422812471556,
+        0.7403208881800402
+      ],
+      "shuffle": 0.5312319974268483,
+      "shuffle_ci": [
+        0.33742633879754436,
+        0.7001135911112701
+      ],
+      "random_init": 0.6008597808980958,
+      "random_init_ci": [
+        0.472203159075094,
+        0.7071751550745385
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:/te": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 1,
+      "score": 0.5424722336487042,
+      "score_sd": 0.0,
+      "ci": [
+        0.41589590964590967,
+        0.6751504909873554
+      ],
+      "shuffle": 0.478834219858156,
+      "shuffle_ci": [
+        0.31587657277836745,
+        0.5914168582192074
+      ],
+      "random_init": 0.5272521596051007,
+      "random_init_ci": [
+        0.4316418324482841,
+        0.6870398330420648
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:/wp": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6450326332372586,
+      "score_sd": 0.07095179999913445,
+      "ci": [
+        0.5132587518077191,
+        0.7680397902157697
+      ],
+      "shuffle": 0.4764309599689134,
+      "shuffle_ci": [
+        0.34763420451609345,
+        0.6033083665425483
+      ],
+      "random_init": 0.5648350456208522,
+      "random_init_ci": [
+        0.45802176913982307,
+        0.6766426412028765
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:000": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 1,
+      "score": 0.6963684463684464,
+      "score_sd": 0.0,
+      "ci": [
+        0.5930799387464035,
+        0.9789927768860353
+      ],
+      "shuffle": 0.5238669238187078,
+      "shuffle_ci": [
+        0.34230629539951574,
+        0.6069483313740376
+      ],
+      "random_init": 0.5619288119288119,
+      "random_init_ci": [
+        0.45916124180077844,
+        0.8291665667394137
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:200": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6759418870183828,
+      "score_sd": 0.055411076009202226,
+      "ci": [
+        0.5728357764714278,
+        0.7847332035113299
+      ],
+      "shuffle": 0.4875765890764699,
+      "shuffle_ci": [
+        0.34317559206890624,
+        0.6095248620970887
+      ],
+      "random_init": 0.6125367940667972,
+      "random_init_ci": [
+        0.5106483118623982,
+        0.7427945965381847
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:age": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5198333967822524,
+      "score_sd": 0.049998034219211465,
+      "ci": [
+        0.40627247264329985,
+        0.6351414866090621
+      ],
+      "shuffle": 0.4919582758440789,
+      "shuffle_ci": [
+        0.3944396428087752,
+        0.5919451076387816
+      ],
+      "random_init": 0.5218228623557788,
+      "random_init_ci": [
+        0.40766666922291417,
+        0.6294086144596259
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ail": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.597473525057494,
+      "score_sd": 0.066852846365876,
+      "ci": [
+        0.45985716335753846,
+        0.7233749582600077
+      ],
+      "shuffle": 0.5136105610574901,
+      "shuffle_ci": [
+        0.3780841896248828,
+        0.6568655758512401
+      ],
+      "random_init": 0.6044811180494893,
+      "random_init_ci": [
+        0.43682521587274603,
+        0.7288137640976621
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ame": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:app": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 1,
+      "score": 0.5337190275829827,
+      "score_sd": 0.0,
+      "ci": [
+        0.4287337356254743,
+        0.6023578194019708
+      ],
+      "shuffle": 0.4151388888888889,
+      "shuffle_ci": [
+        0.3060383413012243,
+        0.5216403412530266
+      ],
+      "random_init": 0.5570944366526414,
+      "random_init_ci": [
+        0.40823149190424324,
+        0.8012299373406406
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:art": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5478049702382064,
+      "score_sd": 0.06374972088327102,
+      "ci": [
+        0.4029774561944629,
+        0.6686438453813026
+      ],
+      "shuffle": 0.5174413503974655,
+      "shuffle_ci": [
+        0.37282639251971017,
+        0.6510190667879521
+      ],
+      "random_init": 0.48941272426989213,
+      "random_init_ci": [
+        0.36316242335774285,
+        0.6014019928181693
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ate": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5137417890720963,
+      "score_sd": 0.06327755620629091,
+      "ci": [
+        0.39142838703702076,
+        0.6392987264227
+      ],
+      "shuffle": 0.5157078655225404,
+      "shuffle_ci": [
+        0.3890867662332748,
+        0.6383590561854279
+      ],
+      "random_init": 0.5225004446211438,
+      "random_init_ci": [
+        0.3962300293917865,
+        0.6454375270093988
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ati": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5655565737563604,
+      "score_sd": 0.04729235782442407,
+      "ci": [
+        0.4666999138048227,
+        0.6644417929674047
+      ],
+      "shuffle": 0.4938247136830025,
+      "shuffle_ci": [
+        0.3879235392759089,
+        0.5945134537328379
+      ],
+      "random_init": 0.5727206263002832,
+      "random_init_ci": [
+        0.47620589968896576,
+        0.6733391134782348
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ces": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.5014250298767652,
+      "score_sd": 0.021902633808213907,
+      "ci": [
+        0.3815688100205874,
+        0.6284362509832658
+      ],
+      "shuffle": 0.4861794069850432,
+      "shuffle_ci": [
+        0.30079279297631084,
+        0.6205967588599248
+      ],
+      "random_init": 0.47299492007588123,
+      "random_init_ci": [
+        0.3402308714415672,
+        0.5950170369008022
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:co.": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.640706882338311,
+      "score_sd": 0.045247707245690924,
+      "ci": [
+        0.5108535677457241,
+        0.7880203375581777
+      ],
+      "shuffle": 0.47143259009741884,
+      "shuffle_ci": [
+        0.3516221108008161,
+        0.5886125453931695
+      ],
+      "random_init": 0.6017946309239292,
+      "random_init_ci": [
+        0.4776362485992915,
+        0.7669379298725757
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:com": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5680695433981862,
+      "score_sd": 0.02910012057989828,
+      "ci": [
+        0.4936871337207398,
+        0.6368925682104474
+      ],
+      "shuffle": 0.4965625025182884,
+      "shuffle_ci": [
+        0.4296700403708663,
+        0.5620099007491113
+      ],
+      "random_init": 0.5659214326710161,
+      "random_init_ci": [
+        0.4982107787365768,
+        0.6321234351688256
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:con": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5257623105537308,
+      "score_sd": 0.04350233752236697,
+      "ci": [
+        0.41809204141602613,
+        0.6344558815297126
+      ],
+      "shuffle": 0.5382008361235474,
+      "shuffle_ci": [
+        0.42181825013357577,
+        0.6284325243936869
+      ],
+      "random_init": 0.5530767682422841,
+      "random_init_ci": [
+        0.44666591931333455,
+        0.6492184583402032
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:dex": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6307793202831007,
+      "score_sd": 0.049546510888336864,
+      "ci": [
+        0.5350165676020521,
+        0.7248878212820902
+      ],
+      "shuffle": 0.4911416543381481,
+      "shuffle_ci": [
+        0.38554553857330276,
+        0.5766348684249193
+      ],
+      "random_init": 0.5842504805221163,
+      "random_init_ci": [
+        0.49357519875779643,
+        0.6714402090065422
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:du/": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.7453966814502825,
+      "score_sd": 0.02866543126057253,
+      "ci": [
+        0.6094130984326246,
+        0.8309913470039216
+      ],
+      "shuffle": 0.4750562706037793,
+      "shuffle_ci": [
+        0.282807639406108,
+        0.6104928236377589
+      ],
+      "random_init": 0.48370745405762905,
+      "random_init_ci": [
+        0.3654151540605305,
+        0.6336376065281968
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:e.c": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5180477535310457,
+      "score_sd": 0.05898057898367667,
+      "ci": [
+        0.3892263752170958,
+        0.6346375195905121
+      ],
+      "shuffle": 0.5117404148564518,
+      "shuffle_ci": [
+        0.4109257486716447,
+        0.6173080911628827
+      ],
+      "random_init": 0.5158613601574278,
+      "random_init_ci": [
+        0.404335066893729,
+        0.6293702117349974
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ect": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5791978278431918,
+      "score_sd": 0.04983486893650314,
+      "ci": [
+        0.4504523540251788,
+        0.7225906073995769
+      ],
+      "shuffle": 0.5495884952619241,
+      "shuffle_ci": [
+        0.3819217223855489,
+        0.6766113094684801
+      ],
+      "random_init": 0.5614120685119486,
+      "random_init_ci": [
+        0.42951055582102127,
+        0.6931036642750055
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:edu": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.669085799864208,
+      "score_sd": 0.014270719092474899,
+      "ci": [
+        0.5559930169255838,
+        0.7680127846684062
+      ],
+      "shuffle": 0.455087960221278,
+      "shuffle_ci": [
+        0.26811419717514107,
+        0.5729803781462479
+      ],
+      "random_init": 0.4937305001670384,
+      "random_init_ci": [
+        0.40131182373781626,
+        0.636009885654435
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ent": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5729612792989728,
+      "score_sd": 0.037852743473168166,
+      "ci": [
+        0.46435679580488803,
+        0.6685644220707377
+      ],
+      "shuffle": 0.490290615274385,
+      "shuffle_ci": [
+        0.40618688961122285,
+        0.5766490467690952
+      ],
+      "random_init": 0.5285626977075693,
+      "random_init_ci": [
+        0.4301577329755474,
+        0.6194193253771162
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:er.": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.5742712445507451,
+      "score_sd": 0.04257012304476802,
+      "ci": [
+        0.4197927134653167,
+        0.6975995723550287
+      ],
+      "shuffle": 0.4365173089162411,
+      "shuffle_ci": [
+        0.3249046651634175,
+        0.5651848776336922
+      ],
+      "random_init": 0.602743695890611,
+      "random_init_ci": [
+        0.47154046739215594,
+        0.7189944922634951
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ers": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5764842526864284,
+      "score_sd": 0.043045919795091654,
+      "ci": [
+        0.4699440706083081,
+        0.6770449101153587
+      ],
+      "shuffle": 0.4993497535758227,
+      "shuffle_ci": [
+        0.3913263396862759,
+        0.6015392533713069
+      ],
+      "random_init": 0.5042059670310581,
+      "random_init_ci": [
+        0.39625344579423216,
+        0.6129232554909517
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:es.": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.41737743211425277,
+      "score_sd": 0.09178863374278629,
+      "ci": [
+        0.3041588183685739,
+        0.5520491259537345
+      ],
+      "shuffle": 0.5122411916352382,
+      "shuffle_ci": [
+        0.39966892670795584,
+        0.636214458832156
+      ],
+      "random_init": 0.5660214814818026,
+      "random_init_ci": [
+        0.4059409985313105,
+        0.6776255836608409
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:es/": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5717513534740986,
+      "score_sd": 0.06389111898687697,
+      "ci": [
+        0.47278365026972347,
+        0.6639476749075827
+      ],
+      "shuffle": 0.5203010726617654,
+      "shuffle_ci": [
+        0.4291479179847624,
+        0.6073426782771982
+      ],
+      "random_init": 0.5522603171794243,
+      "random_init_ci": [
+        0.46179456633085714,
+        0.633673495159993
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ess": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5572843483786142,
+      "score_sd": 0.04397984044995872,
+      "ci": [
+        0.4348452464189762,
+        0.66532755934032
+      ],
+      "shuffle": 0.5167010457489201,
+      "shuffle_ci": [
+        0.37490399422223153,
+        0.6568672564272152
+      ],
+      "random_init": 0.5620720380953783,
+      "random_init_ci": [
+        0.43514435686386166,
+        0.7004917387447838
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:est": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.5849000517354324,
+      "score_sd": 0.04700592572547532,
+      "ci": [
+        0.452331704483746,
+        0.7133365470301998
+      ],
+      "shuffle": 0.5735515021545132,
+      "shuffle_ci": [
+        0.43355772165659656,
+        0.6999928783087945
+      ],
+      "random_init": 0.5795613606754538,
+      "random_init_ci": [
+        0.4182523952109062,
+        0.70472997021766
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:et/": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:ex.": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6362174024552039,
+      "score_sd": 0.03548203635999216,
+      "ci": [
+        0.5355092229096574,
+        0.7317872334647726
+      ],
+      "shuffle": 0.4975282443675881,
+      "shuffle_ci": [
+        0.3877330767580816,
+        0.5874984668013192
+      ],
+      "random_init": 0.5683426571580954,
+      "random_init_ci": [
+        0.46736764282402266,
+        0.6607711857663428
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:for": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.527774815561304,
+      "score_sd": 0.06324095920765932,
+      "ci": [
+        0.38340513100156476,
+        0.6752592570900993
+      ],
+      "shuffle": 0.41689010323153475,
+      "shuffle_ci": [
+        0.2763331282371357,
+        0.6072687286207722
+      ],
+      "random_init": 0.5381368758301952,
+      "random_init_ci": [
+        0.4276401806500987,
+        0.6568120788462877
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ge.": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:gin": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6321876276556206,
+      "score_sd": 0.05842673571858237,
+      "ci": [
+        0.5182850223425806,
+        0.7526527548902104
+      ],
+      "shuffle": 0.5269500547682815,
+      "shuffle_ci": [
+        0.4294600819654139,
+        0.6322424901823933
+      ],
+      "random_init": 0.5606758582525906,
+      "random_init_ci": [
+        0.4497377403696997,
+        0.6855705089905315
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:hom": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 1,
+      "score": 0.5622454595487066,
+      "score_sd": 0.0,
+      "ci": [
+        0.4613377943770101,
+        0.7298884390383106
+      ],
+      "shuffle": 0.4090485074626865,
+      "shuffle_ci": [
+        0.20879820459652393,
+        0.646205182143397
+      ],
+      "random_init": 0.39955971381397914,
+      "random_init_ci": [
+        0.2634632891104573,
+        0.6085063336652284
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:htm": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6756644954119361,
+      "score_sd": 0.022778987846093075,
+      "ci": [
+        0.6063533051743338,
+        0.7439932284394473
+      ],
+      "shuffle": 0.4826252788239504,
+      "shuffle_ci": [
+        0.4085744820650622,
+        0.5533431039022667
+      ],
+      "random_init": 0.6242403978915867,
+      "random_init_ci": [
+        0.5576416638300346,
+        0.6914843597895498
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ice": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.5369715472932747,
+      "score_sd": 0.056057837133416846,
+      "ci": [
+        0.37094516660224724,
+        0.6823131647837594
+      ],
+      "shuffle": 0.5608891856899091,
+      "shuffle_ci": [
+        0.4026585956948769,
+        0.7315547835600974
+      ],
+      "random_init": 0.48672709221926286,
+      "random_init_ci": [
+        0.34476620774456657,
+        0.6171364805429058
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ile": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.536290846817616,
+      "score_sd": 0.039365990156914325,
+      "ci": [
+        0.39507900599495216,
+        0.6692033920964318
+      ],
+      "shuffle": 0.5400815932858499,
+      "shuffle_ci": [
+        0.3976149714608425,
+        0.6798992058281892
+      ],
+      "random_init": 0.5197265094107454,
+      "random_init_ci": [
+        0.3676201807877713,
+        0.6706460521033295
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:in/": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6187242097062716,
+      "score_sd": 0.10975530865302834,
+      "ci": [
+        0.5006830691755065,
+        0.7383473904190099
+      ],
+      "shuffle": 0.4731669206575404,
+      "shuffle_ci": [
+        0.3257730138699092,
+        0.6229800821030081
+      ],
+      "random_init": 0.5445972527723782,
+      "random_init_ci": [
+        0.4226806478161215,
+        0.6763542402700542
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ind": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5801130279921806,
+      "score_sd": 0.03657626876519116,
+      "ci": [
+        0.49378639026588783,
+        0.6641839064594468
+      ],
+      "shuffle": 0.5002284636961014,
+      "shuffle_ci": [
+        0.4052761482232149,
+        0.5933673467297547
+      ],
+      "random_init": 0.5713376550270659,
+      "random_init_ci": [
+        0.48188164650916754,
+        0.6572306575269263
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ine": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5992658747046733,
+      "score_sd": 0.06351708061332696,
+      "ci": [
+        0.4705346430127501,
+        0.7148899804415558
+      ],
+      "shuffle": 0.5447459938239188,
+      "shuffle_ci": [
+        0.4177763645882234,
+        0.6589976602773617
+      ],
+      "random_init": 0.5173576828841893,
+      "random_init_ci": [
+        0.3932505745573761,
+        0.622581053487999
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ing": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5255362822196616,
+      "score_sd": 0.02295206167358513,
+      "ci": [
+        0.434840308560441,
+        0.6144107769104258
+      ],
+      "shuffle": 0.48435291630444705,
+      "shuffle_ci": [
+        0.3873070927876789,
+        0.5811327213266007
+      ],
+      "random_init": 0.5513284067054665,
+      "random_init_ci": [
+        0.46327179296137755,
+        0.6350532838896414
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:int": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.5060113312154776,
+      "score_sd": 0.07484816074691746,
+      "ci": [
+        0.38310837384182345,
+        0.6377921286509327
+      ],
+      "shuffle": 0.46073762388446154,
+      "shuffle_ci": [
+        0.3287076184870662,
+        0.5962482366206555
+      ],
+      "random_init": 0.5434498294041736,
+      "random_init_ci": [
+        0.4427245051813813,
+        0.6513311416394459
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ion": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.534263070418282,
+      "score_sd": 0.037929483252435475,
+      "ci": [
+        0.438300418485456,
+        0.6303743882719596
+      ],
+      "shuffle": 0.5149707809161104,
+      "shuffle_ci": [
+        0.4217116867849461,
+        0.5974441914281046
+      ],
+      "random_init": 0.5452768128560529,
+      "random_init_ci": [
+        0.45465591205032185,
+        0.644547917646162
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ist": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:les": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.519066992809974,
+      "score_sd": 0.05053715483473258,
+      "ci": [
+        0.37586993992462947,
+        0.6540197216409884
+      ],
+      "shuffle": 0.516338500412054,
+      "shuffle_ci": [
+        0.37612336872888735,
+        0.6642690436567898
+      ],
+      "random_init": 0.5505597645682192,
+      "random_init_ci": [
+        0.4081073711755391,
+        0.6692279519745499
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:lin": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5508640581747943,
+      "score_sd": 0.0612652866110293,
+      "ci": [
+        0.4167461133561046,
+        0.6802008308744311
+      ],
+      "shuffle": 0.4818556681088751,
+      "shuffle_ci": [
+        0.3651522731309135,
+        0.6069886049879313
+      ],
+      "random_init": 0.5127369260350129,
+      "random_init_ci": [
+        0.3875315574137038,
+        0.6287230390351365
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:log": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6131858485176084,
+      "score_sd": 0.05868509679458607,
+      "ci": [
+        0.5194304740136283,
+        0.7143673046107897
+      ],
+      "shuffle": 0.49445649028377814,
+      "shuffle_ci": [
+        0.38794385575022466,
+        0.5971547140184803
+      ],
+      "random_init": 0.6120128226494439,
+      "random_init_ci": [
+        0.5153803366480402,
+        0.7091489031606215
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:mai": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5638992486528422,
+      "score_sd": 0.062066380371062636,
+      "ci": [
+        0.4210825055231419,
+        0.7352870571224369
+      ],
+      "shuffle": 0.4770980768501765,
+      "shuffle_ci": [
+        0.356979509943124,
+        0.6090820456989912
+      ],
+      "random_init": 0.6280456876702758,
+      "random_init_ci": [
+        0.5152353369883721,
+        0.7376863180261456
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:nde": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6233283723997535,
+      "score_sd": 0.04874658819722547,
+      "ci": [
+        0.5372665443371776,
+        0.7074284590311379
+      ],
+      "shuffle": 0.4953786728328143,
+      "shuffle_ci": [
+        0.39381761398080467,
+        0.5819636393371702
+      ],
+      "random_init": 0.561326032810787,
+      "random_init_ci": [
+        0.45562303714675184,
+        0.6623234652060452
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:net": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5661234865905549,
+      "score_sd": 0.07977724197840687,
+      "ci": [
+        0.4550197784391177,
+        0.6883694917078673
+      ],
+      "shuffle": 0.526090057948502,
+      "shuffle_ci": [
+        0.40990507332312154,
+        0.6371199345875608
+      ],
+      "random_init": 0.5130143085391098,
+      "random_init_ci": [
+        0.38754858428578476,
+        0.6431898769386316
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:new": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.5373837087673565,
+      "score_sd": 0.05196681784872972,
+      "ci": [
+        0.38385922899250796,
+        0.6819879736328972
+      ],
+      "shuffle": 0.4923054958841527,
+      "shuffle_ci": [
+        0.3864306824470252,
+        0.5938258891778952
+      ],
+      "random_init": 0.5639834463396908,
+      "random_init_ci": [
+        0.4161963228696628,
+        0.7159213203477132
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:nt/": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.6016090287722632,
+      "score_sd": 0.1584821801160608,
+      "ci": [
+        0.4793264296481536,
+        0.7236167975803479
+      ],
+      "shuffle": 0.48723327371783204,
+      "shuffle_ci": [
+        0.37156311393387864,
+        0.5829249022906785
+      ],
+      "random_init": 0.4650845581273808,
+      "random_init_ci": [
+        0.3736812223234218,
+        0.5958912978212435
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:nte": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.596109505039924,
+      "score_sd": 0.04726626976626227,
+      "ci": [
+        0.47290823995582676,
+        0.707646951044447
+      ],
+      "shuffle": 0.48617432749857176,
+      "shuffle_ci": [
+        0.3750252832660105,
+        0.5992881563543486
+      ],
+      "random_init": 0.5463945313042675,
+      "random_init_ci": [
+        0.4456058129342536,
+        0.6504145590355777
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ogi": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6937748279095419,
+      "score_sd": 0.07497851556921321,
+      "ci": [
+        0.5802735489286192,
+        0.8010260549303917
+      ],
+      "shuffle": 0.5047310758556719,
+      "shuffle_ci": [
+        0.3839488689980343,
+        0.6216864865305449
+      ],
+      "random_init": 0.593192369413827,
+      "random_init_ci": [
+        0.4808932392089888,
+        0.6962339568552649
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:om/": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5466000529226902,
+      "score_sd": 0.024698353958675423,
+      "ci": [
+        0.47993604031404746,
+        0.617169630043431
+      ],
+      "shuffle": 0.5012288587706268,
+      "shuffle_ci": [
+        0.43239535902500104,
+        0.5675233612749241
+      ],
+      "random_init": 0.5506187110706342,
+      "random_init_ci": [
+        0.4779068742667102,
+        0.6192765086120808
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ome": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.5577630082001149,
+      "score_sd": 0.05756261092345456,
+      "ci": [
+        0.442967595354584,
+        0.673841654872324
+      ],
+      "shuffle": 0.5591066162235463,
+      "shuffle_ci": [
+        0.44573517657379824,
+        0.6864094822373823
+      ],
+      "random_init": 0.5184293133815971,
+      "random_init_ci": [
+        0.3926128233640615,
+        0.6645849192260028
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:on.": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.5078224557552766,
+      "score_sd": 0.0711158629186852,
+      "ci": [
+        0.3608036974366696,
+        0.6359260040079198
+      ],
+      "shuffle": 0.5299163419430031,
+      "shuffle_ci": [
+        0.35290693637810727,
+        0.6776924155944491
+      ],
+      "random_init": 0.5385124419193349,
+      "random_init_ci": [
+        0.42386555112557833,
+        0.657454551615541
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ons": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.5958456015446434,
+      "score_sd": 0.01281714162044388,
+      "ci": [
+        0.4662485758571136,
+        0.6818123141919094
+      ],
+      "shuffle": 0.47411931931768203,
+      "shuffle_ci": [
+        0.3309081587979826,
+        0.6304676944380283
+      ],
+      "random_init": 0.5071023304187533,
+      "random_init_ci": [
+        0.3898406125163824,
+        0.6372026422322968
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ont": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.542684929402822,
+      "score_sd": 0.04548819417046031,
+      "ci": [
+        0.420832860078021,
+        0.6605867018612808
+      ],
+      "shuffle": 0.4637504780746239,
+      "shuffle_ci": [
+        0.3452081991148611,
+        0.5874286420231888
+      ],
+      "random_init": 0.5310126466467162,
+      "random_init_ci": [
+        0.42232339390705464,
+        0.6412734030037215
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ope": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:org": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.6118790355442494,
+      "score_sd": 0.04016759340498229,
+      "ci": [
+        0.47688360131427704,
+        0.7269254375506705
+      ],
+      "shuffle": 0.5233684439320601,
+      "shuffle_ci": [
+        0.40433056346940904,
+        0.6521486501824021
+      ],
+      "random_init": 0.5416159415634141,
+      "random_init_ci": [
+        0.39418861075894035,
+        0.6501347495106239
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ort": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5643707894734504,
+      "score_sd": 0.04384969935251777,
+      "ci": [
+        0.4134547640886983,
+        0.7205632881502053
+      ],
+      "shuffle": 0.500614566251713,
+      "shuffle_ci": [
+        0.38456120812990924,
+        0.6393868299406172
+      ],
+      "random_init": 0.582648224750392,
+      "random_init_ci": [
+        0.46248693735156826,
+        0.7084264211715416
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ost": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 2,
+      "score": 0.49522825549789967,
+      "score_sd": 0.039044044971583924,
+      "ci": [
+        0.3045728614084587,
+        0.6347874792804149
+      ],
+      "shuffle": 0.5375636146095369,
+      "shuffle_ci": [
+        0.3516425511333039,
+        0.7522400593060772
+      ],
+      "random_init": 0.5676414628119595,
+      "random_init_ci": [
+        0.40869027471252006,
+        0.7087934449729733
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:pag": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 2,
+      "score": 0.5451935611894927,
+      "score_sd": 0.014727611368704097,
+      "ci": [
+        0.4084209322830935,
+        0.6690174245441869
+      ],
+      "shuffle": 0.4844919159726664,
+      "shuffle_ci": [
+        0.3575235217489236,
+        0.6012714767351044
+      ],
+      "random_init": 0.5039068815937409,
+      "random_init_ci": [
+        0.3902002047684372,
+        0.652648615763253
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:pdf": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6873422558514434,
+      "score_sd": 0.02927140131562127,
+      "ci": [
+        0.5774745908520732,
+        0.7805733638697543
+      ],
+      "shuffle": 0.4657898603205911,
+      "shuffle_ci": [
+        0.32576417361689125,
+        0.616289768006734
+      ],
+      "random_init": 0.5875406613156946,
+      "random_init_ci": [
+        0.47053308394373855,
+        0.7440903808593244
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:pet": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:php": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6665933769449897,
+      "score_sd": 0.04572767883886878,
+      "ci": [
+        0.5811729269921003,
+        0.7426226564074574
+      ],
+      "shuffle": 0.5037648178818924,
+      "shuffle_ci": [
+        0.422225447805846,
+        0.5835248250213783
+      ],
+      "random_init": 0.5448763337359968,
+      "random_init_ci": [
+        0.4589713796019833,
+        0.6330928019214344
+      ],
+      "n_seeds_significant": 1,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:pro": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5570211292574452,
+      "score_sd": 0.05322095769290625,
+      "ci": [
+        0.42029063732322297,
+        0.6673763194274642
+      ],
+      "shuffle": 0.519846146848924,
+      "shuffle_ci": [
+        0.41029239129281647,
+        0.6358652826006688
+      ],
+      "random_init": 0.5587415595615084,
+      "random_init_ci": [
+        0.4402354376827476,
+        0.6662572856427802
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:res": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6086410097813711,
+      "score_sd": 0.023344720438613818,
+      "ci": [
+        0.5176864649945767,
+        0.7130684498676265
+      ],
+      "shuffle": 0.46245572680829283,
+      "shuffle_ci": [
+        0.31671765417491315,
+        0.6013485937370822
+      ],
+      "random_init": 0.5554577985131732,
+      "random_init_ci": [
+        0.4475288486379384,
+        0.6657869843574236
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:rg/": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 2,
+      "score": 0.5790074035812672,
+      "score_sd": 0.04457214187327818,
+      "ci": [
+        0.47141519690574746,
+        0.6789080654841417
+      ],
+      "shuffle": 0.5274365515436944,
+      "shuffle_ci": [
+        0.4159733113066578,
+        0.6398659173592238
+      ],
+      "random_init": 0.49993450621022134,
+      "random_init_ci": [
+        0.37688913443260114,
+        0.6114951912486642
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:rti": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.5032078949034606,
+      "score_sd": 0.05123373053047841,
+      "ci": [
+        0.35847099386405545,
+        0.6668496161037349
+      ],
+      "shuffle": 0.5361042466349937,
+      "shuffle_ci": [
+        0.38856052519065687,
+        0.6888979672519293
+      ],
+      "random_init": 0.5499251253894138,
+      "random_init_ci": [
+        0.3636926417643167,
+        0.7001527069036425
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:s.c": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5065826754072077,
+      "score_sd": 0.0769537235249043,
+      "ci": [
+        0.38521019149201735,
+        0.6169686607190172
+      ],
+      "shuffle": 0.5280909306966071,
+      "shuffle_ci": [
+        0.4206384115896883,
+        0.6382962000421217
+      ],
+      "random_init": 0.484319437639338,
+      "random_init_ci": [
+        0.36361638182395084,
+        0.5985975185262256
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ser": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5343237522443328,
+      "score_sd": 0.03051930591037526,
+      "ci": [
+        0.4107154126162996,
+        0.6558874924785392
+      ],
+      "shuffle": 0.49403609431871126,
+      "shuffle_ci": [
+        0.34952122182489187,
+        0.6238198745375577
+      ],
+      "random_init": 0.5212716655207801,
+      "random_init_ci": [
+        0.4066714026402525,
+        0.6511683433917386
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:sta": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:ste": {
+      "skipped": "양·음성 표본 부족",
+      "n_seeds": 0
+    },
+    "ngram:t.c": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.5458450937968424,
+      "score_sd": 0.08712228012683021,
+      "ci": [
+        0.44088254945093813,
+        0.6886825789932569
+      ],
+      "shuffle": 0.5155496615065053,
+      "shuffle_ci": [
+        0.34768303161084924,
+        0.684730999868423
+      ],
+      "random_init": 0.49766097875715753,
+      "random_init_ci": [
+        0.38550446510953323,
+        0.6411617234756
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:tec": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 3,
+      "score": 0.5329067121980645,
+      "score_sd": 0.08745187546496769,
+      "ci": [
+        0.39295975001347566,
+        0.7596951044213597
+      ],
+      "shuffle": 0.5009232450115065,
+      "shuffle_ci": [
+        0.33363040474424016,
+        0.6946726918283511
+      ],
+      "random_init": 0.562806166430062,
+      "random_init_ci": [
+        0.43939066842698754,
+        0.732005335681518
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ter": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5689194400686532,
+      "score_sd": 0.059313354249529354,
+      "ci": [
+        0.4664755960933914,
+        0.6694685538416687
+      ],
+      "shuffle": 0.5019494629047634,
+      "shuffle_ci": [
+        0.3958503930880283,
+        0.6117522345833608
+      ],
+      "random_init": 0.5903936082223833,
+      "random_init_ci": [
+        0.46758634988820136,
+        0.7075971642198635
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:tes": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 1,
+      "score": 0.5301507537688442,
+      "score_sd": 0.0,
+      "ci": [
+        0.3482261733101034,
+        0.6484595800341018
+      ],
+      "shuffle": 0.4357682619647355,
+      "shuffle_ci": [
+        0.33146581357343835,
+        0.6436951887677129
+      ],
+      "random_init": 0.5660804020100503,
+      "random_init_ci": [
+        0.38271622030818925,
+        0.7058831187792591
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:the": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 2,
+      "score": 0.5314832514847975,
+      "score_sd": 0.00803674851520253,
+      "ci": [
+        0.4091781192604661,
+        0.6408797607152834
+      ],
+      "shuffle": 0.4593413157612771,
+      "shuffle_ci": [
+        0.3201873093882823,
+        0.5909531894489932
+      ],
+      "random_init": 0.5474936808202583,
+      "random_init_ci": [
+        0.4207402733267569,
+        0.6678437882653396
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:tic": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 4,
+      "score": 0.5931209903472128,
+      "score_sd": 0.05563708862835263,
+      "ci": [
+        0.4496923466161291,
+        0.7411479036957698
+      ],
+      "shuffle": 0.5019289213580015,
+      "shuffle_ci": [
+        0.33038249313963003,
+        0.6541851032349921
+      ],
+      "random_init": 0.5167434751244113,
+      "random_init_ci": [
+        0.3659916664387925,
+        0.642952170622573
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:tio": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5623745231399805,
+      "score_sd": 0.045743742369658565,
+      "ci": [
+        0.4628406412706759,
+        0.66105308272343
+      ],
+      "shuffle": 0.5053877555770272,
+      "shuffle_ci": [
+        0.40537856540901496,
+        0.5907635060705794
+      ],
+      "random_init": 0.5616356371066754,
+      "random_init_ci": [
+        0.46322332796387516,
+        0.6533844184252038
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:tml": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6704244323915783,
+      "score_sd": 0.029221996084427545,
+      "ci": [
+        0.5998198364627848,
+        0.7403269881307996
+      ],
+      "shuffle": 0.5069052634922935,
+      "shuffle_ci": [
+        0.4323509445278667,
+        0.582181468325478
+      ],
+      "random_init": 0.618207008491267,
+      "random_init_ci": [
+        0.5503872451214756,
+        0.6912598302406981
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:tor": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.5591173346118178,
+      "score_sd": 0.097373651684925,
+      "ci": [
+        0.4276360720618203,
+        0.6775396684009369
+      ],
+      "shuffle": 0.5444985334817847,
+      "shuffle_ci": [
+        0.40165117183973137,
+        0.6620657306845652
+      ],
+      "random_init": 0.4919561103004069,
+      "random_init_ci": [
+        0.36553057550983264,
+        0.6285408476670186
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:ure": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 1,
+      "score": 0.3881122729774354,
+      "score_sd": 0.0,
+      "ci": [
+        0.2658899268684964,
+        0.5445296578421578
+      ],
+      "shuffle": 0.4554455445544554,
+      "shuffle_ci": [
+        0.27122389455782314,
+        0.5976427939876215
+      ],
+      "random_init": 0.4434782608695652,
+      "random_init_ci": [
+        0.2940487331296155,
+        0.5767412784884848
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:web": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.513189231772288,
+      "score_sd": 0.03673444593458445,
+      "ci": [
+        0.39577635255496796,
+        0.6260077039001828
+      ],
+      "shuffle": 0.5022453489726854,
+      "shuffle_ci": [
+        0.3588535361531683,
+        0.6268961966868569
+      ],
+      "random_init": 0.514966533162843,
+      "random_init_ci": [
+        0.3947012994533205,
+        0.6211771861806057
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "ngram:wp-": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "ngram",
+      "n_seeds": 5,
+      "score": 0.6603591516670871,
+      "score_sd": 0.0691867386752463,
+      "ci": [
+        0.5324291242669965,
+        0.7787791502693584
+      ],
+      "shuffle": 0.4822611757880453,
+      "shuffle_ci": [
+        0.3520432905258912,
+        0.6131768636664685
+      ],
+      "random_init": 0.5666602172128624,
+      "random_init_ci": [
+        0.4568573023426474,
+        0.6753815586753099
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "path_depth": {
+      "kind": "continuous",
+      "metric": "r2",
+      "family": "lexical",
+      "n_seeds": 5,
+      "score": -0.006527848002174874,
+      "score_sd": 0.08128131541916217,
+      "ci": [
+        -0.15231227737087666,
+        0.07695727283624812
+      ],
+      "shuffle": -0.0797392530988735,
+      "shuffle_ci": [
+        -0.211070669944701,
+        -0.003385726829545105
+      ],
+      "random_init": -0.6250681261426831,
+      "random_init_ci": [
+        -2.379146132598751,
+        0.05113307869846926
+      ],
+      "n_seeds_significant": 1,
+      "significant": false,
+      "above_random_init": false
+    },
+    "special_ratio": {
+      "kind": "continuous",
+      "metric": "r2",
+      "family": "lexical",
+      "n_seeds": 5,
+      "score": 0.02639271524145259,
+      "score_sd": 0.009908128734550234,
+      "ci": [
+        -0.10239094745305728,
+        0.12497501445085765
+      ],
+      "shuffle": -0.07653517069061136,
+      "shuffle_ci": [
+        -0.1868502910745226,
+        -0.026147611060298132
+      ],
+      "random_init": -0.021927628042268645,
+      "random_init_ci": [
+        -0.15942071950205333,
+        0.06426388402517817
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    },
+    "subdomain_count": {
+      "kind": "continuous",
+      "metric": "r2",
+      "family": "lexical",
+      "n_seeds": 5,
+      "score": -0.05765500252571663,
+      "score_sd": 0.06912979405340093,
+      "ci": [
+        -0.18306454607171102,
+        0.03651001555997756
+      ],
+      "shuffle": -0.11966794344886703,
+      "shuffle_ci": [
+        -0.2821173695071988,
+        -0.03303982832745929
+      ],
+      "random_init": -0.10683052710347973,
+      "random_init_ci": [
+        -0.25577101961866017,
+        -0.013650853192013151
+      ],
+      "n_seeds_significant": 0,
+      "significant": false,
+      "above_random_init": false
+    }
+  },
+  "summary": {
+    "n_targets": 104,
+    "n_significant": 0,
+    "frac_significant": 0.0,
+    "top10": [],
+    "label_probe": {
+      "kind": "binary",
+      "metric": "auroc",
+      "family": "label",
+      "n_seeds": 5,
+      "score": 0.8040893642195307,
+      "score_sd": 0.009601460754609912,
+      "ci": [
+        0.7425644179853672,
+        0.859730500526479
+      ],
+      "shuffle": 0.5178503480633991,
+      "shuffle_ci": [
+        0.4526218640547023,
+        0.5817248213771536
+      ],
+      "random_init": 0.5797776321553014,
+      "random_init_ci": [
+        0.5081776787296803,
+        0.6533058153632936
+      ],
+      "n_seeds_significant": 5,
+      "significant": true,
+      "above_random_init": true
+    }
+  },
+  "notes": [
+    "프로브가 유의해도 '문자를 복원했다'는 뜻은 아니다. 임베딩에서 그 속성이 선형으로 접근 가능하다는 뜻이다.",
+    "유의 = 모든 시드에서 (그룹 부트스트랩 CI 하한 > 셔플 CI 상한).",
+    "셔플 기준선은 그룹 단위로 목표를 갈아끼운다(행 단위 셔플은 기준선을 부풀린다)."
+  ],
+  "per_seed": [
+    {
+      "seed": 0,
+      "n_train": 1932,
+      "n_test": 400
+    },
+    {
+      "seed": 1,
+      "n_train": 1964,
+      "n_test": 392
+    },
+    {
+      "seed": 2,
+      "n_train": 1968,
+      "n_test": 400
+    },
+    {
+      "seed": 3,
+      "n_train": 1960,
+      "n_test": 376
+    },
+    {
+      "seed": 4,
+      "n_train": 1968,
+      "n_test": 418
+    }
+  ],
+  "runtime_sec": 1123.4
+}

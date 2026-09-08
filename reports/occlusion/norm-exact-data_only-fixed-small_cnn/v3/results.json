@@ -1,0 +1,657 @@
+{
+  "schema_version": 2,
+  "experiment": "causal_motif_occlusion",
+  "condition_id": "norm-exact-data_only-fixed-small_cnn",
+  "stratum": "v3",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "config": {
+    "seed_list": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "data": {
+      "csv_path": "/content/drive/MyDrive/qrphish/webphish.csv",
+      "category_col": "Category",
+      "url_col": "Data",
+      "positive_label": "spam"
+    },
+    "qr": {
+      "ec": "L",
+      "optimize": 0,
+      "border": 0,
+      "mask_mode": "fixed",
+      "mask_pattern": 0,
+      "pad_mode": "spec"
+    },
+    "condition": {
+      "url_mode": "norm",
+      "length_match": "exact",
+      "length_bucket": 1,
+      "features": "data_only",
+      "path_filter": false,
+      "shuffle_positions": false
+    },
+    "strata": [
+      "v2",
+      "v3",
+      "v4",
+      "v5plus"
+    ],
+    "stratum_rules": {
+      "primary_min_per_class": 1000,
+      "secondary_min_per_class": 300
+    },
+    "split": {
+      "ratios": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "max_group_frac": 0.05
+    },
+    "model": {
+      "arch": "small_cnn",
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "batch_size": 256,
+      "max_epochs": 60,
+      "patience": 8,
+      "class_weight": "balanced",
+      "amp": true
+    },
+    "eval": {
+      "n_bootstrap": 2000,
+      "primary_metric": "auroc"
+    },
+    "output_dir": "/content/drive/MyDrive/qrphish_out_v2/artifacts",
+    "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
+  },
+  "provenance": {
+    "git_sha": "78849487ddc238c309a12e794ce4c5f1dcdee293",
+    "qrphish_version": "0.1.0",
+    "timestamp": "2026-09-07T14:50:38.815528+00:00"
+  },
+  "motif_source": "/content/drive/MyDrive/qrphish_out_v2/reports/motifs/norm-exact-data_only-fixed/v3/enrichment.json",
+  "top_k": 10,
+  "size": 3,
+  "n_random_rep": 5,
+  "aggregate": {
+    "auroc_original": 0.8136107217261621,
+    "benign_motif": {
+      "auroc": 0.7864983500076697,
+      "d_auroc": -0.02711237171849228,
+      "mean_logit_delta": 0.8911847721846733,
+      "mean_logit_delta_phishing": 0.5082463083730969,
+      "mean_logit_delta_benign": 1.2741232359962498,
+      "d_auroc_sd_across_seeds": 0.008160485600181651,
+      "n_seeds_d_auroc_ci_excludes_0": 4,
+      "n_flipped_mean": 7.29312101908585,
+      "frac_samples_no_match": 0.002206079169420602
+    },
+    "phishing_motif": {
+      "auroc": 0.7890076704697104,
+      "d_auroc": -0.02460305125645159,
+      "mean_logit_delta": 0.17617886195046717,
+      "mean_logit_delta_phishing": -0.09984444959835223,
+      "mean_logit_delta_benign": 0.4522021734992866,
+      "d_auroc_sd_across_seeds": 0.01082172660492279,
+      "n_seeds_d_auroc_ci_excludes_0": 4,
+      "n_flipped_mean": 6.9318607526267755,
+      "frac_samples_no_match": 0.002644654694829285
+    },
+    "random": {
+      "auroc": 0.8092535056225726,
+      "d_auroc": -0.0043572161035893234,
+      "mean_logit_delta": 0.1838697839486952,
+      "mean_logit_delta_phishing": -0.07163504749697694,
+      "mean_logit_delta_benign": 0.4393746153943673,
+      "d_auroc_sd_across_seeds": 0.0013408555417150257,
+      "n_seeds_d_auroc_ci_excludes_0": 2,
+      "n_flipped_mean": 6.9318607526267755,
+      "frac_samples_no_match": 0.002644654694829285
+    },
+    "random_benign_matched": {
+      "auroc": 0.8084675254845859,
+      "d_auroc": -0.005143196241576243,
+      "mean_logit_delta": 0.2616784989066107,
+      "mean_logit_delta_phishing": -0.04091452575268939,
+      "mean_logit_delta_benign": 0.5642715235659109,
+      "d_auroc_sd_across_seeds": 0.0018802756991040718,
+      "n_seeds_d_auroc_ci_excludes_0": 2,
+      "n_flipped_mean": 7.29312101908585,
+      "frac_samples_no_match": 0.002206079169420602
+    }
+  },
+  "per_seed": [
+    {
+      "n_test": 1364,
+      "auroc_original": 0.7937238241845186,
+      "top_k": 10,
+      "size": 3,
+      "n_motifs_used": {
+        "phishing": 10,
+        "benign": 10
+      },
+      "conditions": {
+        "phishing_motif": {
+          "auroc": 0.7510728321909856,
+          "d_auroc": -0.04265099199353295,
+          "d_auroc_ci": [
+            -0.06151705579824705,
+            -0.01989181651613538
+          ],
+          "mean_logit_delta": 0.24741233960668013,
+          "mean_logit_delta_ci": [
+            0.007526586549662791,
+            0.5446023537190359
+          ],
+          "mean_logit_delta_phishing": -0.1732428386217513,
+          "mean_logit_delta_benign": 0.6680675178351115,
+          "n_flipped": {
+            "mean": 7.083577712609971,
+            "sd": 2.937330782642414,
+            "median": 7.0,
+            "max": 23,
+            "frac_zero": 0.001466275659824047
+          }
+        },
+        "benign_motif": {
+          "auroc": 0.7541193316190951,
+          "d_auroc": -0.03960449256542353,
+          "d_auroc_ci": [
+            -0.05575188517529297,
+            -0.02444935119363498
+          ],
+          "mean_logit_delta": 0.8421229140729236,
+          "mean_logit_delta_ci": [
+            0.6742574584934861,
+            1.0090859027762091
+          ],
+          "mean_logit_delta_phishing": 0.33224000594963776,
+          "mean_logit_delta_benign": 1.3520058221962095,
+          "n_flipped": {
+            "mean": 7.274193548387097,
+            "sd": 2.948911476306188,
+            "median": 7.0,
+            "max": 21,
+            "frac_zero": 0.0
+          }
+        },
+        "random": {
+          "auroc": 0.7880500683688652,
+          "d_auroc": -0.005673755815653436,
+          "d_auroc_ci": [
+            -0.011338557782647984,
+            0.0004780529315139806
+          ],
+          "mean_logit_delta": 0.212889392972211,
+          "mean_logit_delta_ci": [
+            0.10336502824288125,
+            0.33976290734696435
+          ],
+          "mean_logit_delta_phishing": -0.06491966414049574,
+          "mean_logit_delta_benign": 0.49069845008491775,
+          "n_flipped": {
+            "mean": 7.083577712609971,
+            "sd": 2.937330782642414,
+            "median": 7.0,
+            "max": 23,
+            "frac_zero": 0.001466275659824047
+          },
+          "n_repeat": 5
+        },
+        "random_benign_matched": {
+          "auroc": 0.7908428720083247,
+          "d_auroc": -0.002880952176193885,
+          "d_auroc_ci": [
+            -0.009373439043795489,
+            0.002534864797460925
+          ],
+          "mean_logit_delta": 0.2808895960122434,
+          "mean_logit_delta_ci": [
+            0.16472026102777912,
+            0.3821296566258689
+          ],
+          "mean_logit_delta_phishing": 0.006661863738665464,
+          "mean_logit_delta_benign": 0.5551173282858214,
+          "n_flipped": {
+            "mean": 7.274193548387097,
+            "sd": 2.948911476306188,
+            "median": 7.0,
+            "max": 21,
+            "frac_zero": 0.0
+          },
+          "n_repeat": 5
+        }
+      },
+      "seed": 0
+    },
+    {
+      "n_test": 1392,
+      "auroc_original": 0.7698878649755582,
+      "top_k": 10,
+      "size": 3,
+      "n_motifs_used": {
+        "phishing": 10,
+        "benign": 10
+      },
+      "conditions": {
+        "phishing_motif": {
+          "auroc": 0.7589798850574712,
+          "d_auroc": -0.010907979918087007,
+          "d_auroc_ci": [
+            -0.028616077958219986,
+            0.004084004872649917
+          ],
+          "mean_logit_delta": -0.02382678672170866,
+          "mean_logit_delta_ci": [
+            -0.1904781451103087,
+            0.1394733592904046
+          ],
+          "mean_logit_delta_phishing": -0.25990715008844545,
+          "mean_logit_delta_benign": 0.21225357664502814,
+          "n_flipped": {
+            "mean": 7.127873563218391,
+            "sd": 2.9765895137621894,
+            "median": 7.0,
+            "max": 23,
+            "frac_zero": 0.0014367816091954023
+          }
+        },
+        "benign_motif": {
+          "auroc": 0.7555695930770248,
+          "d_auroc": -0.014318271898533408,
+          "d_auroc_ci": [
+            -0.03305059547130771,
+            0.0018146420156152044
+          ],
+          "mean_logit_delta": 1.0710214010657924,
+          "mean_logit_delta_ci": [
+            0.9370723037919237,
+            1.2297528239910995
+          ],
+          "mean_logit_delta_phishing": 0.764352320465955,
+          "mean_logit_delta_benign": 1.37769048166563,
+          "n_flipped": {
+            "mean": 7.076867816091954,
+            "sd": 2.8338541370161834,
+            "median": 7.0,
+            "max": 20,
+            "frac_zero": 0.0014367816091954023
+          }
+        },
+        "random": {
+          "auroc": 0.765724088386841,
+          "d_auroc": -0.0041637765887171385,
+          "d_auroc_ci": [
+            -0.01126282400713,
+            0.0028446441631069692
+          ],
+          "mean_logit_delta": 0.23399133166919153,
+          "mean_logit_delta_ci": [
+            0.14638311475708585,
+            0.3099261072043504
+          ],
+          "mean_logit_delta_phishing": -0.021113449135720285,
+          "mean_logit_delta_benign": 0.48909611247410334,
+          "n_flipped": {
+            "mean": 7.127873563218391,
+            "sd": 2.9765895137621894,
+            "median": 7.0,
+            "max": 23,
+            "frac_zero": 0.0014367816091954023
+          },
+          "n_repeat": 5
+        },
+        "random_benign_matched": {
+          "auroc": 0.7648632580261594,
+          "d_auroc": -0.005024606949398769,
+          "d_auroc_ci": [
+            -0.01072792792809435,
+            0.00047495418688801443
+          ],
+          "mean_logit_delta": 0.3591677271402387,
+          "mean_logit_delta_ci": [
+            0.26881648496514604,
+            0.439252000285431
+          ],
+          "mean_logit_delta_phishing": 0.08046151469782765,
+          "mean_logit_delta_benign": 0.6378739395826498,
+          "n_flipped": {
+            "mean": 7.076867816091954,
+            "sd": 2.8338541370161834,
+            "median": 7.0,
+            "max": 20,
+            "frac_zero": 0.0014367816091954023
+          },
+          "n_repeat": 5
+        }
+      },
+      "seed": 1
+    },
+    {
+      "n_test": 1356,
+      "auroc_original": 0.8362440285065393,
+      "top_k": 10,
+      "size": 3,
+      "n_motifs_used": {
+        "phishing": 10,
+        "benign": 10
+      },
+      "conditions": {
+        "phishing_motif": {
+          "auroc": 0.8102805405452441,
+          "d_auroc": -0.025963487961295217,
+          "d_auroc_ci": [
+            -0.03901327453501709,
+            -0.01328204530756968
+          ],
+          "mean_logit_delta": 0.07451220149047959,
+          "mean_logit_delta_ci": [
+            -0.012489684201314449,
+            0.16206917216004108
+          ],
+          "mean_logit_delta_phishing": -0.08476292512277937,
+          "mean_logit_delta_benign": 0.23378732810373856,
+          "n_flipped": {
+            "mean": 6.820058997050148,
+            "sd": 2.8450773088396932,
+            "median": 7.0,
+            "max": 17,
+            "frac_zero": 0.004424778761061947
+          }
+        },
+        "benign_motif": {
+          "auroc": 0.8083814098380626,
+          "d_auroc": -0.027862618668476724,
+          "d_auroc_ci": [
+            -0.053969366949801804,
+            -0.0063544331789874495
+          ],
+          "mean_logit_delta": 0.9706407812283894,
+          "mean_logit_delta_ci": [
+            0.8416426030480477,
+            1.1318283733488246
+          ],
+          "mean_logit_delta_phishing": 0.7523170898951437,
+          "mean_logit_delta_benign": 1.188964472561635,
+          "n_flipped": {
+            "mean": 7.267699115044247,
+            "sd": 2.985933741838252,
+            "median": 7.0,
+            "max": 18,
+            "frac_zero": 0.003687315634218289
+          }
+        },
+        "random": {
+          "auroc": 0.8305183560880953,
+          "d_auroc": -0.005725672418444017,
+          "d_auroc_ci": [
+            -0.01137841522858673,
+            -0.0002886446264311117
+          ],
+          "mean_logit_delta": 0.20884354199038319,
+          "mean_logit_delta_ci": [
+            0.14869959701520874,
+            0.2665354218960939
+          ],
+          "mean_logit_delta_phishing": 0.040098488357214815,
+          "mean_logit_delta_benign": 0.37758859562355157,
+          "n_flipped": {
+            "mean": 6.820058997050148,
+            "sd": 2.8450773088396932,
+            "median": 7.0,
+            "max": 17,
+            "frac_zero": 0.004424778761061947
+          },
+          "n_repeat": 5
+        },
+        "random_benign_matched": {
+          "auroc": 0.8286235761958215,
+          "d_auroc": -0.00762045231071784,
+          "d_auroc_ci": [
+            -0.014363364194426253,
+            -0.00015545629383381627
+          ],
+          "mean_logit_delta": 0.23726775669176844,
+          "mean_logit_delta_ci": [
+            0.15072236429267444,
+            0.32252118907943383
+          ],
+          "mean_logit_delta_phishing": 0.028789512274627477,
+          "mean_logit_delta_benign": 0.44574600110890944,
+          "n_flipped": {
+            "mean": 7.267699115044247,
+            "sd": 2.985933741838252,
+            "median": 7.0,
+            "max": 18,
+            "frac_zero": 0.003687315634218289
+          },
+          "n_repeat": 5
+        }
+      },
+      "seed": 2
+    },
+    {
+      "n_test": 1352,
+      "auroc_original": 0.8361270613774027,
+      "top_k": 10,
+      "size": 3,
+      "n_motifs_used": {
+        "phishing": 10,
+        "benign": 10
+      },
+      "conditions": {
+        "phishing_motif": {
+          "auroc": 0.8195813346871608,
+          "d_auroc": -0.016545726690241902,
+          "d_auroc_ci": [
+            -0.02904237698007567,
+            -0.0054295187135653825
+          ],
+          "mean_logit_delta": 0.07671316381931008,
+          "mean_logit_delta_ci": [
+            -0.046502960365008006,
+            0.1891561590512335
+          ],
+          "mean_logit_delta_phishing": -0.18233756814634197,
+          "mean_logit_delta_benign": 0.33576389578496213,
+          "n_flipped": {
+            "mean": 6.805473372781065,
+            "sd": 2.884851207929889,
+            "median": 7.0,
+            "max": 19,
+            "frac_zero": 0.0029585798816568047
+          }
+        },
+        "benign_motif": {
+          "auroc": 0.8117450369384827,
+          "d_auroc": -0.024382024438920014,
+          "d_auroc_ci": [
+            -0.038067781169472056,
+            -0.009870756841862284
+          ],
+          "mean_logit_delta": 0.7235818790632146,
+          "mean_logit_delta_ci": [
+            0.5748858216264492,
+            0.8703182027152232
+          ],
+          "mean_logit_delta_phishing": 0.36373368393872263,
+          "mean_logit_delta_benign": 1.0834300741877065,
+          "n_flipped": {
+            "mean": 7.340236686390533,
+            "sd": 2.980892196503392,
+            "median": 7.0,
+            "max": 18,
+            "frac_zero": 0.004437869822485207
+          }
+        },
+        "random": {
+          "auroc": 0.8340744371695668,
+          "d_auroc": -0.002052624207835918,
+          "d_auroc_ci": [
+            -0.006894430845934235,
+            0.002576739645661006
+          ],
+          "mean_logit_delta": 0.06838506309738515,
+          "mean_logit_delta_ci": [
+            -0.00922295855436496,
+            0.15106646013757524
+          ],
+          "mean_logit_delta_phishing": -0.19516281836746077,
+          "mean_logit_delta_benign": 0.331932944562231,
+          "n_flipped": {
+            "mean": 6.805473372781065,
+            "sd": 2.884851207929889,
+            "median": 7.0,
+            "max": 19,
+            "frac_zero": 0.0029585798816568047
+          },
+          "n_repeat": 5
+        },
+        "random_benign_matched": {
+          "auroc": 0.8292426735758551,
+          "d_auroc": -0.006884387801547542,
+          "d_auroc_ci": [
+            -0.012108377971390994,
+            -0.0006626289022368091
+          ],
+          "mean_logit_delta": 0.1330405306555992,
+          "mean_logit_delta_ci": [
+            -0.06675477656757096,
+            0.27865378547702024
+          ],
+          "mean_logit_delta_phishing": -0.24724173649564143,
+          "mean_logit_delta_benign": 0.5133227978068399,
+          "n_flipped": {
+            "mean": 7.340236686390533,
+            "sd": 2.980892196503392,
+            "median": 7.0,
+            "max": 18,
+            "frac_zero": 0.004437869822485207
+          },
+          "n_repeat": 5
+        }
+      },
+      "seed": 3
+    },
+    {
+      "n_test": 1362,
+      "auroc_original": 0.8320708295867913,
+      "top_k": 10,
+      "size": 3,
+      "n_motifs_used": {
+        "phishing": 10,
+        "benign": 10
+      },
+      "conditions": {
+        "phishing_motif": {
+          "auroc": 0.8051237598676905,
+          "d_auroc": -0.02694706971910088,
+          "d_auroc_ci": [
+            -0.045753914930755785,
+            -0.011687624243086206
+          ],
+          "mean_logit_delta": 0.5060833915575748,
+          "mean_logit_delta_ci": [
+            0.3472029416677925,
+            0.7117268971724767
+          ],
+          "mean_logit_delta_phishing": 0.20102823398755684,
+          "mean_logit_delta_benign": 0.8111385491275928,
+          "n_flipped": {
+            "mean": 6.822320117474303,
+            "sd": 2.8241409319033064,
+            "median": 7.0,
+            "max": 19,
+            "frac_zero": 0.002936857562408223
+          }
+        },
+        "benign_motif": {
+          "auroc": 0.8026763785656836,
+          "d_auroc": -0.029394451021107715,
+          "d_auroc_ci": [
+            -0.04880510515300518,
+            -0.01046095918592178
+          ],
+          "mean_logit_delta": 0.8485568854930468,
+          "mean_logit_delta_ci": [
+            0.6912520250901779,
+            1.0150431728001392
+          ],
+          "mean_logit_delta_phishing": 0.32858844161602546,
+          "mean_logit_delta_benign": 1.368525329370068,
+          "n_flipped": {
+            "mean": 7.506607929515418,
+            "sd": 3.0937909170387092,
+            "median": 7.0,
+            "max": 18,
+            "frac_zero": 0.0014684287812041115
+          }
+        },
+        "random": {
+          "auroc": 0.8279005780994952,
+          "d_auroc": -0.004170251487296106,
+          "d_auroc_ci": [
+            -0.008835823008861812,
+            -0.0002686407657490771
+          ],
+          "mean_logit_delta": 0.19523959001430505,
+          "mean_logit_delta_ci": [
+            0.10574980005531058,
+            0.28799599562004435
+          ],
+          "mean_logit_delta_phishing": -0.11707779419842271,
+          "mean_logit_delta_benign": 0.5075569742270329,
+          "n_flipped": {
+            "mean": 6.822320117474303,
+            "sd": 2.8241409319033064,
+            "median": 7.0,
+            "max": 19,
+            "frac_zero": 0.002936857562408223
+          },
+          "n_repeat": 5
+        },
+        "random_benign_matched": {
+          "auroc": 0.8287652476167682,
+          "d_auroc": -0.0033055819700231748,
+          "d_auroc_ci": [
+            -0.008583550391887828,
+            0.0027226056063227163
+          ],
+          "mean_logit_delta": 0.2980268840332038,
+          "mean_logit_delta_ci": [
+            0.1735492628108774,
+            0.394039045123822
+          ],
+          "mean_logit_delta_phishing": -0.07324378297892611,
+          "mean_logit_delta_benign": 0.6692975510453338,
+          "n_flipped": {
+            "mean": 7.506607929515418,
+            "sd": 3.0937909170387092,
+            "median": 7.0,
+            "max": 18,
+            "frac_zero": 0.0014684287812041115
+          },
+          "n_repeat": 5
+        }
+      },
+      "seed": 4
+    }
+  ],
+  "notes": [
+    "뒤집은 격자는 더 이상 유효한 QR이 아니다. RS 오류정정 덕에 실제 스캐너는 여전히 디코딩할 수 있지만, 이것은 모델 입력에 대한 개입일 뿐 실제 QR 변형이 아니다.",
+    "무작위 대조는 각 샘플에서 phishing motif가 맞은 개수와 같은 수를 뒤집는다.",
+    "매칭은 원본 격자에서 한 번에 계산한 뒤 동시에 뒤집는다(순서 의존 제거)."
+  ],
+  "runtime_sec": 141.4
+}

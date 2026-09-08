@@ -9,15 +9,20 @@ from qrphish.evaluate import (
     acc_at,
     auroc,
     bootstrap_p_value,
+    bootstrap_with_resamples,
     cluster_bootstrap,
+    cluster_bootstrap_by_seed,
     f1_at,
     group_perf_iqr,
     holm,
     metrics_from_probs,
     paired_cluster_bootstrap,
+    paired_cluster_bootstrap_by_seed,
     percentile_ci,
     pick_threshold,
+    precompute_cluster_resamples,
     unpaired_delta_bootstrap,
+    unpaired_delta_bootstrap_by_seed,
 )
 
 
@@ -198,3 +203,159 @@ def test_bootstrap_p_value_matches_ci_inversion() -> None:
         for alpha in (0.01, 0.05, 0.10):
             lo, _, _ = percentile_ci(v, alpha)
             assert (p < alpha) == (lo > 0.0), (shift, alpha, p, lo)
+
+
+# ------------------------------------------- 사전 계산 리샘플(프로브 고속 경로)
+def test_precompute_resamples_matches_cluster_bootstrap() -> None:
+    """리샘플을 미리 뽑아 재사용해도 ``cluster_bootstrap``과 같은 CI가 나와야 한다.
+
+    프로브 스위트는 목표마다 리샘플을 다시 뽑는 대신 시드·층당 한 번 뽑아 공유한다.
+    같은 시드·같은 그룹 배열이면 두 경로의 리샘플 규약이 같으므로 결과도 같다.
+    """
+    rng = np.random.default_rng(3)
+    groups = np.repeat(np.arange(25), 8)
+    y = rng.integers(0, 2, size=groups.size)
+    p = y * 0.6 + rng.normal(size=groups.size) * 0.5
+
+    ref = cluster_bootstrap(y, p, groups, auroc, n_boot=64, seed=7)
+    rs = precompute_cluster_resamples(groups, n_boot=64, seed=7)
+    got = bootstrap_with_resamples(y, p, rs, auroc)
+    assert got["point"] == pytest.approx(ref["point"])
+    assert got["lo"] == pytest.approx(ref["lo"])
+    assert got["hi"] == pytest.approx(ref["hi"])
+    assert np.allclose(got["samples"], ref["samples"], equal_nan=True)
+
+
+def test_fast_auroc_path_matches_sklearn_with_ties() -> None:
+    """AUROC 고속 경로(순위 공식)는 동점이 있어도 ``roc_auc_score``와 같은 값이다."""
+    rng = np.random.default_rng(0)
+    groups = np.repeat(np.arange(12), 5)
+    y = rng.integers(0, 2, size=groups.size)
+    # 값을 일부러 굵게 반올림해 동점을 많이 만든다.
+    p = np.round(rng.normal(size=groups.size), 1)
+    rs = precompute_cluster_resamples(groups, n_boot=32, seed=1)
+    fast = bootstrap_with_resamples(y, p, rs, auroc)["samples"]
+    slow = np.array([auroc(y[i], p[i]) for i in rs])
+    assert np.allclose(fast, slow, equal_nan=True)
+
+
+def test_bootstrap_with_resamples_accepts_packed_form() -> None:
+    """``(flat, offsets)``로 이어 붙인 형태도 목록과 같은 결과를 낸다(병렬 전달용)."""
+    rng = np.random.default_rng(5)
+    groups = np.repeat(np.arange(10), 6)
+    y = rng.integers(0, 2, size=groups.size)
+    p = rng.normal(size=groups.size)
+    rs = precompute_cluster_resamples(groups, n_boot=16, seed=2)
+    flat = np.concatenate(rs)
+    offsets = np.concatenate(([0], np.cumsum([r.size for r in rs])))
+    a = bootstrap_with_resamples(y, p, rs, auroc)
+    b = bootstrap_with_resamples(y, p, (flat, offsets), auroc)
+    assert np.allclose(a["samples"], b["samples"], equal_nan=True)
+
+
+# ------------------------------------------------- 시드 층화 클러스터 부트스트랩
+def _two_seed_offset_preds():
+    """순위는 같고 로짓 오프셋만 5 차이 나는 두 시드의 합성 test 예측."""
+    rng = np.random.default_rng(11)
+    n = 400
+    y1 = np.repeat([0, 1], n // 2)
+    score = rng.normal(size=n) + y1 * 1.5
+    groups1 = np.array([f"g{i % 40}" for i in range(n)])
+    y = np.concatenate([y1, y1])
+    p = np.concatenate([score, score + 5.0])  # 시드1은 척도만 밀린 같은 순위
+    groups = np.concatenate([groups1, groups1])
+    seeds = np.concatenate([np.zeros(n, dtype=int), np.ones(n, dtype=int)])
+    return y, p, groups, seeds, y1, score
+
+
+def test_seed_stratified_point_equals_mean_of_per_seed_auroc() -> None:
+    """시드 간 로짓 오프셋이 있으면 옛 풀링은 AUROC가 떨어지고, 시드 층화는 시드 평균과 같다."""
+    y, p, groups, seeds, y1, score = _two_seed_offset_preds()
+    per_seed = [auroc(y1, score), auroc(y1, score + 5.0)]
+    assert per_seed[0] == pytest.approx(per_seed[1])  # 순위가 같으니 시드별 AUROC도 같다
+
+    old = auroc(y, p)  # (seed, row)를 그냥 이어 붙인 옛 방식
+    new = cluster_bootstrap_by_seed(y, p, groups, seeds, auroc, n_boot=64, seed=0)
+
+    assert new["point"] == pytest.approx(float(np.mean(per_seed)))
+    assert old < new["point"] - 0.05  # 옛 방식은 순위가 섞여 체계적으로 낮다
+    assert new["per_seed"] == pytest.approx(per_seed)
+    assert new["pooling"] == "seed_stratified"
+    # CI가 점추정 근처에 오고, 옛 풀링 값(허수)을 포함하지 않는다.
+    assert new["lo"] <= new["point"] <= new["hi"]
+    assert not (new["lo"] <= old <= new["hi"])
+
+
+def test_seed_stratified_is_deterministic() -> None:
+    y, p, groups, seeds, _, _ = _two_seed_offset_preds()
+    a = cluster_bootstrap_by_seed(y, p, groups, seeds, auroc, n_boot=48, seed=3)
+    b = cluster_bootstrap_by_seed(y, p, groups, seeds, auroc, n_boot=48, seed=3)
+    assert np.allclose(a["samples"], b["samples"], equal_nan=True)
+    assert a["lo"] == pytest.approx(b["lo"])
+
+
+def test_seed_stratified_matches_cluster_bootstrap_with_single_seed() -> None:
+    """시드가 하나면 시드 층화는 그냥 그룹 클러스터 부트스트랩과 같은 점추정을 낸다."""
+    rng = np.random.default_rng(4)
+    groups = np.repeat(np.arange(20), 10)
+    y = rng.integers(0, 2, size=groups.size)
+    p = y * 0.5 + rng.normal(size=groups.size)
+    seeds = np.zeros(groups.size, dtype=int)
+    a = cluster_bootstrap(y, p, groups, auroc, n_boot=64, seed=1)
+    b = cluster_bootstrap_by_seed(y, p, groups, seeds, auroc, n_boot=64, seed=1)
+    assert b["point"] == pytest.approx(a["point"])
+    assert np.allclose(b["samples"], a["samples"], equal_nan=True)
+
+
+def test_paired_seed_stratified_zero_for_identical_predictions() -> None:
+    """같은 예측 두 벌의 쌍체 Δ는 점추정도 CI도 정확히 0이다."""
+    y, p, groups, seeds, _, _ = _two_seed_offset_preds()
+    r = paired_cluster_bootstrap_by_seed(y, p, p, groups, seeds, auroc, n_boot=32, seed=0)
+    assert r["point"] == pytest.approx(0.0)
+    assert r["lo"] == pytest.approx(0.0)
+    assert r["hi"] == pytest.approx(0.0)
+    assert r["paired"] is True
+
+
+def test_paired_seed_stratified_equals_mean_of_per_seed_delta() -> None:
+    """쌍체 Δ의 점추정은 시드별 ΔAUROC의 평균이다(시드를 섞은 값이 아니다)."""
+    y, p_a, groups, seeds, y1, score = _two_seed_offset_preds()
+    rng = np.random.default_rng(12)
+    p_b = p_a + rng.normal(scale=0.4, size=p_a.size)
+    r = paired_cluster_bootstrap_by_seed(y, p_a, p_b, groups, seeds, auroc, n_boot=32, seed=0)
+    expected = np.mean(
+        [
+            auroc(y[seeds == s], p_a[seeds == s]) - auroc(y[seeds == s], p_b[seeds == s])
+            for s in (0, 1)
+        ]
+    )
+    assert r["point"] == pytest.approx(float(expected))
+
+
+def test_unpaired_seed_stratified_delta_of_seed_means() -> None:
+    """비쌍체 Δ의 점추정은 두 조건의 시드 평균 AUROC 차이다."""
+    y, p_a, groups, seeds, _, _ = _two_seed_offset_preds()
+    rng = np.random.default_rng(13)
+    p_b = rng.normal(size=p_a.size)
+    r = unpaired_delta_bootstrap_by_seed(
+        y, p_a, groups, seeds, y, p_b, groups, seeds, auroc, n_boot=32, seed=0
+    )
+    mean_a = np.mean([auroc(y[seeds == s], p_a[seeds == s]) for s in (0, 1)])
+    mean_b = np.mean([auroc(y[seeds == s], p_b[seeds == s]) for s in (0, 1)])
+    assert r["point"] == pytest.approx(float(mean_a - mean_b))
+    assert r["paired"] is False
+    assert r["pooling"] == "seed_stratified"
+
+
+def test_seed_stratified_resamples_groups_across_seeds_together() -> None:
+    """리샘플 단위는 그룹이다 — 한 그룹이 여러 시드에 걸쳐 있으면 함께 뽑힌다."""
+    from qrphish.evaluate import _block_indices, _seed_blocks
+
+    groups = np.array(["a", "a", "b", "b", "a", "b"])
+    seeds = np.array([0, 0, 0, 0, 1, 1])
+    n_codes, blocks = _seed_blocks(groups, seeds)
+    assert n_codes == 2
+    assert [int(b["seed"]) for b in blocks] == [0, 1]
+    pick = np.array([0, 0])  # 그룹 "a"를 두 번
+    assert sorted(blocks[0]["rows"][_block_indices(blocks[0], pick)]) == [0, 0, 1, 1]
+    assert sorted(blocks[1]["rows"][_block_indices(blocks[1], pick)]) == [4, 4]

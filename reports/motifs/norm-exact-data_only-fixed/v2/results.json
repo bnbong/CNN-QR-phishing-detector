@@ -19,7 +19,7 @@
       4
     ],
     "data": {
-      "csv_path": "data/webphish.csv",
+      "csv_path": "/content/drive/MyDrive/qrphish/webphish.csv",
       "category_col": "Category",
       "url_col": "Data",
       "positive_label": "spam"
@@ -72,13 +72,13 @@
       "n_bootstrap": 2000,
       "primary_metric": "auroc"
     },
-    "output_dir": "artifacts",
-    "reports_dir": "reports"
+    "output_dir": "/content/drive/MyDrive/qrphish_out_v2/artifacts",
+    "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
   },
   "provenance": {
-    "git_sha": "8e4c609ad8ab3e2356a125ab477e4e8d44b7b5dc",
+    "git_sha": "78849487ddc238c309a12e794ce4c5f1dcdee293",
     "qrphish_version": "0.1.0",
-    "timestamp": "2026-09-07T10:32:30.649948+00:00"
+    "timestamp": "2026-09-07T14:42:04.856792+00:00"
   },
   "data": {
     "n_total": 12118,
@@ -154,12 +154,12 @@
       "dim": 2560
     },
     "pyramid3_labelshuffle": {
-      "auroc_mean": 0.5046714100094455,
-      "auroc_sd_across_seeds": 0.03249482124391246,
-      "auroc_pooled": 0.5058893145620533,
+      "auroc_mean": 0.5046704648298613,
+      "auroc_sd_across_seeds": 0.03249308205856802,
+      "auroc_pooled": 0.5058913879587534,
       "auroc_pooled_ci": [
-        0.48045732120755735,
-        0.5289399355093346
+        0.48044671889502066,
+        0.5289807659390418
       ],
       "n_pooled": 9108,
       "f1_mean": 0.66597615192185,
@@ -570,13 +570,13 @@
           "dim": 2560
         },
         "pyramid3_labelshuffle": {
-          "auroc": 0.5525059073724008,
-          "auprc": 0.5555096568048629,
+          "auroc": 0.5525011814744801,
+          "auprc": 0.5555309202142844,
           "f1": 0.6669090909090909,
           "acc": 0.5021739130434782,
           "auroc_ci": [
-            0.5119225279945728,
-            0.5928170323573112
+            0.51163033668184,
+            0.5932640843186467
           ],
           "C": 10.0,
           "dim": 2560
@@ -584,5 +584,5 @@
       }
     }
   ],
-  "runtime_sec": 189.3
+  "runtime_sec": 445.4
 }

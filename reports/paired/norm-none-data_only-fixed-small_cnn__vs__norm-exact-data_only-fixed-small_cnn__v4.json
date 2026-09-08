@@ -1,0 +1,19 @@
+{
+  "cond_a": "norm-none-data_only-fixed-small_cnn",
+  "cond_b": "norm-exact-data_only-fixed-small_cnn",
+  "stratum": "v4",
+  "paired": false,
+  "n_pooled": 2945,
+  "auroc_a": 0.7867355195376303,
+  "auroc_b": 0.7574927817988761,
+  "delta_auroc": 0.029242737738754188,
+  "delta_ci": [
+    -0.020429558538287783,
+    0.078254419443403
+  ],
+  "p_value": 0.26286856571714146,
+  "alternative": "greater",
+  "n_boot": 2000,
+  "n_valid": 2000,
+  "caveat": "두 조건의 test 표본 집합이 다르다(표본 수·클래스 구성·URL 집합이 함께 변한다). 따라서 이 차이는 단일 개입의 효과가 아니며 쌍체 비교도 불가능하다."
+}

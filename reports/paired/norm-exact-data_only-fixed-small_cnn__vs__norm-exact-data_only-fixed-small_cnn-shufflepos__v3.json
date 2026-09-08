@@ -1,0 +1,19 @@
+{
+  "cond_a": "norm-exact-data_only-fixed-small_cnn",
+  "cond_b": "norm-exact-data_only-fixed-small_cnn-shufflepos",
+  "stratum": "v3",
+  "paired": true,
+  "n_pooled": 6826,
+  "auroc_a": 0.8038387805403393,
+  "auroc_b": 0.626061578894369,
+  "delta_auroc": 0.17777720164597033,
+  "delta_ci": [
+    0.14294481182384586,
+    0.2112119963829788
+  ],
+  "p_value": 0.0009995002498750624,
+  "alternative": "greater",
+  "n_boot": 2000,
+  "n_valid": 2000,
+  "caveat": "같은 split의 같은 test 행을 공유하므로 쌍체 비교가 성립한다."
+}

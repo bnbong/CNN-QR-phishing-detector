@@ -19,7 +19,7 @@
       4
     ],
     "data": {
-      "csv_path": "data/webphish.csv",
+      "csv_path": "/content/drive/MyDrive/qrphish/webphish.csv",
       "category_col": "Category",
       "url_col": "Data",
       "positive_label": "spam"
@@ -72,13 +72,13 @@
       "n_bootstrap": 2000,
       "primary_metric": "auroc"
     },
-    "output_dir": "artifacts",
-    "reports_dir": "reports"
+    "output_dir": "/content/drive/MyDrive/qrphish_out_v2/artifacts",
+    "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
   },
   "provenance": {
-    "git_sha": "8e4c609ad8ab3e2356a125ab477e4e8d44b7b5dc",
+    "git_sha": "78849487ddc238c309a12e794ce4c5f1dcdee293",
     "qrphish_version": "0.1.0",
-    "timestamp": "2026-09-07T10:29:30.116364+00:00"
+    "timestamp": "2026-09-07T14:34:53.476678+00:00"
   },
   "data": {
     "n_total": 9178,
@@ -154,12 +154,12 @@
       "dim": 2560
     },
     "pyramid3_labelshuffle": {
-      "auroc_mean": 0.5146474297606227,
-      "auroc_sd_across_seeds": 0.028627116850034714,
-      "auroc_pooled": 0.514642356498897,
+      "auroc_mean": 0.5146651112819235,
+      "auroc_sd_across_seeds": 0.028625636807983582,
+      "auroc_pooled": 0.5147254568350842,
       "auroc_pooled_ci": [
-        0.49325293802953296,
-        0.53438766539843
+        0.4933463455514224,
+        0.5344812838242777
       ],
       "n_pooled": 6826,
       "f1_mean": 0.6664049044286797,
@@ -570,19 +570,19 @@
           "dim": 2560
         },
         "pyramid3_labelshuffle": {
-          "auroc": 0.5126951166656963,
-          "auprc": 0.5048965226026061,
+          "auroc": 0.5127835242722005,
+          "auprc": 0.5050185063652974,
           "f1": 0.6666666666666666,
           "acc": 0.5,
           "auroc_ci": [
-            0.4707138081428743,
-            0.5484428379612231
+            0.47103039946384884,
+            0.5482858236275446
           ],
-          "C": 10.0,
+          "C": 1.0,
           "dim": 2560
         }
       }
     }
   ],
-  "runtime_sec": 172.0
+  "runtime_sec": 399.4
 }

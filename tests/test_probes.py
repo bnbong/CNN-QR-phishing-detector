@@ -9,12 +9,14 @@ import torch
 from qrphish.models import SmallCNN
 from qrphish.probes import (
     KEYWORDS,
+    PROBE_N_BOOT,
     build_targets,
     embed,
     fit_binary_probe,
     group_shuffle,
     r2_score_fn,
     run_probe_suite,
+    standardize,
     top_char_ngrams,
 )
 from tests.test_explain import Setup, build_trained
@@ -186,3 +188,84 @@ def test_probe_ngram_universe_is_fixed_across_seeds(setup: Setup) -> None:
     a = top_char_ngrams(setup.urls[tr], size=3, top=10)
     b = top_char_ngrams(setup.urls[tr], size=3, top=10)
     assert a == b and len(a) == len(set(a))
+
+
+# ------------------------------------------------------- 속도 최적화 경로(의미 보존)
+def test_standardize_matches_pipeline_scaler(setup: Setup) -> None:
+    """시드당 한 번 적합한 스케일러가 파이프라인 안 StandardScaler와 같은 값을 낸다."""
+    from sklearn.preprocessing import StandardScaler
+
+    tr = np.nonzero(setup.split == 0)[0]
+    te = np.nonzero(setup.split == 2)[0]
+    z_tr, z_te = embed(setup.model, setup.ds, tr), embed(setup.model, setup.ds, te)
+    a_tr, a_te = standardize(z_tr, z_te)
+    sc = StandardScaler().fit(z_tr)
+    assert np.allclose(a_tr, sc.transform(z_tr))
+    assert np.allclose(a_te, sc.transform(z_te))
+
+
+def test_fit_binary_probe_scale_flag_equivalent(setup: Setup) -> None:
+    """미리 표준화한 뒤 ``scale=False``로 적합해도 파이프라인과 같은 결정값(순위)이 나온다."""
+    tr = np.nonzero(setup.split == 0)[0]
+    te = np.nonzero(setup.split == 2)[0]
+    z_tr, z_te = embed(setup.model, setup.ds, tr), embed(setup.model, setup.ds, te)
+    t = setup.y[tr]
+    a = fit_binary_probe(z_tr, t, z_te)
+    s_tr, s_te = standardize(z_tr, z_te)
+    b = fit_binary_probe(s_tr, t, s_te, scale=False)
+    assert np.allclose(a, b, atol=1e-8)
+
+
+def test_probe_n_boot_default_is_200() -> None:
+    """부트스트랩 기본 반복 수는 200이다(결과 JSON에도 이 값이 기록된다)."""
+    assert PROBE_N_BOOT == 200
+
+
+def test_probe_suite_parallel_matches_serial(setup: Setup) -> None:
+    """joblib 병렬 경로는 직렬 경로와 **같은 결과**를 낸다(결정성).
+
+    시드는 목표 인덱스에서 파생하므로 실행 순서·워커 수와 무관하다.
+    """
+    tr = np.nonzero(setup.split == 0)[0]
+    te = np.nonzero(setup.split == 2)[0]
+    grams = top_char_ngrams(setup.urls[tr], size=3, top=6)
+    targets = build_targets(setup.urls, setup.y, grams)
+    z_tr, z_te = embed(setup.model, setup.ds, tr), embed(setup.model, setup.ds, te)
+    torch.manual_seed(7)
+    rnd = SmallCNN(in_ch=2).eval()
+    zr_tr, zr_te = embed(rnd, setup.ds, tr), embed(rnd, setup.ds, te)
+
+    kw = dict(seed=0, n_boot=40, min_positive=5)
+    a = run_probe_suite(z_tr, z_te, zr_tr, zr_te, targets, tr, te, setup.groups,
+                        n_jobs=1, **kw)
+    b = run_probe_suite(z_tr, z_te, zr_tr, zr_te, targets, tr, te, setup.groups,
+                        n_jobs=2, **kw)
+    assert set(a) == set(b)
+    for name, row in a.items():
+        assert row == b[name]
+
+
+def test_probe_significance_rule_is_unchanged(setup: Setup) -> None:
+    """유의 = CI 하한 > max(셔플 CI 상한, 무작위 초기화 CI 상한) — 저장된 값으로 재검산."""
+    tr = np.nonzero(setup.split == 0)[0]
+    te = np.nonzero(setup.split == 2)[0]
+    targets = build_targets(setup.urls, setup.y, top_char_ngrams(setup.urls[tr], size=3, top=4))
+    z_tr, z_te = embed(setup.model, setup.ds, tr), embed(setup.model, setup.ds, te)
+    torch.manual_seed(11)
+    rnd = SmallCNN(in_ch=2).eval()
+    zr_tr, zr_te = embed(rnd, setup.ds, tr), embed(rnd, setup.ds, te)
+    res = run_probe_suite(z_tr, z_te, zr_tr, zr_te, targets, tr, te, setup.groups,
+                          seed=0, n_boot=40, min_positive=5, n_jobs=1)
+    checked = 0
+    for row in res.values():
+        if "skipped" in row:
+            continue
+        bars = [v for v in (row["shuffle_ci"][1], row["random_init_ci"][1]) if np.isfinite(v)]
+        bar = max(bars) if bars else float("nan")
+        expect = bool(np.isfinite(row["ci"][0]) and np.isfinite(bar) and row["ci"][0] > bar)
+        assert row["significant"] is expect
+        assert row["above_random_init"] is bool(
+            np.isfinite(row["random_init_ci"][1]) and row["ci"][0] > row["random_init_ci"][1]
+        )
+        checked += 1
+    assert checked > 0
