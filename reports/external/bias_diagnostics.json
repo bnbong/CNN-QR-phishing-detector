@@ -2,125 +2,11 @@
   "collect_date": "2026-09-08",
   "dedup_mode": "etld1",
   "drop_benign_on_phish_domains": true,
-  "main": {
-    "benign": {
-      "n": 60824,
-      "path_depth_ge1_frac": 0.939464684992766,
-      "path_depth_mean": 2.2218696567144547,
-      "url_bytes_len": {
-        "mean": 62.87646323819545,
-        "p10": 25.0,
-        "median": 51.0,
-        "p90": 104.0,
-        "max": 1911
-      },
-      "scheme_frac": 0.0,
-      "n_groups": 9108,
-      "top5_group_frac": 0.0006576351440220965,
-      "top_groups": {
-        "muvfl.com": 8,
-        "libretexts.org": 8,
-        "theinspirationedit.com": 8,
-        "ligo.org": 8,
-        "oecd-nea.org": 8,
-        "novusbio.com": 8,
-        "spar-international.com": 8,
-        "freelance.ru": 8,
-        "flexshopper.com": 8,
-        "knowunity.de": 8
-      }
-    },
-    "phishing": {
-      "n": 31584,
-      "path_depth_ge1_frac": 0.45982142857142855,
-      "path_depth_mean": 0.9663120567375887,
-      "url_bytes_len": {
-        "mean": 42.53403622087133,
-        "p10": 14.0,
-        "median": 34.0,
-        "p90": 74.0,
-        "max": 9256
-      },
-      "scheme_frac": 0.0,
-      "n_groups": 10854,
-      "top5_group_frac": 0.335612968591692,
-      "top_groups": {
-        "pages.dev": 6050,
-        "vercel.app": 2687,
-        "icefactory.cl": 954,
-        "roblox.com.ml": 530,
-        "framer.app": 379,
-        "replit.app": 320,
-        "typedream.app": 291,
-        "roblox.com.mu": 273,
-        "arcadejafet.cl": 266,
-        "roblox.com.bi": 262
-      }
-    },
-    "gate_passed": true,
-    "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-    "output_csv": "data/external/external_primary_2026-09-08.csv",
-    "benign_cleaning": "clean"
-  },
-  "ext_b2": {
-    "benign": {
-      "n": 47268,
-      "path_depth_ge1_frac": 0.0,
-      "path_depth_mean": 0.0,
-      "url_bytes_len": {
-        "mean": 12.351865955826351,
-        "p10": 8.0,
-        "median": 12.0,
-        "p90": 17.0,
-        "max": 66
-      },
-      "scheme_frac": 0.0,
-      "n_groups": 47268,
-      "top5_group_frac": 0.00010577980875010578,
-      "top_groups": {
-        "cloudflare.com": 1,
-        "akamai.net": 1,
-        "ezviz7.com": 1,
-        "fbcdn.net": 1,
-        "dzen.ru": 1,
-        "domaincontrol.com": 1,
-        "googlevideo.com": 1,
-        "hicloudcam.com": 1,
-        "akamaiedge.net": 1,
-        "gtld-servers.net": 1
-      }
-    },
-    "phishing": {
-      "n": 554995,
-      "path_depth_ge1_frac": 0.7598230614690222,
-      "path_depth_mean": 2.098463950125677,
-      "url_bytes_len": {
-        "mean": 71.5096802673898,
-        "p10": 18.0,
-        "median": 46.0,
-        "p90": 131.0,
-        "max": 9256
-      },
-      "scheme_frac": 1.8018180343967062e-06,
-      "n_groups": 227570,
-      "top5_group_frac": 0.0891143163451923,
-      "top_groups": {
-        "pages.dev": 21792,
-        "vercel.app": 11459,
-        "r2.dev": 6599,
-        "qwo231sdx.club": 5322,
-        "gitbook.io": 4286,
-        "fleek.co": 3510,
-        "ewp.live": 3166,
-        "deliverylifesupport.com": 1768,
-        "whatsmapp.download": 1749,
-        "attemplate.com": 1728
-      }
-    },
-    "gate_passed": false,
-    "gate_note": "경고: benign 경로 보유율(0.000)이 phishing(0.760)보다 낮다. WebPhish와 같은 방향의 편향이므로 전이 실험은 검증이 아니다.",
-    "output_csv": "data/external/external_b2_2026-09-08.csv",
-    "benign_cleaning": "clean"
+  "gate_rule": "flags_v2",
+  "regenerated_from": "assembled set CSVs (--rediagnose)",
+  "reference": {
+    "webphish_csv": "data/webphish.csv",
+    "n_rows": 41447
   },
   "sets": {
     "primary": {
@@ -178,10 +64,41 @@
           "roblox.com.bi": 262
         }
       },
-      "gate_passed": true,
-      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-      "output_csv": "data/external/external_primary_2026-09-08.csv",
-      "benign_cleaning": "clean"
+      "direction": {
+        "external": {
+          "benign": 0.939464684992766,
+          "phishing": 0.45982142857142855
+        },
+        "webphish": {
+          "benign": 0.9973112355093225,
+          "phishing": 0.6931769722814499
+        },
+        "diff_external": 0.4796432564213375,
+        "sign_external": 1,
+        "eps": 0.02,
+        "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+        "rule_version": "common_sign_v2",
+        "diff_webphish": 0.3041342632278726,
+        "sign_webphish": 1,
+        "same_direction": true,
+        "common_direction_bias": true,
+        "ok": false,
+        "checked": true,
+        "note": "두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.480, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다"
+      },
+      "common_direction_bias": true,
+      "path_shortcut": {
+        "path_lr_auroc": 0.8148374776465683,
+        "threshold": 0.8,
+        "path_shortcut_dominant": true,
+        "note": "path_lr AUROC=0.8148 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+        "basis": "in_sample_on_this_set"
+      },
+      "path_shortcut_dominant": true,
+      "gate_rule": "flags_v2",
+      "gate_passed": false,
+      "gate_note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.480, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 플래그 ON — path_lr AUROC=0.8148 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "output_csv": "data/external/external_primary_2026-09-08.csv"
     },
     "secondary": {
       "benign": {
@@ -238,130 +155,41 @@
           "attemplate.com": 1728
         }
       },
-      "gate_passed": true,
-      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-      "output_csv": "data/external/external_secondary_2026-09-08.csv",
-      "benign_cleaning": "clean"
-    },
-    "primary_keep_phish_domains": {
-      "benign": {
-        "n": 61150,
-        "path_depth_ge1_frac": 0.9391659852820932,
-        "path_depth_mean": 2.2214063777596076,
-        "url_bytes_len": {
-          "mean": 62.96626328699918,
-          "p10": 25.0,
-          "median": 51.0,
-          "p90": 104.0,
-          "max": 1911
+      "direction": {
+        "external": {
+          "benign": 0.939464684992766,
+          "phishing": 0.7779125749875817
         },
-        "scheme_frac": 0.0,
-        "n_groups": 9151,
-        "top5_group_frac": 0.0006541291905151267,
-        "top_groups": {
-          "muvfl.com": 8,
-          "libretexts.org": 8,
-          "theinspirationedit.com": 8,
-          "ligo.org": 8,
-          "oecd-nea.org": 8,
-          "novusbio.com": 8,
-          "spar-international.com": 8,
-          "freelance.ru": 8,
-          "gofundme.com": 8,
-          "flexshopper.com": 8
-        }
-      },
-      "phishing": {
-        "n": 31584,
-        "path_depth_ge1_frac": 0.45982142857142855,
-        "path_depth_mean": 0.9663120567375887,
-        "url_bytes_len": {
-          "mean": 42.53403622087133,
-          "p10": 14.0,
-          "median": 34.0,
-          "p90": 74.0,
-          "max": 9256
+        "webphish": {
+          "benign": 0.9973112355093225,
+          "phishing": 0.6931769722814499
         },
-        "scheme_frac": 0.0,
-        "n_groups": 10854,
-        "top5_group_frac": 0.335612968591692,
-        "top_groups": {
-          "pages.dev": 6050,
-          "vercel.app": 2687,
-          "icefactory.cl": 954,
-          "roblox.com.ml": 530,
-          "framer.app": 379,
-          "replit.app": 320,
-          "typedream.app": 291,
-          "roblox.com.mu": 273,
-          "arcadejafet.cl": 266,
-          "roblox.com.bi": 262
-        }
+        "diff_external": 0.16155211000518432,
+        "sign_external": 1,
+        "eps": 0.02,
+        "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+        "rule_version": "common_sign_v2",
+        "diff_webphish": 0.3041342632278726,
+        "sign_webphish": 1,
+        "same_direction": true,
+        "common_direction_bias": true,
+        "ok": false,
+        "checked": true,
+        "note": "두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.162, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다"
       },
-      "gate_passed": true,
-      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-      "output_csv": "data/external/external_primary_keep_phish_domains_2026-09-08.csv",
-      "benign_cleaning": "keep_phish_domains"
-    },
-    "primary_no_hosting_blocklist": {
-      "benign": {
-        "n": 60824,
-        "path_depth_ge1_frac": 0.939464684992766,
-        "path_depth_mean": 2.2218696567144547,
-        "url_bytes_len": {
-          "mean": 62.87646323819545,
-          "p10": 25.0,
-          "median": 51.0,
-          "p90": 104.0,
-          "max": 1911
-        },
-        "scheme_frac": 0.0,
-        "n_groups": 9108,
-        "top5_group_frac": 0.0006576351440220965,
-        "top_groups": {
-          "muvfl.com": 8,
-          "libretexts.org": 8,
-          "theinspirationedit.com": 8,
-          "ligo.org": 8,
-          "oecd-nea.org": 8,
-          "novusbio.com": 8,
-          "spar-international.com": 8,
-          "freelance.ru": 8,
-          "flexshopper.com": 8,
-          "knowunity.de": 8
-        }
+      "common_direction_bias": true,
+      "path_shortcut": {
+        "path_lr_auroc": 0.751723228568109,
+        "threshold": 0.8,
+        "path_shortcut_dominant": false,
+        "note": "path_lr AUROC=0.7517 < 0.8 — 경로 지름길이 지배적이지 않다.",
+        "basis": "in_sample_on_this_set"
       },
-      "phishing": {
-        "n": 31584,
-        "path_depth_ge1_frac": 0.45982142857142855,
-        "path_depth_mean": 0.9663120567375887,
-        "url_bytes_len": {
-          "mean": 42.53403622087133,
-          "p10": 14.0,
-          "median": 34.0,
-          "p90": 74.0,
-          "max": 9256
-        },
-        "scheme_frac": 0.0,
-        "n_groups": 10854,
-        "top5_group_frac": 0.335612968591692,
-        "top_groups": {
-          "pages.dev": 6050,
-          "vercel.app": 2687,
-          "icefactory.cl": 954,
-          "roblox.com.ml": 530,
-          "framer.app": 379,
-          "replit.app": 320,
-          "typedream.app": 291,
-          "roblox.com.mu": 273,
-          "arcadejafet.cl": 266,
-          "roblox.com.bi": 262
-        }
-      },
-      "gate_passed": true,
-      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-      "output_csv": "data/external/external_primary_no_hosting_blocklist_2026-09-08.csv",
-      "benign_cleaning": "no_hosting_blocklist"
+      "path_shortcut_dominant": false,
+      "gate_rule": "flags_v2",
+      "gate_passed": false,
+      "gate_note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.162, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 아님 — path_lr AUROC=0.7517 < 0.8 — 경로 지름길이 지배적이지 않다.",
+      "output_csv": "data/external/external_secondary_2026-09-08.csv"
     },
     "primary_ccunranked": {
       "benign": {
@@ -418,10 +246,223 @@
           "roblox.com.bi": 262
         }
       },
-      "gate_passed": true,
-      "gate_note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-      "output_csv": "data/external/external_primary_ccunranked_2026-09-08.csv",
-      "benign_cleaning": "clean"
+      "direction": {
+        "external": {
+          "benign": 0.9713185130180536,
+          "phishing": 0.45982142857142855
+        },
+        "webphish": {
+          "benign": 0.9973112355093225,
+          "phishing": 0.6931769722814499
+        },
+        "diff_external": 0.5114970844466251,
+        "sign_external": 1,
+        "eps": 0.02,
+        "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+        "rule_version": "common_sign_v2",
+        "diff_webphish": 0.3041342632278726,
+        "sign_webphish": 1,
+        "same_direction": true,
+        "common_direction_bias": true,
+        "ok": false,
+        "checked": true,
+        "note": "두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.511, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다"
+      },
+      "common_direction_bias": true,
+      "path_shortcut": {
+        "path_lr_auroc": 0.8550701718663067,
+        "threshold": 0.8,
+        "path_shortcut_dominant": true,
+        "note": "path_lr AUROC=0.8551 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+        "basis": "in_sample_on_this_set"
+      },
+      "path_shortcut_dominant": true,
+      "gate_rule": "flags_v2",
+      "gate_passed": false,
+      "gate_note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.511, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 플래그 ON — path_lr AUROC=0.8551 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "output_csv": "data/external/external_primary_ccunranked_2026-09-08.csv"
+    },
+    "primary_keep_phish_domains": {
+      "benign": {
+        "n": 61150,
+        "path_depth_ge1_frac": 0.9391659852820932,
+        "path_depth_mean": 2.2214063777596076,
+        "url_bytes_len": {
+          "mean": 62.96626328699918,
+          "p10": 25.0,
+          "median": 51.0,
+          "p90": 104.0,
+          "max": 1911
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 9151,
+        "top5_group_frac": 0.0006541291905151267,
+        "top_groups": {
+          "muvfl.com": 8,
+          "libretexts.org": 8,
+          "theinspirationedit.com": 8,
+          "ligo.org": 8,
+          "oecd-nea.org": 8,
+          "novusbio.com": 8,
+          "spar-international.com": 8,
+          "freelance.ru": 8,
+          "gofundme.com": 8,
+          "flexshopper.com": 8
+        }
+      },
+      "phishing": {
+        "n": 31584,
+        "path_depth_ge1_frac": 0.45982142857142855,
+        "path_depth_mean": 0.9663120567375887,
+        "url_bytes_len": {
+          "mean": 42.53403622087133,
+          "p10": 14.0,
+          "median": 34.0,
+          "p90": 74.0,
+          "max": 9256
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 10854,
+        "top5_group_frac": 0.335612968591692,
+        "top_groups": {
+          "pages.dev": 6050,
+          "vercel.app": 2687,
+          "icefactory.cl": 954,
+          "roblox.com.ml": 530,
+          "framer.app": 379,
+          "replit.app": 320,
+          "typedream.app": 291,
+          "roblox.com.mu": 273,
+          "arcadejafet.cl": 266,
+          "roblox.com.bi": 262
+        }
+      },
+      "direction": {
+        "external": {
+          "benign": 0.9391659852820932,
+          "phishing": 0.45982142857142855
+        },
+        "webphish": {
+          "benign": 0.9973112355093225,
+          "phishing": 0.6931769722814499
+        },
+        "diff_external": 0.4793445567106646,
+        "sign_external": 1,
+        "eps": 0.02,
+        "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+        "rule_version": "common_sign_v2",
+        "diff_webphish": 0.3041342632278726,
+        "sign_webphish": 1,
+        "same_direction": true,
+        "common_direction_bias": true,
+        "ok": false,
+        "checked": true,
+        "note": "두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.479, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다"
+      },
+      "common_direction_bias": true,
+      "path_shortcut": {
+        "path_lr_auroc": 0.8129163772335538,
+        "threshold": 0.8,
+        "path_shortcut_dominant": true,
+        "note": "path_lr AUROC=0.8129 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+        "basis": "in_sample_on_this_set"
+      },
+      "path_shortcut_dominant": true,
+      "gate_rule": "flags_v2",
+      "gate_passed": false,
+      "gate_note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.479, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 플래그 ON — path_lr AUROC=0.8129 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "output_csv": "data/external/external_primary_keep_phish_domains_2026-09-08.csv"
+    },
+    "primary_no_hosting_blocklist": {
+      "benign": {
+        "n": 60824,
+        "path_depth_ge1_frac": 0.939464684992766,
+        "path_depth_mean": 2.2218696567144547,
+        "url_bytes_len": {
+          "mean": 62.87646323819545,
+          "p10": 25.0,
+          "median": 51.0,
+          "p90": 104.0,
+          "max": 1911
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 9108,
+        "top5_group_frac": 0.0006576351440220965,
+        "top_groups": {
+          "muvfl.com": 8,
+          "libretexts.org": 8,
+          "theinspirationedit.com": 8,
+          "ligo.org": 8,
+          "oecd-nea.org": 8,
+          "novusbio.com": 8,
+          "spar-international.com": 8,
+          "freelance.ru": 8,
+          "flexshopper.com": 8,
+          "knowunity.de": 8
+        }
+      },
+      "phishing": {
+        "n": 31584,
+        "path_depth_ge1_frac": 0.45982142857142855,
+        "path_depth_mean": 0.9663120567375887,
+        "url_bytes_len": {
+          "mean": 42.53403622087133,
+          "p10": 14.0,
+          "median": 34.0,
+          "p90": 74.0,
+          "max": 9256
+        },
+        "scheme_frac": 0.0,
+        "n_groups": 10854,
+        "top5_group_frac": 0.335612968591692,
+        "top_groups": {
+          "pages.dev": 6050,
+          "vercel.app": 2687,
+          "icefactory.cl": 954,
+          "roblox.com.ml": 530,
+          "framer.app": 379,
+          "replit.app": 320,
+          "typedream.app": 291,
+          "roblox.com.mu": 273,
+          "arcadejafet.cl": 266,
+          "roblox.com.bi": 262
+        }
+      },
+      "direction": {
+        "external": {
+          "benign": 0.939464684992766,
+          "phishing": 0.45982142857142855
+        },
+        "webphish": {
+          "benign": 0.9973112355093225,
+          "phishing": 0.6931769722814499
+        },
+        "diff_external": 0.4796432564213375,
+        "sign_external": 1,
+        "eps": 0.02,
+        "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+        "rule_version": "common_sign_v2",
+        "diff_webphish": 0.3041342632278726,
+        "sign_webphish": 1,
+        "same_direction": true,
+        "common_direction_bias": true,
+        "ok": false,
+        "checked": true,
+        "note": "두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.480, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다"
+      },
+      "common_direction_bias": true,
+      "path_shortcut": {
+        "path_lr_auroc": 0.8148374776465683,
+        "threshold": 0.8,
+        "path_shortcut_dominant": true,
+        "note": "path_lr AUROC=0.8148 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+        "basis": "in_sample_on_this_set"
+      },
+      "path_shortcut_dominant": true,
+      "gate_rule": "flags_v2",
+      "gate_passed": false,
+      "gate_note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.480, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 플래그 ON — path_lr AUROC=0.8148 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "output_csv": "data/external/external_primary_no_hosting_blocklist_2026-09-08.csv"
     },
     "ext_b2": {
       "benign": {
@@ -478,11 +519,224 @@
           "attemplate.com": 1728
         }
       },
+      "direction": {
+        "external": {
+          "benign": 0.0,
+          "phishing": 0.7598230614690222
+        },
+        "webphish": {
+          "benign": 0.9973112355093225,
+          "phishing": 0.6931769722814499
+        },
+        "diff_external": -0.7598230614690222,
+        "sign_external": -1,
+        "eps": 0.02,
+        "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+        "rule_version": "common_sign_v2",
+        "diff_webphish": 0.3041342632278726,
+        "sign_webphish": 1,
+        "same_direction": false,
+        "common_direction_bias": false,
+        "ok": true,
+        "checked": true,
+        "note": "부호가 다르거나 한쪽이 중립이다 (외부 -0.760, WebPhish +0.304)"
+      },
+      "common_direction_bias": false,
+      "path_shortcut": {
+        "path_lr_auroc": 0.95321284143332,
+        "threshold": 0.8,
+        "path_shortcut_dominant": true,
+        "note": "path_lr AUROC=0.9532 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+        "basis": "in_sample_on_this_set"
+      },
+      "path_shortcut_dominant": true,
+      "gate_rule": "flags_v2",
       "gate_passed": false,
-      "gate_note": "경고: benign 경로 보유율(0.000)이 phishing(0.760)보다 낮다. WebPhish와 같은 방향의 편향이므로 전이 실험은 검증이 아니다.",
-      "output_csv": "data/external/external_b2_2026-09-08.csv",
-      "benign_cleaning": "clean"
+      "gate_note": "공통 방향 편향 없음 — 부호가 다르거나 한쪽이 중립이다 (외부 -0.760, WebPhish +0.304) / 경로 지름길 플래그 ON — path_lr AUROC=0.9532 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "output_csv": "data/external/external_b2_2026-09-08.csv"
     }
+  },
+  "main": {
+    "benign": {
+      "n": 60824,
+      "path_depth_ge1_frac": 0.939464684992766,
+      "path_depth_mean": 2.2218696567144547,
+      "url_bytes_len": {
+        "mean": 62.87646323819545,
+        "p10": 25.0,
+        "median": 51.0,
+        "p90": 104.0,
+        "max": 1911
+      },
+      "scheme_frac": 0.0,
+      "n_groups": 9108,
+      "top5_group_frac": 0.0006576351440220965,
+      "top_groups": {
+        "muvfl.com": 8,
+        "libretexts.org": 8,
+        "theinspirationedit.com": 8,
+        "ligo.org": 8,
+        "oecd-nea.org": 8,
+        "novusbio.com": 8,
+        "spar-international.com": 8,
+        "freelance.ru": 8,
+        "flexshopper.com": 8,
+        "knowunity.de": 8
+      }
+    },
+    "phishing": {
+      "n": 31584,
+      "path_depth_ge1_frac": 0.45982142857142855,
+      "path_depth_mean": 0.9663120567375887,
+      "url_bytes_len": {
+        "mean": 42.53403622087133,
+        "p10": 14.0,
+        "median": 34.0,
+        "p90": 74.0,
+        "max": 9256
+      },
+      "scheme_frac": 0.0,
+      "n_groups": 10854,
+      "top5_group_frac": 0.335612968591692,
+      "top_groups": {
+        "pages.dev": 6050,
+        "vercel.app": 2687,
+        "icefactory.cl": 954,
+        "roblox.com.ml": 530,
+        "framer.app": 379,
+        "replit.app": 320,
+        "typedream.app": 291,
+        "roblox.com.mu": 273,
+        "arcadejafet.cl": 266,
+        "roblox.com.bi": 262
+      }
+    },
+    "direction": {
+      "external": {
+        "benign": 0.939464684992766,
+        "phishing": 0.45982142857142855
+      },
+      "webphish": {
+        "benign": 0.9973112355093225,
+        "phishing": 0.6931769722814499
+      },
+      "diff_external": 0.4796432564213375,
+      "sign_external": 1,
+      "eps": 0.02,
+      "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+      "rule_version": "common_sign_v2",
+      "diff_webphish": 0.3041342632278726,
+      "sign_webphish": 1,
+      "same_direction": true,
+      "common_direction_bias": true,
+      "ok": false,
+      "checked": true,
+      "note": "두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.480, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다"
+    },
+    "common_direction_bias": true,
+    "path_shortcut": {
+      "path_lr_auroc": 0.8148374776465683,
+      "threshold": 0.8,
+      "path_shortcut_dominant": true,
+      "note": "path_lr AUROC=0.8148 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "basis": "in_sample_on_this_set"
+    },
+    "path_shortcut_dominant": true,
+    "gate_rule": "flags_v2",
+    "gate_passed": false,
+    "gate_note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.480, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 플래그 ON — path_lr AUROC=0.8148 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+    "output_csv": "data/external/external_primary_2026-09-08.csv"
+  },
+  "ext_b2": {
+    "benign": {
+      "n": 47268,
+      "path_depth_ge1_frac": 0.0,
+      "path_depth_mean": 0.0,
+      "url_bytes_len": {
+        "mean": 12.351865955826351,
+        "p10": 8.0,
+        "median": 12.0,
+        "p90": 17.0,
+        "max": 66
+      },
+      "scheme_frac": 0.0,
+      "n_groups": 47268,
+      "top5_group_frac": 0.00010577980875010578,
+      "top_groups": {
+        "cloudflare.com": 1,
+        "akamai.net": 1,
+        "ezviz7.com": 1,
+        "fbcdn.net": 1,
+        "dzen.ru": 1,
+        "domaincontrol.com": 1,
+        "googlevideo.com": 1,
+        "hicloudcam.com": 1,
+        "akamaiedge.net": 1,
+        "gtld-servers.net": 1
+      }
+    },
+    "phishing": {
+      "n": 554995,
+      "path_depth_ge1_frac": 0.7598230614690222,
+      "path_depth_mean": 2.098463950125677,
+      "url_bytes_len": {
+        "mean": 71.5096802673898,
+        "p10": 18.0,
+        "median": 46.0,
+        "p90": 131.0,
+        "max": 9256
+      },
+      "scheme_frac": 1.8018180343967062e-06,
+      "n_groups": 227570,
+      "top5_group_frac": 0.0891143163451923,
+      "top_groups": {
+        "pages.dev": 21792,
+        "vercel.app": 11459,
+        "r2.dev": 6599,
+        "qwo231sdx.club": 5322,
+        "gitbook.io": 4286,
+        "fleek.co": 3510,
+        "ewp.live": 3166,
+        "deliverylifesupport.com": 1768,
+        "whatsmapp.download": 1749,
+        "attemplate.com": 1728
+      }
+    },
+    "direction": {
+      "external": {
+        "benign": 0.0,
+        "phishing": 0.7598230614690222
+      },
+      "webphish": {
+        "benign": 0.9973112355093225,
+        "phishing": 0.6931769722814499
+      },
+      "diff_external": -0.7598230614690222,
+      "sign_external": -1,
+      "eps": 0.02,
+      "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+      "rule_version": "common_sign_v2",
+      "diff_webphish": 0.3041342632278726,
+      "sign_webphish": 1,
+      "same_direction": false,
+      "common_direction_bias": false,
+      "ok": true,
+      "checked": true,
+      "note": "부호가 다르거나 한쪽이 중립이다 (외부 -0.760, WebPhish +0.304)"
+    },
+    "common_direction_bias": false,
+    "path_shortcut": {
+      "path_lr_auroc": 0.95321284143332,
+      "threshold": 0.8,
+      "path_shortcut_dominant": true,
+      "note": "path_lr AUROC=0.9532 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "basis": "in_sample_on_this_set"
+    },
+    "path_shortcut_dominant": true,
+    "gate_rule": "flags_v2",
+    "gate_passed": false,
+    "gate_note": "공통 방향 편향 없음 — 부호가 다르거나 한쪽이 중립이다 (외부 -0.760, WebPhish +0.304) / 경로 지름길 플래그 ON — path_lr AUROC=0.9532 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+    "output_csv": "data/external/external_b2_2026-09-08.csv"
   },
   "dedup_stats": {
     "n_raw": 895564,
@@ -503,5 +757,7 @@
     "n_final_benign": 60824,
     "n_final_phishing": 555004,
     "n_groups": 236684
-  }
+  },
+  "previous_gate_rule": "common_sign_v2",
+  "flag_note": "전이 단계에서 common_direction_bias는 차단이 아니라 판정 규칙의 입력이다 — 플래그가 켜진 세트는 길이+경로 동시 매칭 cohort(a_fixed_lenpath)가 주 판정을 갖고, 길이만 맞춘 cohort는 reported_unmatched_path로 표시된다. path_shortcut_dominant가 켜지면 판정을 descriptive_only로 내린다."
 }

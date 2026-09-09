@@ -210,7 +210,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "dot_count": {
       "kind": "continuous",
@@ -235,7 +240,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "has_digit": {
       "kind": "binary",
@@ -260,7 +270,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "has_hyphen": {
       "kind": "binary",
@@ -285,7 +300,12 @@
       ],
       "n_seeds_significant": 1,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "has_path": {
       "kind": "binary",
@@ -310,7 +330,12 @@
       ],
       "n_seeds_significant": 5,
       "significant": true,
-      "above_random_init": true
+      "above_random_init": true,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": true,
+      "accessible_and_gained": true,
+      "used_in_decision": null
     },
     "has_query": {
       "kind": "binary",
@@ -335,7 +360,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ip_host": {
       "skipped": "양·음성 표본 부족",
@@ -364,7 +394,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "keyword:.html": {
       "kind": "binary",
@@ -389,7 +424,12 @@
       ],
       "n_seeds_significant": 1,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "keyword:.net": {
       "kind": "binary",
@@ -414,7 +454,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "keyword:.org": {
       "kind": "binary",
@@ -439,7 +484,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "keyword:.php": {
       "kind": "binary",
@@ -464,7 +514,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "keyword:account": {
       "skipped": "양·음성 표본 부족",
@@ -505,7 +560,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "keyword:paypal": {
       "skipped": "양·음성 표본 부족",
@@ -542,7 +602,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "keyword:verify": {
       "skipped": "양·음성 표본 부족",
@@ -571,7 +636,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "label:phishing": {
       "kind": "binary",
@@ -596,7 +666,12 @@
       ],
       "n_seeds_significant": 5,
       "significant": true,
-      "above_random_init": true
+      "above_random_init": true,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": true,
+      "accessible_and_gained": true,
+      "used_in_decision": null
     },
     "ngram:.00": {
       "skipped": "양·음성 표본 부족",
@@ -625,7 +700,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:.co": {
       "kind": "binary",
@@ -650,7 +730,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:.ed": {
       "kind": "binary",
@@ -675,7 +760,12 @@
       ],
       "n_seeds_significant": 1,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:.ht": {
       "kind": "binary",
@@ -700,7 +790,12 @@
       ],
       "n_seeds_significant": 2,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:.ie": {
       "skipped": "양·음성 표본 부족",
@@ -729,7 +824,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:.or": {
       "kind": "binary",
@@ -754,7 +854,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:.ph": {
       "kind": "binary",
@@ -779,7 +884,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:.ru": {
       "kind": "binary",
@@ -804,7 +914,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:.we": {
       "kind": "binary",
@@ -829,7 +944,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:/ht": {
       "skipped": "양·음성 표본 부족",
@@ -858,7 +978,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:/rf": {
       "skipped": "양·음성 표본 부족",
@@ -899,7 +1024,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:age": {
       "kind": "binary",
@@ -924,7 +1054,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ama": {
       "kind": "binary",
@@ -949,7 +1084,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ang": {
       "kind": "binary",
@@ -974,7 +1114,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:app": {
       "kind": "binary",
@@ -999,7 +1144,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:bho": {
       "skipped": "양·음성 표본 부족",
@@ -1028,7 +1178,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:co.": {
       "kind": "binary",
@@ -1053,7 +1208,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:com": {
       "kind": "binary",
@@ -1078,7 +1238,12 @@
       ],
       "n_seeds_significant": 1,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:dex": {
       "kind": "binary",
@@ -1103,7 +1268,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:du/": {
       "kind": "binary",
@@ -1128,7 +1298,12 @@
       ],
       "n_seeds_significant": 1,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:e.c": {
       "kind": "binary",
@@ -1153,7 +1328,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ebh": {
       "skipped": "양·음성 표본 부족",
@@ -1182,7 +1362,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ent": {
       "kind": "binary",
@@ -1207,7 +1392,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:er.": {
       "kind": "binary",
@@ -1232,7 +1422,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ers": {
       "kind": "binary",
@@ -1257,7 +1452,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:erv": {
       "kind": "binary",
@@ -1282,7 +1482,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:es.": {
       "kind": "binary",
@@ -1307,7 +1512,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:et/": {
       "kind": "binary",
@@ -1332,7 +1542,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:etf": {
       "skipped": "양·음성 표본 부족",
@@ -1361,7 +1576,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:f.o": {
       "skipped": "양·음성 표본 부족",
@@ -1398,7 +1618,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:hom": {
       "kind": "binary",
@@ -1423,7 +1648,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:hos": {
       "kind": "binary",
@@ -1448,7 +1678,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:htm": {
       "kind": "binary",
@@ -1473,7 +1708,12 @@
       ],
       "n_seeds_significant": 3,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:iet": {
       "skipped": "양·음성 표본 부족",
@@ -1502,7 +1742,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ing": {
       "kind": "binary",
@@ -1527,7 +1772,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ink": {
       "kind": "binary",
@@ -1552,7 +1802,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ion": {
       "kind": "binary",
@@ -1577,7 +1832,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ire": {
       "kind": "binary",
@@ -1602,7 +1862,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ite": {
       "kind": "binary",
@@ -1627,7 +1892,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:jp.": {
       "kind": "binary",
@@ -1652,7 +1922,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:l/r": {
       "skipped": "양·음성 표본 부족",
@@ -1681,7 +1956,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:log": {
       "kind": "binary",
@@ -1706,7 +1986,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ls.": {
       "skipped": "양·음성 표본 부족",
@@ -1735,7 +2020,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:m/i": {
       "kind": "binary",
@@ -1760,7 +2050,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ml/": {
       "skipped": "양·음성 표본 부족",
@@ -1789,7 +2084,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:nde": {
       "kind": "binary",
@@ -1814,7 +2114,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ne.": {
       "kind": "binary",
@@ -1839,7 +2144,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:net": {
       "kind": "binary",
@@ -1864,7 +2174,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:nge": {
       "skipped": "양·음성 표본 부족",
@@ -1893,7 +2208,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ogs": {
       "kind": "binary",
@@ -1918,7 +2238,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ols": {
       "skipped": "양·음성 표본 부족",
@@ -1947,7 +2272,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:om/": {
       "kind": "binary",
@@ -1972,7 +2302,12 @@
       ],
       "n_seeds_significant": 1,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ome": {
       "kind": "binary",
@@ -1997,7 +2332,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:on.": {
       "kind": "binary",
@@ -2022,7 +2362,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ool": {
       "skipped": "양·음성 표본 부족",
@@ -2051,7 +2396,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ost": {
       "kind": "binary",
@@ -2076,7 +2426,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:ot.": {
       "kind": "binary",
@@ -2101,7 +2456,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:p.c": {
       "kind": "binary",
@@ -2126,7 +2486,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:php": {
       "kind": "binary",
@@ -2151,7 +2516,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:pot": {
       "kind": "binary",
@@ -2176,7 +2546,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:pp.": {
       "skipped": "양·음성 표본 부족",
@@ -2205,7 +2580,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:re.": {
       "kind": "binary",
@@ -2230,7 +2610,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:rfc": {
       "skipped": "양·음성 표본 부족",
@@ -2259,7 +2644,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:s.c": {
       "kind": "binary",
@@ -2284,7 +2674,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:s.i": {
       "skipped": "양·음성 표본 부족",
@@ -2313,7 +2708,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:sit": {
       "kind": "binary",
@@ -2338,7 +2738,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:spo": {
       "kind": "binary",
@@ -2363,7 +2768,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:sta": {
       "kind": "binary",
@@ -2388,7 +2798,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:t.c": {
       "kind": "binary",
@@ -2413,7 +2828,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:tap": {
       "skipped": "양·음성 표본 부족",
@@ -2442,7 +2862,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:tf.": {
       "skipped": "양·음성 표본 부족",
@@ -2471,7 +2896,12 @@
       ],
       "n_seeds_significant": 1,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:too": {
       "skipped": "양·음성 표본 부족",
@@ -2500,7 +2930,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": false,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:x.h": {
       "kind": "binary",
@@ -2525,7 +2960,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "ngram:zon": {
       "kind": "binary",
@@ -2550,7 +2990,12 @@
       ],
       "n_seeds_significant": 1,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "path_depth": {
       "kind": "continuous",
@@ -2575,7 +3020,12 @@
       ],
       "n_seeds_significant": 5,
       "significant": true,
-      "above_random_init": true
+      "above_random_init": true,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": true,
+      "accessible_and_gained": true,
+      "used_in_decision": null
     },
     "special_ratio": {
       "kind": "continuous",
@@ -2600,7 +3050,12 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     },
     "subdomain_count": {
       "kind": "continuous",
@@ -2625,11 +3080,264 @@
       ],
       "n_seeds_significant": 0,
       "significant": false,
-      "above_random_init": false
+      "above_random_init": false,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": false,
+      "accessible_and_gained": false,
+      "used_in_decision": null
     }
   },
   "summary": {
     "n_targets": 91,
+    "accessible": {
+      "n": 45,
+      "frac": 0.4945054945054945,
+      "targets": [
+        "digit_ratio",
+        "dot_count",
+        "has_digit",
+        "has_hyphen",
+        "has_path",
+        "keyword:.com",
+        "keyword:.html",
+        "keyword:.php",
+        "keyword:login",
+        "ngram:.bl",
+        "ngram:.co",
+        "ngram:.ed",
+        "ngram:.ht",
+        "ngram:.ne",
+        "ngram:.ph",
+        "ngram:.ru",
+        "ngram:/in",
+        "ngram:ama",
+        "ngram:blo",
+        "ngram:co.",
+        "ngram:com",
+        "ngram:dex",
+        "ngram:du/",
+        "ngram:edu",
+        "ngram:ex.",
+        "ngram:gsp",
+        "ngram:htm",
+        "ngram:ind",
+        "ngram:jp.",
+        "ngram:log",
+        "ngram:m/i",
+        "ngram:n.c",
+        "ngram:nde",
+        "ngram:ne.",
+        "ngram:om.",
+        "ngram:om/",
+        "ngram:php",
+        "ngram:pot",
+        "ngram:rg/",
+        "ngram:tml",
+        "ngram:x.h",
+        "ngram:zon",
+        "path_depth",
+        "special_ratio",
+        "subdomain_count"
+      ],
+      "top10": [
+        {
+          "target": "ngram:jp.",
+          "metric": "auroc",
+          "score": 0.9090546997580663,
+          "shuffle": 0.49678375047957274,
+          "random_init": 0.8492139363534712
+        },
+        {
+          "target": "has_path",
+          "metric": "auroc",
+          "score": 0.8893173311474106,
+          "shuffle": 0.5113664111841583,
+          "random_init": 0.694385017877938
+        },
+        {
+          "target": "ngram:.bl",
+          "metric": "auroc",
+          "score": 0.8661635565312842,
+          "shuffle": 0.4457174031642117,
+          "random_init": 0.8783754116355653
+        },
+        {
+          "target": "ngram:pot",
+          "metric": "auroc",
+          "score": 0.8549985617530922,
+          "shuffle": 0.46757641921397386,
+          "random_init": 0.8622420961794932
+        },
+        {
+          "target": "ngram:x.h",
+          "metric": "auroc",
+          "score": 0.8413555851248671,
+          "shuffle": 0.5025723529555491,
+          "random_init": 0.811626296254978
+        },
+        {
+          "target": "ngram:.ht",
+          "metric": "auroc",
+          "score": 0.8210857312108747,
+          "shuffle": 0.5088470938314394,
+          "random_init": 0.7433469855669194
+        },
+        {
+          "target": "keyword:.html",
+          "metric": "auroc",
+          "score": 0.8196557199439723,
+          "shuffle": 0.5087482930742955,
+          "random_init": 0.7744652583807087
+        },
+        {
+          "target": "ngram:htm",
+          "metric": "auroc",
+          "score": 0.8169082125160966,
+          "shuffle": 0.4944948680925377,
+          "random_init": 0.7358497237356796
+        },
+        {
+          "target": "ngram:ne.",
+          "metric": "auroc",
+          "score": 0.8156989458846227,
+          "shuffle": 0.5217180829174616,
+          "random_init": 0.7991960104954531
+        },
+        {
+          "target": "ngram:.ru",
+          "metric": "auroc",
+          "score": 0.813184426557559,
+          "shuffle": 0.4797246619823593,
+          "random_init": 0.7248483500649304
+        }
+      ]
+    },
+    "learned_gain": {
+      "n": 2,
+      "frac": 0.02197802197802198,
+      "targets": [
+        "has_path",
+        "path_depth"
+      ],
+      "top10": [
+        {
+          "target": "has_path",
+          "metric": "auroc",
+          "score": 0.8893173311474106,
+          "shuffle": 0.5113664111841583,
+          "random_init": 0.694385017877938
+        },
+        {
+          "target": "path_depth",
+          "metric": "r2",
+          "score": 0.24452318152697822,
+          "shuffle": -0.059426180604844524,
+          "random_init": 0.07829300840567058
+        }
+      ]
+    },
+    "accessible_and_gained": {
+      "n": 2,
+      "frac": 0.02197802197802198,
+      "targets": [
+        "has_path",
+        "path_depth"
+      ],
+      "top10": [
+        {
+          "target": "has_path",
+          "metric": "auroc",
+          "score": 0.8893173311474106,
+          "shuffle": 0.5113664111841583,
+          "random_init": 0.694385017877938
+        },
+        {
+          "target": "path_depth",
+          "metric": "r2",
+          "score": 0.24452318152697822,
+          "shuffle": -0.059426180604844524,
+          "random_init": 0.07829300840567058
+        }
+      ]
+    },
+    "accessible_only": {
+      "n": 43,
+      "note": "셔플 기준선은 CI 수준에서 넘지만 무작위 초기화 CNN 기준선은 넘지 못한 목표. 정보는 선형으로 접근 가능하되 '학습이 접근성을 높였다'고는 말할 수 없다.",
+      "top10": [
+        {
+          "target": "ngram:jp.",
+          "metric": "auroc",
+          "score": 0.9090546997580663,
+          "shuffle": 0.49678375047957274,
+          "random_init": 0.8492139363534712
+        },
+        {
+          "target": "ngram:.bl",
+          "metric": "auroc",
+          "score": 0.8661635565312842,
+          "shuffle": 0.4457174031642117,
+          "random_init": 0.8783754116355653
+        },
+        {
+          "target": "ngram:pot",
+          "metric": "auroc",
+          "score": 0.8549985617530922,
+          "shuffle": 0.46757641921397386,
+          "random_init": 0.8622420961794932
+        },
+        {
+          "target": "ngram:x.h",
+          "metric": "auroc",
+          "score": 0.8413555851248671,
+          "shuffle": 0.5025723529555491,
+          "random_init": 0.811626296254978
+        },
+        {
+          "target": "ngram:.ht",
+          "metric": "auroc",
+          "score": 0.8210857312108747,
+          "shuffle": 0.5088470938314394,
+          "random_init": 0.7433469855669194
+        },
+        {
+          "target": "keyword:.html",
+          "metric": "auroc",
+          "score": 0.8196557199439723,
+          "shuffle": 0.5087482930742955,
+          "random_init": 0.7744652583807087
+        },
+        {
+          "target": "ngram:htm",
+          "metric": "auroc",
+          "score": 0.8169082125160966,
+          "shuffle": 0.4944948680925377,
+          "random_init": 0.7358497237356796
+        },
+        {
+          "target": "ngram:ne.",
+          "metric": "auroc",
+          "score": 0.8156989458846227,
+          "shuffle": 0.5217180829174616,
+          "random_init": 0.7991960104954531
+        },
+        {
+          "target": "ngram:.ru",
+          "metric": "auroc",
+          "score": 0.813184426557559,
+          "shuffle": 0.4797246619823593,
+          "random_init": 0.7248483500649304
+        },
+        {
+          "target": "ngram:gsp",
+          "metric": "auroc",
+          "score": 0.8095654345654346,
+          "shuffle": 0.4342011187281826,
+          "random_init": 0.8455544455544455
+        }
+      ]
+    },
+    "used_in_decision": null,
     "n_significant": 2,
     "frac_significant": 0.02197802197802198,
     "top10": [
@@ -2671,13 +3379,26 @@
       ],
       "n_seeds_significant": 5,
       "significant": true,
-      "above_random_init": true
+      "above_random_init": true,
+      "accessible": true,
+      "accessible_basis": "approx:mean_ci",
+      "learned_gain": true,
+      "accessible_and_gained": true,
+      "used_in_decision": null
+    },
+    "recompute_basis": {
+      "learned_gain": "exact:above_random_init (전 시드 AND가 그대로 저장돼 있다)",
+      "accessible_and_gained": "exact:significant (전 시드 AND가 그대로 저장돼 있다)",
+      "accessible": "approx:mean_ci — 시드별 CI가 없어 '전 시드에서 CI 하한 > 셔플 CI 상한'을 정확히 재현할 수 없다. 시드 평균 CI로 판정하고, accessible_and_gained가 참인 목표는 논리적으로 accessible이므로 OR로 덮는다."
     }
   },
   "notes": [
-    "프로브가 유의해도 '문자를 복원했다'는 뜻은 아니다. 임베딩에서 그 속성이 선형으로 접근 가능하다는 뜻이다.",
-    "유의 = 모든 시드에서 (그룹 부트스트랩 CI 하한 > 셔플 CI 상한).",
-    "셔플 기준선은 그룹 단위로 목표를 갈아끼운다(행 단위 셔플은 기준선을 부풀린다)."
+    "프로브가 유의해도 'CNN이 문자를 복원했다'는 뜻은 아니다. 임베딩에서 그 속성이 선형으로 접근 가능하다는 뜻이다.",
+    "세 질문은 서로 다르다 — (1) accessible: 표현에 어휘 정보가 선형으로 접근 가능한가 (전 시드에서 학습 표현 CI 하한 > 셔플 CI 상한), (2) learned_gain: 피싱 분류 학습이 그 접근성을 높였는가 (전 시드에서 학습 표현 CI 하한 > 무작위 초기화 CNN CI 상한), (3) used_in_decision: 그 정보가 실제 분류 결정에 쓰이는가.",
+    "used_in_decision은 현재 실험(동결 표현 위의 선형 프로브)으로 답할 수 없다. 프로브는 표현을 읽을 뿐 결정 경로에 개입하지 않으므로 값을 null로 남긴다.",
+    "accessible_and_gained(= 옛 significant)는 (1)과 (2)의 AND다. 이 기준을 통과하지 못했다는 것이 '해당 정보를 전혀 읽어낼 수 없다'는 뜻은 아니다 — accessible_only 목록이 그 구분을 보여준다.",
+    "셔플 기준선은 그룹 단위로 목표를 갈아끼운다(행 단위 셔플은 기준선을 부풀린다).",
+    "프로브 입력은 GAP **이후** 128차원 벡터(분류 헤드의 입력)다. 'GAP 직전'이 아니다."
   ],
   "per_seed": [
     {

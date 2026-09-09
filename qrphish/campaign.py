@@ -56,7 +56,87 @@ __all__ = [
     "length_match_campaign",
     "sizematched_train_a",
     "SOLO_PREFIX",
+    "SESOI",
+    "MAJOR_THRESHOLD",
+    "VERDICT_DEFINITIONS",
+    "campaign_verdict",
 ]
+
+# --------------------------------------------------------------------- 판정 상수
+# SESOI(smallest effect size of interest) — "실질적으로 무시 가능"이라고 부를 수 있는
+# ΔAUROC의 상한. review_03 5절: CI 하한이 0 이하라는 것만으로 "누출 무시 가능"이라고
+# 쓰면 CI가 [-0.10, +0.30]이어도 같은 판정이 나온다. 그건 "차이를 검출하지 못했다"이지
+# "차이가 없다"가 아니다. 무시 가능을 주장하려면 **사전에 정한 SESOI보다 CI 상한이
+# 작다**는 등가성(equivalence) 형태의 근거가 있어야 한다.
+#
+# 값 0.02의 근거: 1차 실험의 층 간 AUROC 변동(v2 0.872 → v4 0.805)의 약 1/3, 시드 간
+# 표준편차 수준이며, 설계 6.4의 "결론 수정" 임계 0.05보다 뚜렷이 작다. 두 임계는 서로
+# 다른 질문에 답한다 — 0.02는 "무시해도 되는가", 0.05는 "결론을 고쳐야 하는가".
+SESOI = 0.02
+# 검출된 이득이 이 크기 이상이면 논문의 결론 자체를 수정해야 한다(설계 6.4).
+MAJOR_THRESHOLD = 0.05
+
+VERDICT_DEFINITIONS: dict[str, str] = {
+    "negligible": (
+        f"무시 가능 — 쌍체 95% CI 상한 < SESOI({SESOI}). 누출 이득이 실질적으로 "
+        "무시할 수 있는 크기임을 등가성 형태로 보였다."
+    ),
+    "not_detected": (
+        f"검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI({SESOI}). 누출 허용에 따른 "
+        "AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다."
+    ),
+    "detected_minor": (
+        f"이득 검출, 크기 작음 — CI 하한 > 0이고 |Δ| < {MAJOR_THRESHOLD}."
+    ),
+    "detected_major": (
+        f"결론 수정 필요 — CI 하한 > 0이고 |Δ| ≥ {MAJOR_THRESHOLD}."
+    ),
+    "negative": (
+        "역방향 — CI 상한 < 0. 누출을 허용한 모델이 오히려 더 나쁘다(검정력·교란 점검 필요)."
+    ),
+    "undetermined": "판정 불가 — CI가 유한하지 않다.",
+}
+
+
+def campaign_verdict(lo: float, hi: float, point: float) -> dict[str, Any]:
+    """사전 등록 판정 (설계 5.5·6.4, review_03 5절 반영).
+
+    기존 규칙은 ``lo <= 0``이면 곧장 "누출 무시 가능"이었다. 그 규칙은 CI가
+    ``[-0.10, +0.30]``이어도 같은 판정을 낸다 — 즉 **"차이를 검출하지 못했다"와 "차이가
+    없다"를 구분하지 못한다**. 새 규칙은 SESOI를 기준으로 둘을 가른다.
+
+    * ``negligible``     : ``hi < SESOI``  (등가성 근거가 있는 "무시 가능")
+    * ``not_detected``   : ``lo <= 0 <= hi`` 이고 ``hi >= SESOI``
+    * ``negative``       : ``hi < 0``
+    * ``detected_minor`` : ``lo > 0`` 이고 ``|point| < MAJOR_THRESHOLD``
+    * ``detected_major`` : ``lo > 0`` 이고 ``|point| >= MAJOR_THRESHOLD``
+
+    ``negligible``이 ``hi < 0`` 인 경우까지 포함하지 않도록 ``negative``를 먼저 본다
+    (역방향 효과를 "무시 가능"으로 삼키면 진단을 놓친다).
+
+    Returns:
+        ``{"code", "label", "sesoi", "major_threshold"}``. 문자열이 아니라 dict인 이유는
+        표·문서가 코드로 분기하고 사람이 읽는 문장은 따로 두기 위해서다.
+    """
+    if not np.isfinite(lo) or not np.isfinite(hi):
+        code = "undetermined"
+    elif hi < 0.0:
+        code = "negative"
+    elif lo > 0.0:
+        code = (
+            "detected_major" if abs(point) >= MAJOR_THRESHOLD else "detected_minor"
+        )
+    elif hi < SESOI:
+        code = "negligible"
+    else:
+        code = "not_detected"
+    return {
+        "code": code,
+        "label": VERDICT_DEFINITIONS[code],
+        "sesoi": SESOI,
+        "major_threshold": MAJOR_THRESHOLD,
+    }
+
 
 # ``template_groups``가 클러스터링에서 제외한 행에 붙이는 접두사. 이 id는 행마다
 # 고유하므로 "템플릿이 겹친다"의 근거로 쓰면 안 된다.

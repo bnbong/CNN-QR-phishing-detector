@@ -23,6 +23,10 @@ import yaml
 from torch.utils.data import DataLoader
 
 from qrphish import baselines as bl
+from qrphish.campaign import MAJOR_THRESHOLD as CAMPAIGN_MAJOR_THRESHOLD
+from qrphish.campaign import SESOI as CAMPAIGN_SESOI
+from qrphish.campaign import VERDICT_DEFINITIONS as CAMPAIGN_VERDICT_DEFINITIONS
+from qrphish.campaign import campaign_verdict
 from qrphish.dataset import (
     VERSION_SPECS,
     QRGridDataset,
@@ -63,6 +67,8 @@ __all__ = [
     "run_hypothesis_tests",
     "aggregate_reports",
     "reaggregate",
+    "recompute_campaign_verdicts",
+    "recompute_probe_summaries",
     "run_motifs",
     "run_transfer",
     "load_matrix",
@@ -1863,6 +1869,39 @@ MOTIF_SHUFFLE_KEYS = ("patch3_shuffle_module", "patch3_shuffle_codeword")
 ENRICHMENT_CI_BOOT = 500
 
 
+def _top_list_overlap(per_seed_tops: dict[int, list[int]]) -> dict:
+    """시드별 top motif 목록 사이의 Jaccard 겹침 요약.
+
+    선정을 시드별 train으로 분리하면 목록이 시드마다 달라진다. 겹침이 낮다면 "안정
+    motif"라는 표현 자체가 약해지므로, 절제 결과를 읽을 때 함께 봐야 하는 진단값이다.
+    """
+    seeds = sorted(per_seed_tops)
+    sets = {k: set(int(v) for v in per_seed_tops[k]) for k in seeds}
+    pairs: list[dict[str, Any]] = []
+    for i, a in enumerate(seeds):
+        for b in seeds[i + 1 :]:
+            u = sets[a] | sets[b]
+            pairs.append(
+                {
+                    "seeds": [a, b],
+                    "jaccard": (len(sets[a] & sets[b]) / len(u)) if u else float("nan"),
+                }
+            )
+    js = [d["jaccard"] for d in pairs if not np.isnan(d["jaccard"])]
+    inter = set.intersection(*sets.values()) if sets else set()
+    union = set.union(*sets.values()) if sets else set()
+    return {
+        "n_seeds": len(seeds),
+        "sizes": {str(k): len(sets[k]) for k in seeds},
+        "pairwise_jaccard": pairs,
+        "jaccard_mean": float(np.mean(js)) if js else float("nan"),
+        "jaccard_min": float(np.min(js)) if js else float("nan"),
+        "n_in_all_seeds": len(inter),
+        "n_in_any_seed": len(union),
+    }
+
+
+
 def _phase_dir(cfg: Any, phase: str, cid: str, stratum: str) -> Path:
     """``reports/{phase}/{condition_id}/{stratum}/``.
 
@@ -2232,6 +2271,55 @@ def run_motifs(cfg: Any, strata: list[str] | None = None) -> dict:
             else:
                 enr[sub_key] = block
 
+        # ---- 시드별 enrichment (선정·평가 분리, review_03 2절) -----------------
+        # 절제(run_occlusion)가 시드 k에서 쓸 목록은 **그 시드의 train만**으로 골라야 한다.
+        # 시드를 합쳐 고르면 시드 0의 test URL이 시드 1의 train에 들어가 선정이 평가 라벨에
+        # 오염된다. combine_seed_enrichments를 시드 하나짜리 목록으로 불러 같은 필터
+        # (존재율·CI가 0 제외·ubiquitous 아님)를 그대로 적용한다.
+        per_seed_tops: dict[int, list[int]] = {}
+        # _motif_one_seed가 시드별 train enrichment CI를 만들 때 쓴 부트스트랩 횟수.
+        seed_ci_boot = min(int(_get(_get(cfg, "eval"), "n_bootstrap", 2000)), 1000)
+        for blk in ok:
+            k = int(blk["seed"])
+            seed_enr: dict[str, Any] = {
+                "stratum": stratum,
+                "seed": k,
+                "usage": "occlusion_per_seed",
+                "selection_split": "train_only",
+                "note": (
+                    "이 파일의 top 목록은 시드 "
+                    f"{k}의 train split만으로 골랐다. 절제는 같은 시드의 test에서만 한다."
+                ),
+            }
+            for size, sub_key in ((3, None), (2, "size2")):
+                sblock = combine_seed_enrichments(
+                    [blk["enrichment"][size]["train"]],
+                    [blk["enrichment"][size]["test"]],
+                    size=size,
+                    n_windows_mean=blk["n_windows_mean"],
+                    ci_n_boot=seed_ci_boot,
+                )
+                sblock["stratum"] = stratum
+                sblock["seed"] = k
+                sblock["ci_source"] = f"seed{k}_train"
+                if sub_key is None:
+                    seed_enr.update(sblock)
+                else:
+                    seed_enr[sub_key] = sblock
+            per_seed_tops[k] = list(seed_enr.get("top_phishing", []))
+            (sdir / f"enrichment_seed{k}.json").write_text(
+                json.dumps(seed_enr, ensure_ascii=False, indent=2, default=str),
+                encoding="utf-8",
+            )
+
+        enr["usage"] = "reporting_only"
+        enr["note"] = (
+            "여러 시드의 train을 합쳐 고른 '시드 간 안정 motif' 목록이다. 시드마다 train/test "
+            "분할이 달라 한 시드의 test URL이 다른 시드의 train에 들어가므로, 절제 평가에는 "
+            "쓰지 않는다(enrichment_seed{k}.json을 쓴다)."
+        )
+        enr["per_seed_top_overlap"] = _top_list_overlap(per_seed_tops)
+
         res["runtime_sec"] = round(time.time() - t0, 1)
         (sdir / "results.json").write_text(
             json.dumps(res, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
@@ -2308,13 +2396,87 @@ def _probe_ngram_universe(
     return top_char_ngrams(meta["url"].astype(str).to_numpy()[tr_rows], size=3, top=n_ngram)
 
 
+# 결과 JSON에 그대로 싣는 해석 주의문. 세 질문을 섞어 읽지 못하게 못을 박는다.
+PROBE_NOTES = (
+    "프로브가 유의해도 'CNN이 문자를 복원했다'는 뜻은 아니다. "
+    "임베딩에서 그 속성이 선형으로 접근 가능하다는 뜻이다.",
+    "세 질문은 서로 다르다 — (1) accessible: 표현에 어휘 정보가 선형으로 접근 가능한가 "
+    "(전 시드에서 학습 표현 CI 하한 > 셔플 CI 상한), (2) learned_gain: 피싱 분류 학습이 "
+    "그 접근성을 높였는가 (전 시드에서 학습 표현 CI 하한 > 무작위 초기화 CNN CI 상한), "
+    "(3) used_in_decision: 그 정보가 실제 분류 결정에 쓰이는가.",
+    "used_in_decision은 현재 실험(동결 표현 위의 선형 프로브)으로 답할 수 없다. "
+    "프로브는 표현을 읽을 뿐 결정 경로에 개입하지 않으므로 값을 null로 남긴다.",
+    "accessible_and_gained(= 옛 significant)는 (1)과 (2)의 AND다. 이 기준을 통과하지 "
+    "못했다는 것이 '해당 정보를 전혀 읽어낼 수 없다'는 뜻은 아니다 — accessible_only "
+    "목록이 그 구분을 보여준다.",
+    "셔플 기준선은 그룹 단위로 목표를 갈아끼운다(행 단위 셔플은 기준선을 부풀린다).",
+    "프로브 입력은 GAP **이후** 128차원 벡터(분류 헤드의 입력)다. 'GAP 직전'이 아니다.",
+)
+# 요약에 싣는 세 질문의 키. ``used_in_decision``은 판정 자체가 불가능하므로 뺀다.
+PROBE_QUESTIONS = ("accessible", "learned_gain", "accessible_and_gained")
+
+
+def _probe_top(lex: dict, names, k: int = 10) -> list[dict]:
+    """점수 내림차순 상위 k개를 표에 실을 최소 필드로 줄인다."""
+    ranked = sorted(names, key=lambda n: -float(lex[n]["score"]))[:k]
+    return [
+        {
+            "target": n,
+            "metric": lex[n]["metric"],
+            "score": lex[n]["score"],
+            "shuffle": lex[n]["shuffle"],
+            "random_init": lex[n]["random_init"],
+        }
+        for n in ranked
+    ]
+
+
+def _probe_summary(lex: dict) -> dict:
+    """목표별 집계 -> 세 질문 요약 (review_03 6절).
+
+    ``accessible_only``는 **셔플 기준선은 넘지만 무작위 초기화 기준선은 넘지 못한** 목표다.
+    옛 단일 ``significant`` 기준에서는 이 목표들이 통째로 "증거 없음"으로 사라졌는데,
+    그건 "정보를 읽어낼 수 없다"가 아니라 "학습이 접근성을 **더** 높였다고는 말할 수
+    없다"는 뜻이다. 그 구분을 요약에서 바로 보이게 따로 싣는다.
+    """
+    n_targets = len(lex)
+    out: dict[str, Any] = {"n_targets": n_targets}
+    for q in PROBE_QUESTIONS:
+        names = [k for k, v in lex.items() if v.get(q)]
+        out[q] = {
+            "n": len(names),
+            "frac": (len(names) / n_targets) if n_targets else 0.0,
+            "targets": sorted(names),
+            "top10": _probe_top(lex, names),
+        }
+    only = [k for k, v in lex.items() if v.get("accessible") and not v.get("learned_gain")]
+    out["accessible_only"] = {
+        "n": len(only),
+        "note": (
+            "셔플 기준선은 CI 수준에서 넘지만 무작위 초기화 CNN 기준선은 넘지 못한 목표. "
+            "정보는 선형으로 접근 가능하되 '학습이 접근성을 높였다'고는 말할 수 없다."
+        ),
+        "top10": _probe_top(lex, only),
+    }
+    out["used_in_decision"] = None
+    # 하위 호환 별칭(표·옛 스크립트가 읽던 키).
+    out["n_significant"] = out["accessible_and_gained"]["n"]
+    out["frac_significant"] = out["accessible_and_gained"]["frac"]
+    out["top10"] = out["accessible_and_gained"]["top10"]
+    return out
+
+
 def _probe_aggregate(per_seed: list[dict], n_seeds: int) -> dict:
     """시드별 프로브 결과 -> 목표별 요약.
 
     ``ci``는 시드별 그룹 부트스트랩 CI의 하한/상한 평균이다. 정식 집계 CI가 아니므로
-    유의 판정은 **시드별로** (CI 하한 > max(셔플 CI 상한, 무작위 초기화 CI 상한))를 따진 뒤
-    ``n_seeds`` 전부에서 성립할 것을 요구한다. 일부 시드에서 표본 부족으로 건너뛴 목표는
-    전 시드 일치를 확인할 수 없으므로 유의로 세지 않는다.
+    판정은 **시드별로** 내린 뒤 ``n_seeds`` 전부에서 성립할 것을 요구한다. 일부 시드에서
+    표본 부족으로 건너뛴 목표는 전 시드 일치를 확인할 수 없으므로 세지 않는다.
+
+    세 질문을 분리해 각각 보고한다(review_03 6절, :mod:`qrphish.probes` 참조):
+    ``accessible``(셔플 대비), ``learned_gain``(무작위 초기화 대비), 둘의 AND인
+    ``accessible_and_gained``(옛 ``significant``). ``used_in_decision``은 현재 실험으로
+    답할 수 없어 ``None``이다.
     """
     names: set[str] = set()
     for d in per_seed:
@@ -2348,7 +2510,23 @@ def _probe_aggregate(per_seed: list[dict], n_seeds: int) -> dict:
                 float(np.nanmean([r["random_init_ci"][0] for r in usable])),
                 float(np.nanmean([r["random_init_ci"][1] for r in usable])),
             ],
+            # 옛 결과(accessible 필드가 없는 seed json)도 읽을 수 있게 fallback을 둔다.
+            # accessible의 fallback은 저장된 CI로 직접 재검산한다.
+            "n_seeds_accessible": int(sum(_seed_accessible(r) for r in usable)),
+            "n_seeds_learned_gain": int(sum(bool(r["above_random_init"]) for r in usable)),
             "n_seeds_significant": int(sum(bool(r["significant"]) for r in usable)),
+            "accessible": bool(
+                len(usable) == n_seeds and all(_seed_accessible(r) for r in usable)
+            ),
+            "learned_gain": bool(
+                len(usable) == n_seeds and all(r["above_random_init"] for r in usable)
+            ),
+            "accessible_and_gained": bool(
+                len(usable) == n_seeds and all(r["significant"] for r in usable)
+            ),
+            # 프로브는 표현을 읽을 뿐 결정 경로를 건드리지 않는다 — 답할 수 없음을 명시.
+            "used_in_decision": None,
+            # 하위 호환 별칭.
             "significant": bool(
                 len(usable) == n_seeds and all(r["significant"] for r in usable)
             ),
@@ -2357,6 +2535,19 @@ def _probe_aggregate(per_seed: list[dict], n_seeds: int) -> dict:
             ),
         }
     return out
+
+
+def _seed_accessible(row: dict) -> bool:
+    """시드 한 개의 ``accessible`` — 없으면 저장된 CI로 재검산한다.
+
+    "학습 표현 CI 하한 > 셔플 CI 상한". 옛 seed json에는 이 필드가 없지만 ``ci``와
+    ``shuffle_ci``는 남아 있으므로 재학습 없이 정확히 복원된다.
+    """
+    if "accessible" in row:
+        return bool(row["accessible"])
+    lo = float(row["ci"][0])
+    hi = float(row["shuffle_ci"][1])
+    return bool(np.isfinite(lo) and np.isfinite(hi) and lo > hi)
 
 
 def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
@@ -2443,10 +2634,8 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
         agg = _probe_aggregate(ok, len(avail))
         # 라벨 프로브는 어휘 증거가 아니라 상한 참고선이므로 요약 카운트에서 뺀다.
         lex = {k: v for k, v in agg.items() if v.get("family") not in (None, "label")}
-        sig = [k for k, v in lex.items() if v.get("significant")]
-        ranked = sorted(
-            (k for k in sig), key=lambda k: -lex[k]["score"]
-        )[:10]
+        summary = _probe_summary(lex)
+        sig = summary["accessible_and_gained"]["targets"]
 
         res = {
             "schema_version": SCHEMA_VERSION,
@@ -2464,23 +2653,8 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
             "n_boot": int(n_boot),
             "ngrams": list(ngrams),
             "targets": agg,
-            "summary": {
-                "n_targets": len(lex),
-                "n_significant": len(sig),
-                "frac_significant": (len(sig) / len(lex)) if lex else 0.0,
-                "top10": [
-                    {"target": k, "metric": lex[k]["metric"], "score": lex[k]["score"],
-                     "shuffle": lex[k]["shuffle"], "random_init": lex[k]["random_init"]}
-                    for k in ranked
-                ],
-                "label_probe": agg.get("label:phishing"),
-            },
-            "notes": [
-                "프로브가 유의해도 '문자를 복원했다'는 뜻은 아니다. "
-                "임베딩에서 그 속성이 선형으로 접근 가능하다는 뜻이다.",
-                "유의 = 모든 시드에서 (그룹 부트스트랩 CI 하한 > 셔플 CI 상한).",
-                "셔플 기준선은 그룹 단위로 목표를 갈아끼운다(행 단위 셔플은 기준선을 부풀린다).",
-            ],
+            "summary": {**summary, "label_probe": agg.get("label:phishing")},
+            "notes": list(PROBE_NOTES),
             "per_seed": [
                 {"seed": d["seed"], "n_train": d["n_train"], "n_test": d["n_test"]} for d in ok
             ],
@@ -2492,7 +2666,9 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
         out[stratum] = res
         print(
             f"[probes] {stratum} 종료 ({res['runtime_sec']}s) — "
-            f"유의 {len(sig)}/{len(lex)}",
+            f"접근 가능 {summary['accessible']['n']}/{summary['n_targets']}, "
+            f"학습 이득 {summary['learned_gain']['n']}/{summary['n_targets']}, "
+            f"둘 다 {len(sig)}/{summary['n_targets']}",
             flush=True,
         )
     return out
@@ -2502,8 +2678,20 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
 # review_01 "C. Causal motif ablation" — 상위 motif를 뒤집으면 CNN 예측이 무너지는가.
 
 
-def _occlusion_aggregate(per_seed: list[dict]) -> dict:
-    """조건별 시드 평균. CI는 시드별 값을 그대로 per_seed에 남기고 여기서는 평균만."""
+def _occlusion_aggregate(
+    per_seed: list[dict],
+    arrays: list[dict] | None = None,
+    n_boot: int = 500,
+) -> dict:
+    """조건별 시드 평균 + **시드 층화 통합 CI**.
+
+    시드별 CI 경계를 평균하는 것은 통합 효과의 95% CI가 아니다(review_03 3절). 여기서는
+    시드별 값의 평균·표준편차만 요약으로 남기고, 구간 추정은
+    :func:`qrphish.evaluate.paired_cluster_bootstrap_by_seed`로 5시드 test를 (seed, row)로
+    풀링해 한 번만 만든다. 무작위 조건은 반복 r마다 같은 부트스트랩 시드로 돌린 뒤
+    리샘플 표본을 반복 평균한다 — 리샘플 규약이 같아 반복 간 표본이 정확히 짝지어지므로,
+    평균한 표본은 "반복 평균 ΔAUROC"의 부트스트랩 분포가 된다.
+    """
     conds = sorted({c for d in per_seed for c in d["conditions"]})
     keys = ("auroc", "d_auroc", "mean_logit_delta",
             "mean_logit_delta_phishing", "mean_logit_delta_benign")
@@ -2512,22 +2700,129 @@ def _occlusion_aggregate(per_seed: list[dict]) -> dict:
     }
     for c in conds:
         rows = [d["conditions"][c] for d in per_seed if c in d["conditions"]]
-        block = {k: float(np.nanmean([r[k] for r in rows])) for k in keys}
+        block: dict[str, Any] = {k: float(np.nanmean([r[k] for r in rows])) for k in keys}
         block["d_auroc_sd_across_seeds"] = float(
             np.nanstd([r["d_auroc"] for r in rows], ddof=0)
-        )
-        block["n_seeds_d_auroc_ci_excludes_0"] = int(
-            sum(1 for r in rows if r["d_auroc_ci"][1] < 0 or r["d_auroc_ci"][0] > 0)
         )
         block["n_flipped_mean"] = float(np.nanmean([r["n_flipped"]["mean"] for r in rows]))
         block["frac_samples_no_match"] = float(
             np.nanmean([r["n_flipped"]["frac_zero"] for r in rows])
         )
+        # 무작위 조건: 반복 간 변동(반복별 AUROC의 표준편차·범위)을 그대로 싣는다.
+        if all("d_auroc_sd_across_reps" in r for r in rows) and rows:
+            block["n_repeat"] = int(rows[0]["n_repeat"])
+            block["d_auroc_sd_across_reps"] = float(
+                np.nanmean([r["d_auroc_sd_across_reps"] for r in rows])
+            )
+            block["d_auroc_range"] = [
+                float(np.nanmin([r["d_auroc_range"][0] for r in rows])),
+                float(np.nanmax([r["d_auroc_range"][1] for r in rows])),
+            ]
+            block["aggregation"] = "per_repeat_auroc_then_mean"
         # topology-matched 대조에만 있는 진단값: 후보 부족으로 밀도 제약을 푼 비율.
         relaxed = [r["frac_relaxed"] for r in rows if "frac_relaxed" in r]
         if relaxed:
             block["frac_relaxed"] = float(np.nanmean(relaxed))
         out[c] = block
+
+    # ---- ΔΔ(표적 − 무작위) 시드 평균 --------------------------------------------
+    contrast_names = sorted({c for d in per_seed for c in d.get("contrasts", {})})
+    contrasts: dict[str, Any] = {}
+    for name in contrast_names:
+        rows = [d["contrasts"][name] for d in per_seed if name in d.get("contrasts", {})]
+        contrasts[name] = {
+            "target": rows[0].get("target"),
+            "control": rows[0].get("control"),
+            "estimate_mean_across_seeds": float(np.nanmean([r["estimate"] for r in rows])),
+            "sd_across_seeds": float(np.nanstd([r["estimate"] for r in rows], ddof=0)),
+            "sd_across_reps_mean": float(np.nanmean([r["sd_across_reps"] for r in rows])),
+            "perm_p_per_seed": [float(r["perm_p"]) for r in rows],
+        }
+    if contrasts:
+        out["contrasts"] = contrasts
+
+    if arrays:
+        out.update(_occlusion_pooled(arrays, conds, contrast_names, n_boot=n_boot))
+    return out
+
+
+def _occlusion_pooled(
+    arrays: list[dict], conds: list[str], contrast_names: list[str], n_boot: int = 500
+) -> dict:
+    """5시드 test를 (seed, row)로 풀링한 시드 층화 CI 묶음.
+
+    ``arrays``의 각 원소는 :func:`qrphish.occlusion.occlude_stratum`이 남긴 ``_arrays``에
+    ``seed``를 붙인 것이다.
+    """
+    from qrphish.occlusion import OCCLUSION_CONTRASTS
+
+    y = np.concatenate([a["y"] for a in arrays])
+    g = np.concatenate([np.asarray(a["groups"]).astype(str) for a in arrays])
+    sd = np.concatenate(
+        [np.full(np.asarray(a["y"]).size, int(a["seed"]), dtype=np.int64) for a in arrays]
+    )
+    base = np.concatenate([a["base"] for a in arrays])
+
+    def _cat_cond(name: str) -> np.ndarray | None:
+        """단일 개입 조건(반복 없음)의 로짓을 (seed, row)로 이어 붙인다."""
+        if all(name in a["cond"] for a in arrays):
+            return np.concatenate([a["cond"][name] for a in arrays])
+        return None
+
+    def _rep_count(name: str) -> int:
+        return min(len(a["reps"][name]) for a in arrays)
+
+    def _cat_rep(name: str, r: int) -> np.ndarray:
+        return np.concatenate([a["reps"][name][r] for a in arrays])
+
+    def _pooled_delta(p_a_list: list[np.ndarray], p_b_list: list[np.ndarray],
+                      seed: int) -> dict:
+        """반복 쌍 목록의 Δ를 같은 리샘플로 돌린 뒤 표본을 평균해 CI를 만든다."""
+        pts, samples = [], []
+        for pa, pb in zip(p_a_list, p_b_list, strict=True):
+            cb = paired_cluster_bootstrap_by_seed(
+                y, pa, pb, g, sd, auroc_fn, n_boot=n_boot, seed=seed
+            )
+            pts.append(cb["point"])
+            samples.append(cb["samples"])
+        vals = np.mean(np.stack(samples), axis=0)
+        lo, hi, n_valid = percentile_ci(vals, 0.05)
+        return {
+            "estimate": float(np.mean(pts)),
+            "ci": [lo, hi],
+            "n_boot": int(n_boot),
+            "n_valid": int(n_valid),
+            "pooling": "seed_stratified",
+        }
+
+    out: dict[str, Any] = {"n_pooled": int(y.size), "pooling": "seed_stratified"}
+    d_pooled: dict[str, Any] = {}
+    for c in conds:
+        cat = _cat_cond(c)
+        if cat is not None:
+            d_pooled[c] = _pooled_delta([cat], [base], seed=0)
+        elif all(c in a["reps"] for a in arrays):
+            n_r = _rep_count(c)
+            d_pooled[c] = _pooled_delta(
+                [_cat_rep(c, r) for r in range(n_r)], [base] * n_r, seed=0
+            )
+    out["d_auroc_pooled"] = d_pooled
+
+    dd: dict[str, Any] = {}
+    for i, (name, tgt, rnd) in enumerate(OCCLUSION_CONTRASTS):
+        if name not in contrast_names:
+            continue
+        cat = _cat_cond(tgt)
+        if cat is None or not all(rnd in a["reps"] for a in arrays):
+            continue
+        n_r = _rep_count(rnd)
+        blk = _pooled_delta([cat] * n_r, [_cat_rep(rnd, r) for r in range(n_r)], seed=i + 1)
+        blk["target"] = tgt
+        blk["control"] = rnd
+        blk["n_repeat"] = int(n_r)
+        dd[name] = blk
+    if dd:
+        out["delta_vs_random"] = dd
     return out
 
 
@@ -2537,13 +2832,18 @@ def run_occlusion(
     top_k: int = 10,
     size: int = 3,
     n_random_rep: int = 5,
+    n_perm: int = 500,
 ) -> dict:
     """인과 motif 절제 (review_01 C). ``run_motifs`` 결과가 먼저 있어야 한다.
 
-    ``reports/motifs/{stratum}/enrichment.json``의 상위 phishing motif가 매칭된 창의
-    중심 모듈을 뒤집고, 같은 개수의 무작위 데이터 모듈 뒤집기 및 상위 benign motif
-    뒤집기와 원본 대비 쌍체 비교한다. 결과는
-    ``reports/occlusion/{stratum}/results.json``.
+    시드 k는 ``reports/motifs/{motif_cid}/{stratum}/enrichment_seed{k}.json``의 상위
+    phishing motif만 쓴다. 그 파일은 **시드 k의 train만**으로 골랐으므로 선정이 평가 라벨에
+    오염되지 않는다(review_03 2절). 시드를 합친 ``enrichment.json``으로 폴백하지 않는다 —
+    폴백하면 오염된 옛 경로가 조용히 되살아난다.
+
+    매칭된 창의 중심 모듈을 뒤집고, 같은 개수의 무작위 데이터 모듈 뒤집기 및 상위 benign
+    motif 뒤집기와 원본 대비 쌍체 비교한다. 결과는
+    ``reports/occlusion/{cid}/{stratum}/results.json``.
     """
     import time
 
@@ -2563,18 +2863,16 @@ def run_occlusion(
             print(f"[skip] occlusion {stratum} (results.json 존재)", flush=True)
             out[stratum] = done
             continue
-        enr_path = _reports_dir(cfg) / "motifs" / motif_cid / stratum / "enrichment.json"
-        if not enr_path.exists():
+        mdir = _reports_dir(cfg) / "motifs" / motif_cid / stratum
+        if not list(mdir.glob("enrichment_seed*.json")):
             # run_motifs가 돌지 않은 층(MOTIF_STRATA 밖이거나 dropped)은 건너뛴다.
-            msg = f"enrichment.json이 없다: {enr_path} — 층을 건너뛴다 ([9] motif를 먼저 돌려라)."
+            msg = (
+                f"enrichment_seed*.json이 없다: {mdir} — 층을 건너뛴다 "
+                "([9] motif를 먼저 돌려라. 옛 통합 enrichment.json은 쓰지 않는다)."
+            )
             print(f"[skip] occlusion {stratum}: {msg}")
             out[stratum] = {"skipped": msg}
             continue
-        enr = load_enrichment(enr_path)
-        if int(enr.get("size", size)) != int(size):
-            raise ValueError(
-                f"enrichment.json의 size={enr.get('size')}가 요청한 size={size}와 다르다"
-            )
         avail = [s for s in _available_seeds(cfg, cid, stratum) if s in set(seeds)]
         if not avail:
             msg = (
@@ -2587,22 +2885,49 @@ def run_occlusion(
         t0 = time.time()
         print(f"[occlusion] {stratum} 시작 — seeds={avail}, n_boot={n_boot}", flush=True)
         per_seed = []
+        arrays: list[dict] = []
+        enr_paths: dict[str, str] = {}
         for s in avail:
             t_seed = time.time()
             try:
+                enr_path = mdir / f"enrichment_seed{s}.json"
+                if not enr_path.exists():
+                    raise FileNotFoundError(
+                        f"시드별 enrichment가 없다: {enr_path}\n"
+                        "[9] run_motifs를 다시 돌려 enrichment_seed{k}.json을 만들어라. "
+                        "시드를 합친 enrichment.json으로 대체하면 motif 선정이 평가 라벨에 "
+                        "오염된다(review_03 2절)."
+                    )
+                enr = load_enrichment(enr_path)
+                if int(enr.get("size", size)) != int(size):
+                    raise ValueError(
+                        f"{enr_path.name}의 size={enr.get('size')}가 "
+                        f"요청한 size={size}와 다르다"
+                    )
+                if int(enr.get("seed", s)) != int(s):
+                    raise ValueError(
+                        f"{enr_path.name}의 seed={enr.get('seed')}가 {s}와 다르다"
+                    )
+                enr_paths[str(s)] = str(enr_path)
                 model, ds, arr, meta = _load_trained(cfg, cid, stratum, s)
                 te_rows = np.nonzero(arr["split"].astype(int) == 2)[0]
                 groups = meta["group"].astype(str).to_numpy()[te_rows]
                 block = occlude_stratum(
                     model, ds, te_rows, groups, enr,
-                    top_k=top_k, size=size, n_random_rep=n_random_rep, seed=s, n_boot=n_boot,
+                    top_k=top_k, size=size, n_random_rep=n_random_rep, seed=s,
+                    n_boot=n_boot, n_perm=n_perm,
                 )
             except Exception as exc:
                 print(f"[ERROR] occlusion {stratum} seed{s}: {exc!r}")
                 traceback.print_exc()
                 per_seed.append({"seed": int(s), "error": repr(exc), "conditions": {}})
                 continue
+            arr_blk = block.pop("_arrays")
+            arr_blk["seed"] = int(s)
+            arrays.append(arr_blk)
             block["seed"] = int(s)
+            block["motif_source"] = "per_seed_train"
+            block["motif_source_path"] = str(enr_path)
             per_seed.append(block)
             print(f"  [occlusion] {stratum} seed{s} 종료 ({time.time() - t_seed:.1f}s)",
                   flush=True)
@@ -2610,6 +2935,19 @@ def run_occlusion(
             out[stratum] = {"error": "no usable seed", "per_seed": per_seed}
             print(f"[ERROR] occlusion {stratum}: 모든 시드 실패")
             continue
+
+        top_by_seed = {
+            int(a["seed"]): [
+                int(v) for v in load_enrichment(enr_paths[str(a["seed"])]).get(
+                    "top_phishing", []
+                )[:top_k]
+            ]
+            for a in arrays
+        }
+        agg = _occlusion_aggregate(
+            [b for b in per_seed if "error" not in b], arrays, n_boot=n_boot
+        )
+        agg["motif_top_overlap"] = _top_list_overlap(top_by_seed)
 
         res = {
             "schema_version": SCHEMA_VERSION,
@@ -2623,16 +2961,24 @@ def run_occlusion(
                 "qrphish_version": _pkg_version_safe(),
                 "timestamp": datetime.now(UTC).isoformat(),
             },
-            "motif_source": str(enr_path),
+            "motif_source": "per_seed_train",
+            "motif_source_paths": enr_paths,
             "top_k": int(top_k),
             "size": int(size),
             "n_random_rep": int(n_random_rep),
-            "aggregate": _occlusion_aggregate([b for b in per_seed if "error" not in b]),
+            "n_perm": int(n_perm),
+            "aggregate": agg,
             "per_seed": per_seed,
             "notes": [
                 "뒤집은 격자는 더 이상 유효한 QR이 아니다. RS 오류정정 덕에 실제 스캐너는 "
                 "여전히 디코딩할 수 있지만, 이것은 모델 입력에 대한 개입일 뿐 실제 QR 변형이 아니다.",
-                "무작위 대조는 각 샘플에서 phishing motif가 맞은 개수와 같은 수를 뒤집는다.",
+                "시드 k의 motif 목록은 시드 k의 train만으로 골랐다(enrichment_seed{k}.json). "
+                "시드를 합친 enrichment.json은 보고용이며 절제에 쓰지 않는다(review_03 2절).",
+                "무작위 대조는 각 샘플에서 짝이 되는 motif가 맞은 개수와 같은 수를 뒤집는다.",
+                "무작위 조건은 반복마다 AUROC를 따로 계산해 평균한다. 반복별 로짓을 평균하면 "
+                "무작위 훼손 효과가 상쇄되어 대조군 하락이 과소평가된다(review_03 3절).",
+                "delta_vs_random은 같은 test에서 (표적 개입 − 무작위 개입)의 AUROC 차 ΔΔ이고, "
+                "CI는 시드 층화 클러스터 부트스트랩이다. 음수면 표적 개입이 더 크게 무너뜨렸다.",
                 "random_matched/random_matched_benign은 개수에 더해 사분면과 국소 흑색 밀도(3x3 창 "
                 "안 1의 개수 ±1)까지 맞춘 topology-matched 대조다(review_02 4절). 후보가 모자라 밀도 "
                 "제약을 푼 비율은 frac_relaxed에 남는다.",
@@ -2662,12 +3008,17 @@ TRANSFER_MOTIF_FIT_CAP = 4000
 TRANSFER_MOTIF_EVAL_CAP = 8000
 
 
-def _transfer_mode_dir(mode: str, cohort: str) -> str:
-    """산출물 경로에 쓰는 모드 이름. F-a는 cohort에 따라 갈린다.
+def _transfer_mode_dir(mode: str, cohort: str, match: str = "length") -> str:
+    """산출물 경로에 쓰는 모드 이름. F-a는 cohort와 매칭 조건에 따라 갈린다.
 
     고정 cohort와 시드별 cohort는 평가 행 집합이 다르므로 같은 경로에 쓰면 서로 덮어쓴다.
+    ``match="length_path"``(경로 유무까지 맞춘 민감도 조건)도 평가 행이 달라지므로
+    접미사로 갈라 둔다.
     """
-    return "a_fixed" if (mode == "a" and cohort == "fixed") else mode
+    name = "a_fixed" if (mode == "a" and cohort == "fixed") else mode
+    if match == "length_path":
+        name = f"{name}_lenpath"
+    return name
 
 
 def _transfer_report_dir(cfg: Any, source_tag: str, mode: str, cid: str, stratum: str) -> Path:
@@ -2824,35 +3175,140 @@ def _transfer_baseline_block(
     fit_frame: pd.DataFrame | None,
     fit_on: str,
     with_motif: bool,
+    preds_out: dict | None = None,
+    motif_eval_cap: int = TRANSFER_MOTIF_EVAL_CAP,
+    eval_hist_cache: dict | None = None,
 ) -> dict:
     """F-a/F-c 베이스라인: ``fit_frame``(train)에서 fit → 외부 평가 행에 apply.
 
     설계 3.7 — CNN만 무너지는지, 텍스트 기준선도 함께 무너지는지가 해석 매트릭스를 가른다.
+
+    ``preds_out``을 주면 기준선별 예측 점수를 담아 준다(CNN과의 쌍체 ΔAUROC용).
+    ``motif_eval_cap<=0``이면 motif 히스토그램을 평가 cohort **전체**에서 만든다 — 이때만
+    motif 기준선이 CNN과 같은 행을 보므로 쌍체 비교가 성립한다. 고정 cohort에서는
+    ``eval_hist_cache``로 평가 쪽 히스토그램을 시드 간에 재사용한다(F-a 비용의 대부분).
     """
     from qrphish.transfer import transfer_baselines
 
     if fit_frame is None or len(fit_frame) == 0:
         return {}
     base = transfer_baselines(
-        _subsample(fit_frame, TRANSFER_FIT_CAP, seed), ext_eval, seed, fit_on=fit_on
+        _subsample(fit_frame, TRANSFER_FIT_CAP, seed), ext_eval, seed, fit_on=fit_on,
+        preds_out=preds_out,
     )
+    for v in base.values():
+        v["n_fit"] = int(min(len(fit_frame), TRANSFER_FIT_CAP) if TRANSFER_FIT_CAP > 0
+                         else len(fit_frame))
     if not with_motif:
         return base
-    # motif 히스토그램은 URL당 QR 인코딩이 필요해 훨씬 비싸다. fit/eval 모두 따로 캡을 걸고,
+    # motif 히스토그램은 URL당 QR 인코딩이 필요해 훨씬 비싸다. fit에는 따로 캡을 걸고,
     # 실패하더라도 전이 판정(CNN AUROC 대 순열 바닥선)은 그대로 진행한다.
     try:
         fit_m = _subsample(fit_frame, TRANSFER_MOTIF_FIT_CAP, seed)
-        ev_m = _subsample(ext_eval, TRANSFER_MOTIF_EVAL_CAP, seed)
-        H = _motif_hists(cfg, {"fit": fit_m, "eval": ev_m}, {})
+        ev_m = ext_eval.reset_index(drop=True) if motif_eval_cap <= 0 else _subsample(
+            ext_eval, motif_eval_cap, seed
+        )
+        # n_max는 fit·eval 두 프레임의 최대 버전에서 한 번에 정해야 창 개수가 같아진다.
+        # 고정 cohort에서는 eval 히스토그램이 시드와 무관하므로 캐시해 재계산을 피한다
+        # (F-a 비용의 대부분이 여기다).
+        vmax = max(int(fit_m["version"].max()), int(ev_m["version"].max()))
+        n_max = 4 * vmax + 17
+        cache_key = ("eval", int(len(ev_m)), int(motif_eval_cap), int(n_max))
+        if eval_hist_cache is not None and cache_key in eval_hist_cache:
+            H_eval = eval_hist_cache[cache_key]
+        else:
+            H_eval = _motif_features(cfg, ev_m, {}, n_max)[0]
+            if eval_hist_cache is not None:
+                eval_hist_cache[cache_key] = H_eval
+        H = {"fit": _motif_features(cfg, fit_m, {}, n_max)[0], "eval": H_eval}
         motif = {
             key: {"H_fit": H["fit"][key], "H_eval": H["eval"][key]}
             for key in ("patch3", "pyramid3")
         }
-        got = transfer_baselines(fit_m, ev_m, seed, fit_on=fit_on, motif=motif)
-        base.update({k: v for k, v in got.items() if k.startswith("motif_")})
+        motif_preds: dict | None = {} if preds_out is not None else None
+        got = transfer_baselines(
+            fit_m, ev_m, seed, fit_on=fit_on, motif=motif, preds_out=motif_preds
+        )
+        paired = bool(len(ev_m) == len(ext_eval))
+        for k, v in got.items():
+            if not k.startswith("motif_"):
+                continue
+            v["n_fit"] = int(len(fit_m))
+            v["eval_rows_same_as_cnn"] = paired
+            base[k] = v
+            if preds_out is not None and motif_preds is not None and paired:
+                preds_out[k] = motif_preds[k]
     except Exception as exc:  # motif는 보조 지표다
         print(f"[WARN] transfer motif 베이스라인 실패 {stratum} seed{seed}: {exc!r}")
     return base
+
+
+def _aggregate_baselines(per_seed_base: list[dict]) -> dict:
+    """시드별 베이스라인 결과 → 시드 평균 + 시드별 값. 모든 시드에 있는 이름만 남긴다."""
+    ok = [b for b in per_seed_base if b]
+    if not ok:
+        return {}
+    names = set(ok[0])
+    for b in ok[1:]:
+        names &= set(b)
+    out: dict[str, Any] = {}
+    for name in sorted(names):
+        vals = [float(b[name]["auroc"]) for b in ok]
+        first = ok[0][name]
+        out[name] = {
+            "auroc": float(np.mean(vals)),
+            "auroc_per_seed": vals,
+            "auroc_sd": float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0,
+            # CI는 첫 시드의 그룹 클러스터 부트스트랩이다. 시드 층화 CI는
+            # comparison_to_baselines의 쌍체 Δ 쪽에서 낸다.
+            "ci": first.get("ci"),
+            "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+            "fit_on": first.get("fit_on"),
+            "n": first.get("n"),
+            "n_fit": first.get("n_fit"),
+            "n_seeds": len(vals),
+            "eval_rows_same_as_cnn": first.get("eval_rows_same_as_cnn", True),
+        }
+    dropped = sorted((set().union(*(set(b) for b in ok))) - names)
+    if dropped:
+        out["_incomplete_across_seeds"] = dropped  # type: ignore[assignment]
+    return out
+
+
+def _paired_baseline_deltas(
+    per_seed: list[dict], per_seed_preds: list[dict], baselines: dict, n_boot: int
+) -> dict:
+    """CNN − 각 기준선의 **쌍체** ΔAUROC와 시드 층화 CI (리뷰 03 항목 8)."""
+    from qrphish.transfer import paired_delta_auroc
+
+    ok = [(d, pr) for d, pr in zip(per_seed, per_seed_preds, strict=True)
+          if "error" not in d and pr]
+    if not ok:
+        return {}
+    names = set(ok[0][1])
+    for _, pr in ok[1:]:
+        names &= set(pr)
+    y = np.concatenate([d["y"] for d, _ in ok])
+    p_cnn = np.concatenate([d["p"] for d, _ in ok])
+    g = np.concatenate([np.asarray(d["group"]).astype(str) for d, _ in ok])
+    sd = np.concatenate([np.full(d["y"].size, int(d["seed"]), dtype=np.int64) for d, _ in ok])
+    out: dict[str, Any] = {}
+    for name in sorted(names):
+        p_b = np.concatenate([pr[name] for _, pr in ok])
+        if p_b.size != y.size:
+            continue
+        res = paired_delta_auroc(y, p_cnn, p_b, g, sd, n_boot=n_boot, seed=0)
+        res["baseline"] = name
+        res["n_seeds"] = len(ok)
+        res["n_rows"] = int(y.size)
+        out[name] = res
+    skipped = sorted(set(baselines) - set(out) - {"_incomplete_across_seeds"})
+    if skipped:
+        out["_skipped"] = {  # type: ignore[assignment]
+            "names": skipped,
+            "reason": "모든 시드에서 같은 평가 행의 예측을 얻지 못했다(캡 적용 등)",
+        }
+    return out
 
 
 def _transfer_data_block(df: pd.DataFrame, sm: Any, eval_rows: str, tier: str) -> dict:
@@ -2926,6 +3382,7 @@ def _fa_cohort(
     ext_df: pd.DataFrame,
     ext_cond_dir: Path,
     eval_rows: str,
+    match: str = "length",
 ) -> dict:
     """F-a 평가 cohort 하나(외부 층 프레임 + 격자 + 평가 행 마스크)를 만든다.
 
@@ -2935,7 +3392,7 @@ def _fa_cohort(
     """
     from qrphish.transfer import build_external_stratum, prepare_external_frame
 
-    df, diag = prepare_external_frame(cfg, ext_df, stratum, cohort_seed)
+    df, diag = prepare_external_frame(cfg, ext_df, stratum, cohort_seed, match=match)
     if len(df) == 0:
         raise RuntimeError(f"F-a {stratum}: 길이 매칭 후 외부 층이 비었다 (cohort seed {cohort_seed})")
     seed_dir = ext_cond_dir / stratum / f"seed{cohort_seed}"
@@ -2948,6 +3405,8 @@ def _fa_cohort(
         "stratum_meta": sm,
         "rows": _eval_rows_mask(meta, eval_rows),
         "n_after_match": diag.get("n_after_match"),
+        "match": str(match),
+        "path_match": diag.get("path_match"),
     }
 
 
@@ -2961,13 +3420,14 @@ def _fa_one_seed(
     eval_rows: str,
     thresholds: dict[int, float],
     cohort: dict | None = None,
+    match: str = "length",
 ) -> dict:
     """F-a 한 시드: 외부 프레임 준비 → 층 조립 → WebPhish 체크포인트로 추론.
 
     ``cohort``를 주면 그 고정 cohort의 격자·평가 행을 그대로 쓰고, 시드에 따라 바뀌는 것은
     체크포인트(모델)와 임계값뿐이다.
     """
-    co = cohort or _fa_cohort(cfg, stratum, seed, ext_df, ext_cond_dir, eval_rows)
+    co = cohort or _fa_cohort(cfg, stratum, seed, ext_df, ext_cond_dir, eval_rows, match)
     rows = co["rows"]
     ckpt_path = _seed_dir(cfg, cid, stratum, seed) / "model.pt"
     if not ckpt_path.exists():
@@ -2987,6 +3447,7 @@ def _fa_one_seed(
         "stratum_meta": co["stratum_meta"],
         "n_after_match": co["n_after_match"],
         "cohort_seed": int(co["cohort_seed"]),
+        "path_match": co.get("path_match"),
     }
 
 
@@ -3025,6 +3486,9 @@ def _transfer_results(
     in_domain: float | None,
     gates: dict,
     extra: dict | None = None,
+    common_direction_bias: bool = False,
+    path_shortcut_dominant: bool = False,
+    match: str = "length",
 ) -> dict:
     """설계 7.5 결과 스키마. 키를 비워서라도 유지한다(표 생성기가 이 키를 읽는다)."""
     from qrphish.transfer import verdict as _verdict
@@ -3056,8 +3520,12 @@ def _transfer_results(
                 float(text - auroc) if text is not None and text == text else None
             ),
         },
-        "verdict": _verdict(auroc, ci, float(null_perm.get("ci_upper", float("nan"))),
-                            in_domain, gates),
+        "verdict": _verdict(
+            auroc, ci, float(null_perm.get("ci_upper", float("nan"))), in_domain, gates,
+            common_direction_bias=common_direction_bias,
+            path_shortcut_dominant=path_shortcut_dominant,
+            match=match,
+        ),
     }
     if extra:
         res.update(extra)
@@ -3075,9 +3543,11 @@ def run_transfer(
     source_tag: str | None = None,
     cid: str = MAIN_CONDITION,
     eval_rows: str = "all",
-    n_perm: int = 200,
+    n_perm: int = 2000,
     dedup: str = "etld1",
     motif: bool = True,
+    match: str = "length",
+    motif_eval_cap: int = TRANSFER_MOTIF_EVAL_CAP,
     entry: dict | None = None,
 ) -> dict:
     """외부 검증(F). 설계 3·4·6·7절.
@@ -3093,7 +3563,13 @@ def run_transfer(
             시드마다 다시 매칭하며 F-b와의 쌍체 비교(secondary)용이다. 두 결과는 서로 다른
             경로에 쓴다: ``reports/transfer/{tag}/a_fixed/…`` 대 ``…/a/…``.
         eval_rows: F-a 평가 행. 주 결과는 ``"all"``.
-        n_perm: 그룹 단위 라벨 순열 횟수(바닥선).
+        n_perm: 라벨 순열 횟수(바닥선). 결과 JSON의 ``null_permutation.n_perm``에 그대로
+            기록되며 그 값이 정본이다. 기본 2,000회.
+        match: F-a 외부 층의 매칭 조건. ``"length"``(기본, 1차 실험과 동일) 또는
+            ``"length_path"``(길이 + 경로 유무 동시 매칭, 리뷰 03 항목 4 민감도).
+            ``"length_path"`` 산출물은 ``…/a_fixed_lenpath/…`` 경로로 따로 나간다.
+        motif_eval_cap: motif 히스토그램 평가 행 상한. ``0`` 이하면 cohort 전체를 쓰고,
+            그때만 motif 기준선이 CNN과 같은 행을 보므로 쌍체 Δ가 계산된다.
 
     Returns:
         ``{mode: {stratum: results}}``. 부작용으로
@@ -3113,6 +3589,8 @@ def run_transfer(
     )
 
     modes = tuple(str(m) for m in modes)
+    if match not in ("length", "length_path"):
+        raise ValueError(f"match는 'length'|'length_path'여야 한다 (got {match!r})")
     if cohort not in ("fixed", "per_seed"):
         raise ValueError(f"cohort는 'fixed'|'per_seed' 중 하나여야 한다 (got {cohort!r})")
     for m in modes:
@@ -3158,7 +3636,7 @@ def run_transfer(
 
     for stratum in todo:
         for mode in modes:
-            mode_dir = _transfer_mode_dir(mode, cohort)
+            mode_dir = _transfer_mode_dir(mode, cohort, match if mode == "a" else "length")
             rpath = _transfer_report_dir(cfg, tag, mode_dir, cid, stratum) / "results.json"
             done = _completed_result(rpath, f"transfer F-{mode} {stratum}")
             if done is not None:
@@ -3177,7 +3655,8 @@ def run_transfer(
                         cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir,
                         eval_rows=eval_rows, n_perm=n_perm, n_boot=n_boot,
                         secondary_min=secondary_min, motif=motif, ext_stats=ext_stats,
-                        coll_gate=coll_gate, cohort=cohort,
+                        coll_gate=coll_gate, cohort=cohort, match=match,
+                        motif_eval_cap=motif_eval_cap,
                     )
                 elif mode == "b":
                     res = _run_transfer_b(
@@ -3217,34 +3696,38 @@ def run_transfer(
     return out
 
 
-def _apply_collection_gate(data: dict, coll_gate: dict | None, recomputed_ok: bool) -> bool:
-    """편향 게이트를 결정한다 — 수집 단계 판정이 있으면 그것을 쓴다.
+def _apply_collection_gate(data: dict, coll_gate: dict | None, recomputed_flag: bool) -> bool:
+    """공통 방향 편향 **플래그**를 결정한다 — 수집 단계 기록이 있으면 그것을 쓴다.
 
-    반환값이 ``gates["bias_direction_ok"]``에 들어간다. 어느 쪽을 썼는지는 ``data``에
-    남겨 결과 JSON만 보고도 추적할 수 있게 한다.
+    반환값은 차단 게이트가 아니라 :func:`qrphish.transfer.verdict`에 넘길 플래그다.
+    길이 매칭된 프레임에서 재계산하면 수집 단계와 값이 달라질 수 있으므로(매칭이 경로
+    보유율 분포를 바꾼다) 수집 단계 판정을 우선 승계하고, 어느 쪽을 썼는지 남긴다.
     """
     if coll_gate is not None:
+        flag = bool(coll_gate.get("common_direction_bias", not coll_gate["gate_passed"]))
         data["bias_gate"] = {
             "source": "collection",
-            "gate_passed": bool(coll_gate["gate_passed"]),
+            "common_direction_bias": flag,
             "path": coll_gate.get("source"),
             "block": coll_gate.get("block"),
             "note": coll_gate.get("gate_note"),
-            "recomputed_transfer_stage": bool(recomputed_ok),
+            "recomputed_transfer_stage": bool(recomputed_flag),
+            "blocking": False,
         }
-        return bool(coll_gate["gate_passed"])
+        return flag
     data["bias_gate"] = {
         "source": "recomputed_transfer_stage",
-        "gate_passed": bool(recomputed_ok),
+        "common_direction_bias": bool(recomputed_flag),
         "note": "수집 단계 bias_diagnostics.json을 못 찾아 층 프레임에서 재계산했다.",
+        "blocking": False,
     }
-    return bool(recomputed_ok)
+    return bool(recomputed_flag)
 
 
 def _run_transfer_a(
     cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir, *,
     eval_rows, n_perm, n_boot, secondary_min, motif, ext_stats, coll_gate=None,
-    cohort="fixed",
+    cohort="fixed", match="length", motif_eval_cap=TRANSFER_MOTIF_EVAL_CAP,
 ) -> dict:
     """F-a — zero-shot. 학습하지 않는다. 임계값은 WebPhish val 값을 재사용한다.
 
@@ -3257,7 +3740,13 @@ def _run_transfer_a(
       F-a 대 F-b 쌍체 비교(secondary)에만 쓴다.
     """
     from qrphish.dataset import stratum_tier
-    from qrphish.transfer import bias_direction_ok, gates_from, permutation_null
+    from qrphish.transfer import (
+        bias_direction_ok,
+        gates_from,
+        path_shortcut_flag,
+        permutation_null,
+        row_permutation_null,
+    )
 
     if cohort not in ("fixed", "per_seed"):
         raise ValueError(f"cohort는 'fixed'|'per_seed' 중 하나여야 한다 (got {cohort!r})")
@@ -3267,18 +3756,18 @@ def _run_transfer_a(
     if cohort == "fixed":
         cohort_seed = int(seeds[0]) if seeds else 0
         fixed_cohort = _fa_cohort(
-            cfg, stratum, cohort_seed, ext_all, ext_cond_dir, eval_rows
+            cfg, stratum, cohort_seed, ext_all, ext_cond_dir, eval_rows, match
         )
-        print(f"[transfer] F-a {stratum}: 고정 cohort (seed{cohort_seed} 분할·매칭) "
-              f"{int(np.asarray(fixed_cohort['rows']).sum())}행을 모든 모델 시드가 공유",
-              flush=True)
+        print(f"[transfer] F-a {stratum}: 고정 cohort (seed{cohort_seed} 분할·매칭, "
+              f"match={match}) {int(np.asarray(fixed_cohort['rows']).sum())}행을 "
+              "모든 모델 시드가 공유", flush=True)
     per_seed: list[dict] = []
     n_failed = 0
     for s in seeds:
         try:
             per_seed.append(
                 _fa_one_seed(cfg, cid, stratum, s, ext_all, ext_cond_dir, eval_rows,
-                             thresholds, cohort=fixed_cohort)
+                             thresholds, cohort=fixed_cohort, match=match)
             )
         except Exception as exc:
             # 시드마다 같은 traceback을 반복해 찍으면 로그에서 원인을 찾기 어렵다.
@@ -3307,15 +3796,31 @@ def _run_transfer_a(
     model = _transfer_model_block(per_seed, n_boot, "webphish_val")
     y, p, g, sd = _pooled_arrays(per_seed)
     null_perm = permutation_null(y, p, g, sd, n_perm=n_perm, seed=0)
+    null_row = row_permutation_null(y, p, sd, n_perm=n_perm, seed=0)
 
-    # 베이스라인은 첫 성공 시드에서만 낸다(WebPhish train에서 fit하는 비용이 크고,
-    # 판정의 주 지표는 CNN AUROC다). 어느 시드였는지 결과에 남긴다.
-    wp_frame, _ = _prepare_frame(cfg, stratum, int(first["seed"]))
-    wp_train = wp_frame[_split_mask(wp_frame, 0)].reset_index(drop=True)
-    baselines = _transfer_baseline_block(
-        cfg, stratum, int(first["seed"]), ev,
-        fit_frame=wp_train, fit_on="webphish_train", with_motif=motif,
-    )
+    # 베이스라인은 **모든 성공 시드**에서 낸다(리뷰 03 항목 8). 시드 s의 WebPhish train에서
+    # fit해 같은 (고정) cohort에 apply하므로, CNN과 시드가 정확히 짝지어진다.
+    wp_frame = None
+    per_seed_base: list[dict] = []
+    per_seed_preds: list[dict] = []
+    eval_hist_cache: dict = {}
+    for d in ok:
+        preds: dict = {}
+        wp_s, _ = _prepare_frame(cfg, stratum, int(d["seed"]))
+        if wp_frame is None:
+            wp_frame = wp_s
+        wp_train_s = wp_s[_split_mask(wp_s, 0)].reset_index(drop=True)
+        per_seed_base.append(
+            _transfer_baseline_block(
+                cfg, stratum, int(d["seed"]), d["eval_frame"],
+                fit_frame=wp_train_s, fit_on="webphish_train", with_motif=motif,
+                preds_out=preds, motif_eval_cap=motif_eval_cap,
+                eval_hist_cache=(eval_hist_cache if cohort == "fixed" else None),
+            )
+        )
+        per_seed_preds.append(preds)
+    baselines = _aggregate_baselines(per_seed_base)
+    paired_deltas = _paired_baseline_deltas(per_seed, per_seed_preds, baselines, n_boot)
 
     bias = bias_direction_ok(ev, wp_frame)
     sm = first.get("stratum_meta")
@@ -3329,11 +3834,17 @@ def _run_transfer_a(
         int(fixed_cohort["cohort_seed"]) if fixed_cohort is not None else None
     )
     data["bias_diagnostics"] = bias
-    data["baseline_seed"] = int(first["seed"])
+    data["baseline_seeds"] = [int(d["seed"]) for d in ok]
+    data["match"] = str(match)
+    data["path_match"] = first.get("path_match")
     gate_notes: dict[str, str] = {}
-    bias_ok = _apply_collection_gate(data, coll_gate, bool(bias["ok"]))
+    common_bias = _apply_collection_gate(
+        data, coll_gate, bool(bias.get("common_direction_bias", False))
+    )
+    shortcut = path_shortcut_flag(baselines)
+    data["path_shortcut"] = shortcut
     gates = gates_from(baselines, data["split_diagnostics"].get("top5_test_group_frac"),
-                       bias_ok, notes=gate_notes)
+                       notes=gate_notes)
     data["gate_notes"] = gate_notes
     if tier == "dropped":
         gates["stratum_tier_ok"] = False
@@ -3343,7 +3854,15 @@ def _run_transfer_a(
         cfg, mode="a", source_tag=tag, cid=cid, stratum=stratum, data=data, model=model,
         null_perm=null_perm, baselines=baselines,
         in_domain=(float(in_domain) if in_domain is not None else None), gates=gates,
-        extra={"cohort": str(cohort)},
+        common_direction_bias=common_bias,
+        path_shortcut_dominant=bool(shortcut["path_shortcut_dominant"]),
+        match=str(match),
+        extra={
+            "cohort": str(cohort),
+            "match": str(match),
+            "null_row_permutation": null_row,
+            "comparison_to_baselines": paired_deltas,
+        },
     )
     if motif:
         res["motif_replication"] = _transfer_motif_replication(
@@ -3395,7 +3914,13 @@ def _run_transfer_b(cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir, *,
     전이가 실패했을 때 "외부에 신호가 없다"와 "전이가 안 된다"를 가르는 실행이다.
     """
     from qrphish.dataset import stratum_tier
-    from qrphish.transfer import gates_from, permutation_null, transfer_baselines
+    from qrphish.transfer import (
+        gates_from,
+        path_shortcut_flag,
+        permutation_null,
+        row_permutation_null,
+        transfer_baselines,
+    )
 
     per_seed_raw = []
     for s in seeds:
@@ -3432,6 +3957,7 @@ def _run_transfer_b(cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir, *,
     model = _transfer_model_block(per_seed, n_boot, "external_val")
     y, p, g, sd = _pooled_arrays(per_seed)
     null_perm = permutation_null(y, p, g, sd, n_perm=n_perm, seed=0)
+    null_row = row_permutation_null(y, p, sd, n_perm=n_perm, seed=0)
 
     seed0 = int(ok[0]["seed"])
     meta = pd.read_parquet(ext_cond_dir / stratum / f"seed{seed0}" / "meta.parquet")
@@ -3446,8 +3972,13 @@ def _run_transfer_b(cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir, *,
     )
     data["n_train"] = int(len(tr))
     gate_notes: dict[str, str] = {}
-    bias_ok = _apply_collection_gate(data, coll_gate, True)
-    gates = gates_from(baselines, None, bias_ok, notes=gate_notes)
+    # F-b는 외부에서 학습·평가한다. "두 데이터셋 공통 방향" 질문은 전이(F-a)의 것이므로
+    # 플래그를 판정에 넣지 않고 기록만 한다. 경로 지름길은 평가 cohort 자체의 성질이라
+    # 그대로 적용한다.
+    _apply_collection_gate(data, coll_gate, False)
+    shortcut = path_shortcut_flag(baselines)
+    data["path_shortcut"] = shortcut
+    gates = gates_from(baselines, None, notes=gate_notes)
     data["gate_notes"] = gate_notes
     wp_res = _webphish_results(cfg, cid, stratum)
     in_domain = ((wp_res or {}).get("aggregate") or {}).get("auroc_mean")
@@ -3455,7 +3986,9 @@ def _run_transfer_b(cfg, cid, tag, stratum, seeds, ext_all, ext_cond_dir, *,
         cfg, mode="b", source_tag=tag, cid=cid, stratum=stratum, data=data, model=model,
         null_perm=null_perm, baselines=baselines,
         in_domain=(float(in_domain) if in_domain is not None else None), gates=gates,
-        extra={"per_seed_train": [{k: v for k, v in d.items() if k != "baselines"}
+        path_shortcut_dominant=bool(shortcut["path_shortcut_dominant"]),
+        extra={"null_row_permutation": null_row,
+               "per_seed_train": [{k: v for k, v in d.items() if k != "baselines"}
                                   for d in per_seed_raw]},
     )
 
@@ -3480,7 +4013,13 @@ def _run_transfer_c(cfg, cid, tag, stratum, seeds, ext_cond_dir, *, n_perm, n_bo
     F-a와 비대칭이면 어느 쪽 신호가 더 일반적인지 알려준다.
     ``ext_cond_dir``는 **F-b가 쓴** 디렉터리다(체크포인트가 거기 있다).
     """
-    from qrphish.transfer import gates_from, permutation_null, transfer_baselines
+    from qrphish.transfer import (
+        gates_from,
+        path_shortcut_flag,
+        permutation_null,
+        row_permutation_null,
+        transfer_baselines,
+    )
 
     per_seed = []
     for s in seeds:
@@ -3496,6 +4035,7 @@ def _run_transfer_c(cfg, cid, tag, stratum, seeds, ext_cond_dir, *, n_perm, n_bo
     model = _transfer_model_block(per_seed, n_boot, "external_val")
     y, p, g, sd = _pooled_arrays(per_seed)
     null_perm = permutation_null(y, p, g, sd, n_perm=n_perm, seed=0)
+    null_row = row_permutation_null(y, p, sd, n_perm=n_perm, seed=0)
 
     seed0 = int(ok[0]["seed"])
     ext_meta = pd.read_parquet(ext_cond_dir / stratum / f"seed{seed0}" / "meta.parquet")
@@ -3508,8 +4048,10 @@ def _run_transfer_c(cfg, cid, tag, stratum, seeds, ext_cond_dir, *, n_perm, n_bo
     # 평가는 WebPhish지만 **학습**이 외부 데이터라, 수집 단계 게이트가 깨졌으면 F-c도
     # 결론에 쓰지 않는다.
     gate_notes: dict[str, str] = {}
-    bias_ok = _apply_collection_gate(data, coll_gate, True)
-    gates = gates_from(baselines, None, bias_ok, notes=gate_notes)
+    _apply_collection_gate(data, coll_gate, False)
+    shortcut = path_shortcut_flag(baselines)
+    data["path_shortcut"] = shortcut
+    gates = gates_from(baselines, None, notes=gate_notes)
     data["gate_notes"] = gate_notes
     wp_res = _webphish_results(cfg, cid, stratum)
     in_domain = ((wp_res or {}).get("aggregate") or {}).get("auroc_mean")
@@ -3517,6 +4059,8 @@ def _run_transfer_c(cfg, cid, tag, stratum, seeds, ext_cond_dir, *, n_perm, n_bo
         cfg, mode="c", source_tag=tag, cid=cid, stratum=stratum, data=data, model=model,
         null_perm=null_perm, baselines=baselines,
         in_domain=(float(in_domain) if in_domain is not None else None), gates=gates,
+        path_shortcut_dominant=bool(shortcut["path_shortcut_dominant"]),
+        extra={"null_row_permutation": null_row},
     )
 
 
@@ -3532,7 +4076,15 @@ CAMPAIGN_MODELS = ("A", "A_sm", "B")
 CAMPAIGN_BASELINES = ("charngram_lr", "bytehist_lr")
 # 사전 등록 판정 경계(설계 6.4). 부호만 뒤집어 쓴다 — 여기서는 Δ = A − B가 양수일 때
 # "템플릿 누출 이득"이므로, 하락폭 대신 이득 크기를 같은 0.05와 비교한다.
-CAMPAIGN_EFFECT_THRESHOLD = 0.05
+# SESOI(0.02)는 이것과 **다른 질문**의 임계다: 0.05는 "결론을 고쳐야 하는가",
+# 0.02는 "무시해도 되는가". 정의는 :mod:`qrphish.campaign` 상단에 있다.
+CAMPAIGN_EFFECT_THRESHOLD = CAMPAIGN_MAJOR_THRESHOLD
+# 판정을 붙이는 태그. 주 지표(cnn_sm)와 보조 A−B, 그리고 두 누출 대조 부집합까지 모두
+# 같은 규칙으로 판정한다(review_03 5절: "부집합에도 같은 규칙을 명시"). 텍스트 기준선
+# 태그에는 붙이지 않는다 — 사전 등록 가설이 아니다.
+CAMPAIGN_VERDICT_TAGS = (
+    "cnn_sm", "cnn", "cnn_sm_leaky_vs_contrast", "cnn_leaky_vs_contrast",
+)
 
 
 def _campaign_pool_frame(cfg: Any, stratum: str, seed: int) -> tuple[pd.DataFrame, dict]:
@@ -3869,15 +4421,41 @@ def _campaign_pooled(
     }
 
 
-def _campaign_verdict(lo: float, hi: float, point: float) -> str:
-    """사전 등록 판정 (설계 6.4를 A−B 부호로 옮긴 것)."""
-    if not np.isfinite(lo) or not np.isfinite(hi):
-        return "판정 불가"
-    if lo <= 0.0:
-        return "누출 무시 가능 (CI가 0을 포함하거나 하한이 0 이하)"
-    if abs(point) < CAMPAIGN_EFFECT_THRESHOLD:
-        return "템플릿 누출 이득 존재, 크기 작음 (< 0.05)"
-    return "결론 수정 필요 (템플릿 누출 이득 ≥ 0.05)"
+def _campaign_verdict(lo: float, hi: float, point: float) -> dict[str, Any]:
+    """사전 등록 판정 — :func:`qrphish.campaign.campaign_verdict`의 얇은 래퍼.
+
+    옛 규칙(``lo <= 0`` → "누출 무시 가능")은 CI ``[-0.10, +0.30]``에도 같은 판정을 내려
+    "검출하지 못했다"와 "차이가 없다"를 섞었다(review_03 5절). 새 규칙은 SESOI
+    (:data:`CAMPAIGN_SESOI`)로 둘을 가른다. 판정 코드와 정의는 campaign 모듈에 있다.
+    """
+    return campaign_verdict(float(lo), float(hi), float(point))
+
+
+def _campaign_leaky_sample_warning(per_seed: list[dict]) -> dict[str, Any]:
+    """누출 대조 부집합의 표본 수 경고 블록.
+
+    ``*_leaky_vs_contrast``의 Δ는 "A train에 형제가 있는 T 행"이 몇 개냐에 검정력이
+    통째로 걸려 있다. 실측은 층당 평균 15 ~ 38행뿐이라 CI가 넓고, 그 CI로는
+    ``negligible``이 나올 수 없다. 그 사실을 결과 JSON에 명시적으로 남긴다.
+    """
+    vals = [
+        int(r["n_test_leaky"])
+        for r in per_seed
+        if "error" not in r and r.get("n_test_leaky") is not None
+    ]
+    if not vals:
+        return {"n_leaky_rows_per_seed": [], "warning": "누출 행 수를 알 수 없다"}
+    mean = float(np.mean(vals))
+    return {
+        "n_leaky_rows_per_seed": vals,
+        "n_leaky_rows_mean": mean,
+        "warning": (
+            f"누출 기회가 있는 T 행은 시드당 평균 {mean:.0f}개뿐이다(시드별 {vals}). "
+            "이 부집합의 CI는 구조적으로 넓어 등가성(negligible) 판정이 사실상 불가능하며, "
+            "'phishing kit 암기 가능성을 배제했다'는 결론의 근거로 쓸 수 없다. "
+            "표본 구성이 다르므로 전체 T의 Δ와 크기를 직접 비교해서도 안 된다."
+        ),
+    }
 
 
 def _campaign_aggregate(cfg, per_seed, out_dir, stratum) -> dict:
@@ -3932,10 +4510,20 @@ def _campaign_aggregate(cfg, per_seed, out_dir, stratum) -> dict:
         }
         block["model_a"] = model_a
         block["model_b"] = "B"
-        if tag == "cnn_sm":
-            # 사전 등록 판정은 주 지표(A_sm − B)에만 붙인다.
+        if tag in CAMPAIGN_VERDICT_TAGS:
+            # 사전 등록 판정. 주 지표는 여전히 cnn_sm(A_sm − B)이지만, 누출 대조
+            # 부집합에도 **같은 규칙**을 적용해 판정을 명시한다(review_03 5절).
             block["verdict"] = _campaign_verdict(pb_["lo"], pb_["hi"], pb_["point"])
+            block["primary"] = tag == "cnn_sm"
+            if leaky_only:
+                block["sample_size_warning"] = _campaign_leaky_sample_warning(per_seed)
         agg[tag] = block
+    agg["verdict_rule"] = {
+        "sesoi": CAMPAIGN_SESOI,
+        "major_threshold": CAMPAIGN_EFFECT_THRESHOLD,
+        "primary_tag": "cnn_sm",
+        "definitions": dict(CAMPAIGN_VERDICT_DEFINITIONS),
+    }
     return agg
 
 
@@ -4025,3 +4613,207 @@ def run_campaign_holdout(cfg: Any, strata: list[str] | None = None) -> dict:
         json.dumps(summary, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
     return summary
+
+
+def recompute_campaign_verdicts(
+    cfg: Any, strata: list[str] | None = None
+) -> dict[str, Any]:
+    """저장된 캠페인 결과에 **새 판정 규칙만** 다시 적용한다 (재학습 없음).
+
+    ``run_campaign_holdout``은 ``results.json``이 있으면 층을 통째로 건너뛰므로, 판정
+    규칙이 바뀌어도 재실행으로는 새 verdict가 나오지 않는다. 이 함수는 이미 저장된
+    ``delta_auroc``·``delta_ci``만 읽어 :func:`_campaign_verdict`를 다시 돌리고, 옛 판정과
+    새 판정을 나란히 돌려준다. 부트스트랩·순열은 다시 하지 않는다(값이 그대로이므로
+    판정만 바뀐다).
+
+    Args:
+        cfg: 결과 경로만 쓴다(``reports_dir``).
+        strata: 대상 층. 기본은 ``reports/campaign`` 아래의 모든 층.
+
+    Returns:
+        ``{"strata": {stratum: {tag: {"old", "new", "delta_auroc", "delta_ci"}}},
+        "sesoi": ..., "updated": [경로]}``
+    """
+    rep_root = _reports_dir(cfg) / "campaign"
+    want = set(strata) if strata else None
+    changes: dict[str, Any] = {}
+    updated: list[str] = []
+    for rpath in sorted(rep_root.glob("*/results.json")):
+        stratum = rpath.parent.name
+        if want and stratum not in want:
+            continue
+        data = json.loads(rpath.read_text(encoding="utf-8"))
+        agg = data.get("aggregate")
+        if not isinstance(agg, dict) or "error" in agg:
+            continue
+        per_seed = [r for r in data.get("per_seed", []) if isinstance(r, dict)]
+        rows: dict[str, Any] = {}
+        for tag in CAMPAIGN_VERDICT_TAGS:
+            block = agg.get(tag)
+            if not isinstance(block, dict) or "delta_ci" not in block:
+                continue
+            lo, hi = (float(v) for v in block["delta_ci"][:2])
+            point = float(block["delta_auroc"])
+            old = block.get("verdict")
+            old_code = old.get("code") if isinstance(old, dict) else old
+            new = _campaign_verdict(lo, hi, point)
+            block["verdict"] = new
+            block["primary"] = tag == "cnn_sm"
+            if tag.endswith("leaky_vs_contrast"):
+                block["sample_size_warning"] = _campaign_leaky_sample_warning(per_seed)
+            rows[tag] = {
+                "old": old_code,
+                "new": new["code"],
+                "delta_auroc": point,
+                "delta_ci": [lo, hi],
+            }
+        if not rows:
+            continue
+        agg["verdict_rule"] = {
+            "sesoi": CAMPAIGN_SESOI,
+            "major_threshold": CAMPAIGN_EFFECT_THRESHOLD,
+            "primary_tag": "cnn_sm",
+            "definitions": dict(CAMPAIGN_VERDICT_DEFINITIONS),
+        }
+        rpath.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        updated.append(str(rpath))
+        changes[stratum] = rows
+        for tag, row in rows.items():
+            print(
+                f"[verdict] campaign/{stratum} {tag}: {row['old']} -> {row['new']} "
+                f"(Δ={row['delta_auroc']:+.4f} CI=[{row['delta_ci'][0]:+.4f}, "
+                f"{row['delta_ci'][1]:+.4f}])",
+                flush=True,
+            )
+
+    # 층 요약(reports/campaign/results.json)도 같은 층 파일에서 다시 만든다.
+    summary_path = rep_root / "results.json"
+    if summary_path.exists() and changes:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        for stratum in list(summary.get("strata", {})):
+            sp = rep_root / stratum / "results.json"
+            if sp.exists():
+                summary["strata"][stratum] = json.loads(sp.read_text(encoding="utf-8"))
+        summary_path.write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        updated.append(str(summary_path))
+    return {
+        "sesoi": CAMPAIGN_SESOI,
+        "major_threshold": CAMPAIGN_EFFECT_THRESHOLD,
+        "definitions": dict(CAMPAIGN_VERDICT_DEFINITIONS),
+        "strata": changes,
+        "updated": updated,
+    }
+
+
+# 저장된 프로브 results.json에서 세 질문을 다시 만들 때, **정확히** 복원되는 것과
+# 근사만 가능한 것을 구분해 적는다. seed{k}.json 캐시가 남아 있지 않은 결과에는
+# 시드별 CI가 없어 accessible의 "전 시드 일치"를 정확히 재현할 수 없다.
+PROBE_RECOMPUTE_BASIS = {
+    "learned_gain": "exact:above_random_init (전 시드 AND가 그대로 저장돼 있다)",
+    "accessible_and_gained": "exact:significant (전 시드 AND가 그대로 저장돼 있다)",
+    "accessible": (
+        "approx:mean_ci — 시드별 CI가 없어 '전 시드에서 CI 하한 > 셔플 CI 상한'을 "
+        "정확히 재현할 수 없다. 시드 평균 CI로 판정하고, accessible_and_gained가 참인 "
+        "목표는 논리적으로 accessible이므로 OR로 덮는다."
+    ),
+}
+# 정확 재계산에 필요한데 results.json에는 없는 필드(= seed{k}.json 캐시에만 있던 것).
+PROBE_MISSING_FIELDS = (
+    "per_seed targets[*].ci / shuffle_ci — 시드별 CI. reports/probes/{cid}/{stratum}/"
+    "seed{k}.json 캐시가 남아 있으면 정확 재계산이 가능하지만, 현재 저장소에는 층 "
+    "results.json만 남아 있다(run_probes가 층 완료 후 캐시를 지우지는 않으나, "
+    "지금 커밋된 결과에는 포함돼 있지 않다).",
+)
+
+
+def recompute_probe_summaries(
+    cfg: Any, strata: list[str] | None = None, condition_id_: str | None = None
+) -> dict[str, Any]:
+    """저장된 프로브 결과에 **세 질문 분리 보고**를 적용한다 (재학습 없음).
+
+    ``run_probes``는 ``results.json``이 있으면 층을 건너뛰므로, 보고 규약이 바뀌어도
+    재실행으로는 새 요약이 나오지 않는다. 이 함수는 저장된 목표별 집계만 읽어
+    ``accessible`` / ``learned_gain`` / ``accessible_and_gained`` / ``used_in_decision``을
+    채우고 요약을 다시 만든다.
+
+    **정확도 주의.** ``learned_gain``과 ``accessible_and_gained``는 저장된 전 시드 AND
+    (``above_random_init`` / ``significant``)에서 정확히 복원된다. ``accessible``은 시드별
+    CI가 남아 있지 않으면 시드 평균 CI로만 판정할 수 있다 — 그 경우 목표마다
+    ``accessible_basis``에 근거를 적고, 반환값의 ``missing_fields``로 무엇이 부족한지 알린다.
+
+    Returns:
+        ``{"strata": {stratum: {요약}}, "basis": ..., "missing_fields": [...],
+        "updated": [경로]}``
+    """
+    cid = condition_id_ or MAIN_CONDITION
+    root = _reports_dir(cfg) / "probes" / cid
+    want = set(strata) if strata else None
+    per_stratum: dict[str, Any] = {}
+    updated: list[str] = []
+    approximated = False
+    for rpath in sorted(root.glob("*/results.json")):
+        stratum = rpath.parent.name
+        if want and stratum not in want:
+            continue
+        data = json.loads(rpath.read_text(encoding="utf-8"))
+        targets = data.get("targets")
+        if not isinstance(targets, dict):
+            continue
+        for row in targets.values():
+            if not isinstance(row, dict) or "ci" not in row:
+                continue
+            gained = bool(row.get("above_random_init"))
+            both = bool(row.get("significant"))
+            if "accessible" in row:
+                basis = row.get("accessible_basis", "exact:per_seed")
+                acc = bool(row["accessible"])
+            else:
+                lo = float(row["ci"][0])
+                hi = float(row["shuffle_ci"][1])
+                acc = bool(np.isfinite(lo) and np.isfinite(hi) and lo > hi) or both
+                basis = "approx:mean_ci"
+                approximated = True
+            row["accessible"] = acc
+            row["accessible_basis"] = basis
+            row["learned_gain"] = gained
+            row["accessible_and_gained"] = both
+            row["used_in_decision"] = None
+        lex = {
+            k: v
+            for k, v in targets.items()
+            if isinstance(v, dict) and v.get("family") not in (None, "label")
+        }
+        summary = _probe_summary(lex)
+        summary["label_probe"] = targets.get("label:phishing")
+        summary["recompute_basis"] = dict(PROBE_RECOMPUTE_BASIS)
+        data["summary"] = summary
+        data["notes"] = list(PROBE_NOTES)
+        rpath.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        updated.append(str(rpath))
+        per_stratum[stratum] = {
+            q: {"n": summary[q]["n"], "frac": summary[q]["frac"]} for q in PROBE_QUESTIONS
+        } | {
+            "n_targets": summary["n_targets"],
+            "accessible_only": summary["accessible_only"]["n"],
+            "used_in_decision": None,
+        }
+        print(
+            f"[probes] {stratum} 재요약 — accessible {summary['accessible']['n']}/"
+            f"{summary['n_targets']}, learned_gain {summary['learned_gain']['n']}/"
+            f"{summary['n_targets']}, 둘 다 {summary['accessible_and_gained']['n']}/"
+            f"{summary['n_targets']} (accessible만 {summary['accessible_only']['n']})",
+            flush=True,
+        )
+    return {
+        "condition_id": cid,
+        "strata": per_stratum,
+        "basis": dict(PROBE_RECOMPUTE_BASIS),
+        "missing_fields": list(PROBE_MISSING_FIELDS) if approximated else [],
+        "updated": updated,
+    }

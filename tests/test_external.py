@@ -238,19 +238,52 @@ def _diag_frame(benign_paths, phish_paths):
     return df
 
 
-def test_bias_diagnostics_gate_passes_when_benign_has_paths():
-    df = _diag_frame([1, 2, 1, 3], [1, 0, 1, 1])
-    d = ext.bias_diagnostics(df)
-    assert d["benign"]["path_depth_ge1_frac"] == 1.0
-    assert d["phishing"]["path_depth_ge1_frac"] == 0.75
-    assert d["gate_passed"] is True
+# WebPhish의 실제 방향: benign이 거의 다 경로를 갖고 phishing은 절반 정도다
+# (benign 0.998 대 phishing 0.443 — diff는 양수).
+_WP_LIKE = _diag_frame([1, 2, 1, 3], [1, 0, 0, 0])
 
 
-def test_bias_diagnostics_gate_fails_on_webphish_like_bias():
-    df = _diag_frame([0, 0, 0, 1], [2, 3, 1, 2])
+def _mixed_paths(n: int):
+    """경로 지름길이 지배적이지 않도록 두 클래스에 경로 유무를 고루 섞는다."""
+    return [i % 2 for i in range(n)]
+
+
+def test_bias_diagnostics_without_reference_records_direction_but_does_not_flag():
+    """참조 프레임이 없으면 공통 방향 편향을 판정할 수 없다 — 플래그를 켜지 않는다."""
+    df = _diag_frame(_mixed_paths(40), _mixed_paths(40))
     d = ext.bias_diagnostics(df)
+    assert d["direction"]["checked"] is False
+    assert d["common_direction_bias"] is False
+    assert d["gate_rule"] == "flags_v2"
+    assert d["path_shortcut"]["basis"] == "in_sample_on_this_set"
+
+
+def test_bias_diagnostics_flags_common_direction():
+    """두 데이터셋 모두 benign 쪽 경로 보유율이 높으면(같은 부호) 플래그가 켜진다."""
+    ben = [1] * 30 + [0] * 10   # 0.75
+    phi = [1] * 20 + [0] * 20   # 0.50
+    d = ext.bias_diagnostics(_diag_frame(ben, phi), _WP_LIKE)
+    assert d["direction"]["sign_external"] == 1
+    assert d["direction"]["sign_webphish"] == 1
+    assert d["common_direction_bias"] is True
     assert d["gate_passed"] is False
-    assert "경고" in d["gate_note"]
+
+
+def test_bias_diagnostics_no_flag_on_opposite_direction():
+    """방향이 반대면(외부는 phishing 쪽이 높다) 공통 방향 플래그는 꺼진다."""
+    ben = [1] * 20 + [0] * 20   # 0.50
+    phi = [1] * 30 + [0] * 10   # 0.75
+    d = ext.bias_diagnostics(_diag_frame(ben, phi), _WP_LIKE)
+    assert d["direction"]["sign_external"] == -1
+    assert d["common_direction_bias"] is False
+
+
+def test_bias_diagnostics_flags_path_shortcut():
+    """경로 유무만으로 완전히 갈리는 세트(EXT-B2 같은)는 path_shortcut 플래그가 켜진다."""
+    d = ext.bias_diagnostics(_diag_frame([0] * 30, [2] * 30), _WP_LIKE)
+    assert d["path_shortcut"]["path_lr_auroc"] > 0.95
+    assert d["path_shortcut_dominant"] is True
+    assert d["gate_passed"] is False
 
 
 def test_bias_diagnostics_reports_length_and_groups():

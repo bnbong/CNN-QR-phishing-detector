@@ -260,6 +260,20 @@ def test_run_motifs_smoke(tmp_path):
     assert enr["size2"]["size"] == 2
     assert all(len(d["bits"]) == 4 for d in enr["size2"]["motifs"])
     assert len(enr["top_phishing"]) <= 20
+    # 시드 통합 목록은 보고용이다(절제는 시드별 파일을 쓴다, review_03 2절).
+    assert enr["usage"] == "reporting_only"
+    assert enr["per_seed_top_overlap"]["n_seeds"] == 2
+
+    mdir = tmp_path / f"reports/motifs/norm-none-data_only-fixed/{st}"
+    for k in (0, 1):
+        se = json.loads((mdir / f"enrichment_seed{k}.json").read_text(encoding="utf-8"))
+        assert se["seed"] == k
+        assert se["usage"] == "occlusion_per_seed"
+        assert se["selection_split"] == "train_only"
+        assert se["ci_source"] == f"seed{k}_train"
+        assert se["n_seeds"] == 1 and se["size"] == 3
+        assert isinstance(se["top_phishing"], list)
+        assert se["size2"]["size"] == 2
 
 
 def test_run_motifs_reproduces_main_condition_split(tmp_path):
@@ -415,3 +429,59 @@ def test_within_qr_nulls_reduce_patch3_signal():
     h0 = M.patch_histogram(vals, mask, 3)
     h1 = M.patch_histogram(M.shuffle_within_qr(vals, mask, seed=0), mask, 3)
     assert np.abs(h0 - h1).sum() > 0.2
+
+
+# ------------------------- review_03 2: motif 선정·평가 분리 (시드별 train만) ----
+def _split_data(flip_test_labels: bool):
+    """train/test가 나뉜 작은 히스토그램 데이터. planted motif는 train phishing에만."""
+    H, y, g = _synthetic_motif_data(n=200, size=2, planted=15, seed=3)
+    tr = np.zeros(len(y), dtype=bool)
+    tr[: len(y) // 2] = True
+    yy = y.copy()
+    if flip_test_labels:
+        yy[~tr] = 1 - yy[~tr]
+    return H, yy, g, tr
+
+
+def _seed_top_lists(flip_test_labels: bool):
+    from qrphish.motifs import combine_seed_enrichments, motif_enrichment
+
+    H, y, g, tr = _split_data(flip_test_labels)
+    tr_enr = motif_enrichment(H[tr], y[tr], g[tr], size=2, n_boot=200, seed=0)
+    te_lo = motif_enrichment(H[~tr], y[~tr], g[~tr], size=2, n_boot=0, seed=0)["log_odds"]
+    blk = combine_seed_enrichments(
+        [tr_enr], [te_lo], size=2, n_windows_mean=10.0, min_presence=0.0
+    )
+    return blk, tr_enr
+
+
+def test_per_seed_enrichment_uses_train_labels_only():
+    """시드별 enrichment의 top 목록은 test 라벨을 뒤집어도 그대로여야 한다 (review_03 2)."""
+    a, enr_a = _seed_top_lists(False)
+    b, enr_b = _seed_top_lists(True)
+    assert a["top_phishing"] == b["top_phishing"]
+    assert a["top_benign"] == b["top_benign"]
+    np.testing.assert_allclose(enr_a["log_odds"], enr_b["log_odds"])
+    np.testing.assert_allclose(enr_a["ci_lo"], enr_b["ci_lo"])
+
+
+def test_pooling_train_and_test_would_change_selection():
+    """대조: train+test를 합쳐 고르면 test 라벨 변경이 선정에 새어 들어온다(=위 검사가 유효)."""
+    from qrphish.motifs import motif_enrichment
+
+    H, y0, g, _ = _split_data(False)
+    _, y1, _, _ = _split_data(True)
+    a = motif_enrichment(H, y0, g, size=2, n_boot=0, seed=0)["log_odds"]
+    b = motif_enrichment(H, y1, g, size=2, n_boot=0, seed=0)["log_odds"]
+    assert not np.allclose(a, b)
+
+
+def test_top_list_overlap_jaccard():
+    from qrphish.runner import _top_list_overlap
+
+    ov = _top_list_overlap({0: [1, 2, 3], 1: [2, 3, 4]})
+    assert ov["n_seeds"] == 2
+    assert ov["pairwise_jaccard"][0]["jaccard"] == pytest.approx(2 / 4)
+    assert ov["jaccard_mean"] == pytest.approx(0.5)
+    assert ov["n_in_all_seeds"] == 2 and ov["n_in_any_seed"] == 4
+    assert _top_list_overlap({0: [], 1: []})["n_in_any_seed"] == 0

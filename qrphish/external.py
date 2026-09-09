@@ -59,6 +59,7 @@ __all__ = [
     "parse_source",
     "fetch_phishdb",
     "fetch_openphish_history",
+    "openphish_commit_log",
     "fetch_tranco",
     "fetch_commoncrawl",
     "build_external_dataset",
@@ -402,6 +403,11 @@ def fetch_openphish_history(
         "url": spec.url_template.format(ref="<commit>"),
         "raw_path": str(out),
         "pinned_id": ";".join(sha for sha, _ in commits[-5:]),
+        # 재현에는 전체 목록이 필요하다(리뷰 03 항목 8). 마지막 5개만 남기지 않는다.
+        "commits": [{"sha": sha, "committed_at": when} for sha, when in commits],
+        "commit_window": (
+            {"first": commits[0][1], "last": commits[-1][1]} if commits else None
+        ),
         "n_commits_listed": len(commits),
         "n_commits_fetched": n_fetched,
         "window_days": days,
@@ -415,6 +421,50 @@ def fetch_openphish_history(
             "리포 전체를 내려받지 않는다."
         ),
     }
+
+
+def openphish_commit_log(
+    *,
+    since: str,
+    until: str | None = None,
+    max_commits: int = 200,
+    session: Any = None,
+) -> list[dict[str, str]]:
+    """openphish/public_feed의 ``feed.txt`` 커밋 목록만 받아 온다 (feed 본문은 받지 않는다).
+
+    ``fetch_openphish_history``가 실제로 훑은 커밋 창을 **사후에 재구성**하려고 쓴다.
+    manifest에는 마지막 5개 SHA만 남아 있었는데(리뷰 03 항목 8), 같은 ``since``와
+    수집 시각(``until``)을 주면 그때와 같은 목록이 나온다.
+
+    Returns:
+        오래된 커밋부터 정렬한 ``[{"sha", "committed_at"}, ...]``.
+    """
+    sess = session if session is not None else _session()
+    out: list[dict[str, str]] = []
+    page = 1
+    while len(out) < max_commits:
+        url = (
+            "https://api.github.com/repos/openphish/public_feed/commits"
+            f"?path=feed.txt&since={since}&per_page=100&page={page}"
+        )
+        if until:
+            url += f"&until={until}"
+        batch = _get(sess, url, retries=3, timeout=60).json()
+        if not isinstance(batch, list) or not batch:
+            break
+        for c in batch:
+            out.append(
+                {
+                    "sha": str(c["sha"]),
+                    "committed_at": str(c["commit"]["committer"]["date"]),
+                }
+            )
+        if len(batch) < 100:
+            break
+        page += 1
+    out = out[:max_commits]
+    out.reverse()
+    return out
 
 
 def fetch_tranco(
@@ -741,11 +791,24 @@ def dedup_against(
     return df[~drop].copy(), stats
 
 
-def bias_diagnostics(df: pd.DataFrame) -> dict[str, Any]:
+def bias_diagnostics(
+    df: pd.DataFrame, reference: pd.DataFrame | None = None
+) -> dict[str, Any]:
     """설계 3절 하드 게이트용 편향 진단.
 
-    benign의 `path_depth>=1` 비율이 phishing보다 낮으면 WebPhish와 **같은 방향**의 편향이므로
-    수집을 다시 설계해야 한다. 그 판정을 `gate_passed`로 낸다.
+    전이 단계와 **같은 두 플래그**를 기록한다(리뷰 03 항목 4).
+
+    - ``common_direction_bias``: ``reference``(보통 WebPhish 프레임)와
+      ``P(path>=1|benign) - P(path>=1|phishing)``의 부호가 같은가
+      (:func:`qrphish.transfer.bias_direction_ok`). 참조가 없으면 판정하지 않는다.
+    - ``path_shortcut_dominant``: 이 세트 자체가 경로 모양만으로 갈리는가.
+      ``path_lr``을 세트 안에서 fit해 **같은 행에서** 평가한 in-sample AUROC가
+      :data:`qrphish.transfer.GATE_PATH_LR_MAX` 이상이면 켠다. 전이 성능 추정이 아니라
+      "이 세트가 경로만으로 분리 가능한가"라는 분리도 지표다.
+
+    ``gate_passed``는 두 플래그 중 어느 것도 켜지지 않았을 때만 참이다. 수집 CLI의 종료
+    코드가 이 값을 쓴다. 전이 단계에서는 차단이 아니라 판정 규칙의 입력이다
+    (:func:`qrphish.transfer.verdict`).
     """
     out: dict[str, Any] = {}
     for key, lab in (("benign", 0), ("phishing", 1)):
@@ -777,21 +840,62 @@ def bias_diagnostics(df: pd.DataFrame) -> dict[str, Any]:
             },
         }
 
+    from qrphish.transfer import (
+        GATE_PATH_LR_MAX,
+        apply_path_lr,
+        bias_direction_ok,
+        fit_path_lr,
+        path_shortcut_flag,
+    )
+
     ben = out.get("benign", {}).get("path_depth_ge1_frac")
     phi = out.get("phishing", {}).get("path_depth_ge1_frac")
     if ben is None or phi is None:
         out["gate_passed"] = False
         out["gate_note"] = "한쪽 클래스가 비어 진단 불가"
-    else:
-        out["gate_passed"] = bool(ben >= phi)
-        out["gate_note"] = (
-            "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다"
-            if ben >= phi
-            else (
-                f"경고: benign 경로 보유율({ben:.3f})이 phishing({phi:.3f})보다 낮다. "
-                "WebPhish와 같은 방향의 편향이므로 전이 실험은 검증이 아니다."
-            )
+        out["gate_rule"] = "flags_v2"
+        return out
+
+    direction = bias_direction_ok(df, reference)
+    out["direction"] = direction
+    out["common_direction_bias"] = bool(direction["common_direction_bias"])
+
+    # 경로 지름길: 세트 안에서 fit → 같은 행에서 평가한 in-sample 분리도.
+    try:
+        from qrphish.evaluate import auroc as _auroc
+
+        urls = df["url"].astype(str).to_numpy()
+        y = df["label"].to_numpy()
+        p = apply_path_lr(fit_path_lr(urls, y, 0), urls)
+        shortcut = path_shortcut_flag({"path_lr": {"auroc": float(_auroc(y, p))}})
+    except Exception as exc:  # noqa: BLE001 — 못 재면 fail-closed로 켠다
+        shortcut = {
+            "path_lr_auroc": None,
+            "threshold": float(GATE_PATH_LR_MAX),
+            "path_shortcut_dominant": True,
+            "note": f"path_lr in-sample AUROC 계산 실패 ({exc!r}) — fail-closed.",
+        }
+    shortcut["basis"] = "in_sample_on_this_set"
+    out["path_shortcut"] = shortcut
+    out["path_shortcut_dominant"] = bool(shortcut["path_shortcut_dominant"])
+
+    out["gate_rule"] = "flags_v2"
+    out["gate_passed"] = bool(
+        not out["common_direction_bias"] and not out["path_shortcut_dominant"]
+    )
+    parts = []
+    if not direction["checked"]:
+        parts.append(
+            f"참조(WebPhish) 프레임이 없어 공통 방향 편향을 판정하지 못했다 "
+            f"(이 세트의 차이 {direction['diff_external']:+.3f})."
         )
+    elif out["common_direction_bias"]:
+        parts.append(f"공통 방향 편향 플래그 ON — {direction['note']}")
+    else:
+        parts.append(f"공통 방향 편향 없음 — {direction['note']}")
+    parts.append(("경로 지름길 플래그 ON — " if out["path_shortcut_dominant"]
+                  else "경로 지름길 아님 — ") + str(shortcut["note"]))
+    out["gate_note"] = " / ".join(parts)
     return out
 
 
@@ -806,6 +910,7 @@ def load_external(
     drop_benign_on_phish_domains: bool = True,
     benign_cleaning: str | None = None,
     extractor: Any = None,
+    reference: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """외부 수집 CSV(들)를 읽어 `load_webphish`와 **동일한 컬럼 규약**으로 돌려준다.
 
@@ -916,6 +1021,9 @@ def load_external(
         from qrphish.urls import load_webphish
 
         wp, _ = load_webphish(webphish_csv, mode, extractor=ex)
+        if reference is None:
+            # 편향 게이트의 참조 프레임으로 그대로 쓴다 — 어차피 여기서 읽는다.
+            reference = wp
         df, wp_stats = dedup_against(df, wp, dedup=dedup)
         stats.update(wp_stats)
         stats["dedup_mode"] = dedup
@@ -939,12 +1047,12 @@ def load_external(
         )
     )
     stats["drop_hosting_from_benign"] = bool(drop_hosting_from_benign)
-    stats["bias_diagnostics"] = bias_diagnostics(df)
+    stats["bias_diagnostics"] = bias_diagnostics(df, reference)
     return df, stats
 
 
 def split_by_source(
-    df: pd.DataFrame, keep: Sequence[str]
+    df: pd.DataFrame, keep: Sequence[str], reference: pd.DataFrame | None = None
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """``load_external`` 결과에서 주어진 소스의 행만 남기고 통계를 다시 낸다.
 
@@ -962,7 +1070,7 @@ def split_by_source(
         "n_final_phishing": int((sub["label"] == 1).sum()),
         "n_groups": int(sub["group"].nunique()),
         "by_source": {str(k): int(v) for k, v in sub["source"].value_counts().items()},
-        "bias_diagnostics": bias_diagnostics(sub),
+        "bias_diagnostics": bias_diagnostics(sub, reference),
     }
     return sub, stats
 

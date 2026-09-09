@@ -2,12 +2,25 @@
 
 review_01 "두 번째 질문도 표현을 낮추는 것이 좋습니다" 절의 D안이다.
 
-``QR 모듈 격자 → SmallCNN(freeze) → GAP 128차원 → linear probe → URL 어휘 목표``
+``QR 모듈 격자 → SmallCNN(freeze) → GAP **이후** 128차원 → linear probe → URL 어휘 목표``
 
-목표는 URL에서 직접 계산한다(3-gram 존재, 키워드 존재, 숫자 비율 등). 프로브가
-셔플 기준선과 무작위 초기화 CNN 기준선을 **둘 다** 넘을 때만 유의하다고 본다.
-프로브 성능은 "CNN이 문자를 복원했다"의 증거가 아니라 "그 정보가 임베딩에서
-선형으로 접근 가능하다"의 증거임을 유의할 것.
+프로브 입력은 ``feature_maps``의 공간 평균, 즉 **global average pooling을 통과한 뒤의**
+128차원 벡터다(분류 헤드에 들어가는 바로 그 벡터). "GAP 직전"이 아니다.
+
+목표는 URL에서 직접 계산한다(3-gram 존재, 키워드 존재, 숫자 비율 등).
+
+보고는 **세 질문으로 분리한다** (review_03 6절). 셋은 서로 다른 질문이다:
+
+* ``accessible`` — 표현에 그 어휘 정보가 **선형으로 접근 가능한가**.
+  판정: 학습 표현 프로브 CI 하한 > 셔플 기준선 CI 상한(전 시드).
+* ``learned_gain`` — 피싱 분류 **학습이 그 접근성을 높였는가**.
+  판정: 학습 표현 프로브 CI 하한 > 무작위 초기화 CNN 기준선 CI 상한(전 시드).
+* ``used_in_decision`` — 그 정보가 실제 **분류 결정에 쓰이는가**.
+  현재 실험으로는 답할 수 없다. 항상 ``None``으로 남긴다.
+
+``accessible_and_gained``는 앞의 둘의 AND이며, 옛 ``significant``와 같은 값이다
+(이름만 바꾸고 별칭을 남겼다). 프로브 성능은 어느 경우에도 "CNN이 문자를 복원했다"의
+증거가 아니라 "그 정보가 임베딩에서 선형으로 접근 가능하다"의 증거일 뿐이다.
 """
 
 from __future__ import annotations
@@ -68,7 +81,7 @@ def embed(
     batch_size: int = 256,
     device: Any = None,
 ) -> np.ndarray:
-    """``(N, 128)`` GAP 출력(분류 헤드 직전). 모델은 freeze + eval.
+    """``(N, 128)`` **GAP 이후** 출력(= 분류 헤드의 입력). 모델은 freeze + eval.
 
     ``SmallCNN.feature_maps``의 공간 평균이 곧 ``forward``가 ``head``에 넣는 벡터다
     (dropout은 eval에서 항등). 따라서 이 임베딩은 로짓의 선형 입력과 정확히 같다.
@@ -343,7 +356,7 @@ def _probe_one_target(
     flat: np.ndarray,
     offsets: np.ndarray,
 ) -> tuple[str, dict]:
-    """목표 하나의 전체 행(실제/셔플/무작위 초기화 + 유의 판정). 병렬 태스크 단위.
+    """목표 하나의 전체 행(실제/셔플/무작위 초기화 + 세 질문 판정). 병렬 태스크 단위.
 
     큰 배열은 모두 **인자로** 받는다. joblib이 1MB 넘는 ndarray 인자를 메모리맵으로
     바꿔 워커와 공유하므로, 클로저로 잡아 두면 태스크마다 통째로 피클된다.
@@ -359,12 +372,20 @@ def _probe_one_target(
     shuf = _score_one(t.kind, z_tr, s_tr, z_te, s_te, g_te, seed, n_boot, True, packed)
     rnd = _score_one(t.kind, z_tr_rand, v_tr, z_te_rand, v_te, g_te, seed, n_boot, True, packed)
 
-    # 학습된 임베딩이 두 기준선을 **둘 다** CI 수준에서 넘어야 유의로 센다.
-    # 무작위 초기화 점추정만 넘는 것으로는 구조/입력만으로 얻어지는 몫을 배제하지 못한다.
-    bar = max(
-        v for v in (shuf["hi"], rnd["hi"]) if np.isfinite(v)
-    ) if np.isfinite(shuf["hi"]) or np.isfinite(rnd["hi"]) else float("nan")
-    sig = bool(np.isfinite(real["lo"]) and np.isfinite(bar) and real["lo"] > bar)
+    # 세 질문을 분리해 각각 보고한다 (review_03 6절).
+    #   accessible   — 표현에 그 속성이 선형으로 접근 가능한가 (셔플 기준선 대비)
+    #   learned_gain — 피싱 분류 학습이 그 접근성을 **높였는가** (무작위 초기화 대비)
+    # 두 질문은 다르다. 예를 들어 학습 0.909 vs 무작위 초기화 0.849면 정보는 분명히
+    # 접근 가능하지만(accessible) 학습이 접근성을 높였다고는 말하기 어렵다.
+    # 옛 ``significant``는 이 둘의 AND였다 — 이름을 ``accessible_and_gained``로 바꾸고
+    # ``significant``는 하위 호환 별칭으로만 남긴다.
+    accessible = bool(
+        np.isfinite(real["lo"]) and np.isfinite(shuf["hi"]) and real["lo"] > shuf["hi"]
+    )
+    learned_gain = bool(
+        np.isfinite(real["lo"]) and np.isfinite(rnd["hi"]) and real["lo"] > rnd["hi"]
+    )
+    both = bool(accessible and learned_gain)
     return t.name, {
         **row,
         "score": real["score"],
@@ -373,8 +394,16 @@ def _probe_one_target(
         "shuffle_ci": [shuf["lo"], shuf["hi"]],
         "random_init": rnd["score"],
         "random_init_ci": [rnd["lo"], rnd["hi"]],
-        "above_random_init": bool(np.isfinite(rnd["hi"]) and real["lo"] > rnd["hi"]),
-        "significant": sig,
+        "accessible": accessible,
+        "learned_gain": learned_gain,
+        "accessible_and_gained": both,
+        # 세 번째 질문 — "그 정보가 실제 분류 결정에 쓰이는가"는 프로브로 답할 수
+        # 없다. 프로브는 표현을 읽을 뿐 결정 경로를 건드리지 않는다. 필드를 null로
+        # 남겨 "안 쟀다"를 명시한다(빠뜨린 것과 구분).
+        "used_in_decision": None,
+        # 하위 호환 별칭. above_random_init == learned_gain, significant == AND.
+        "above_random_init": learned_gain,
+        "significant": both,
     }
 
 
@@ -405,9 +434,13 @@ def run_probe_suite(
 
     Returns:
         ``{target_name: {kind, family, score, ci, shuffle, shuffle_ci, random_init,
-        random_init_ci, above_random_init, significant, skipped?}}``
+        random_init_ci, accessible, learned_gain, accessible_and_gained,
+        used_in_decision, above_random_init, significant, skipped?}}``
 
-    유의 판정은 ``CI 하한 > max(셔플 CI 상한, 무작위 초기화 CI 상한)``이다.
+    판정은 셋으로 나뉜다: ``accessible``(CI 하한 > 셔플 CI 상한),
+    ``learned_gain``(CI 하한 > 무작위 초기화 CI 상한), 그리고 둘의 AND인
+    ``accessible_and_gained``. ``used_in_decision``은 프로브로 답할 수 없어 ``None``이다.
+    ``significant``/``above_random_init``은 각각 뒤의 둘에 대한 하위 호환 별칭이다.
 
     비용 구조상 두 가지를 시드·층당 한 번만 한다: (1) 그룹 부트스트랩 리샘플 인덱스,
     (2) 임베딩 표준화. 목표마다 바뀌는 것은 목표값뿐이므로 결과의 의미는 그대로다.

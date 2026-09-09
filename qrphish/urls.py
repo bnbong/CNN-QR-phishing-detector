@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
+import numpy as np
 import pandas as pd
 import tldextract
 
@@ -17,6 +18,8 @@ __all__ = [
     "normalize_url",
     "etld1",
     "path_depth",
+    "shape_features",
+    "shape_feature_names",
     "load_webphish",
     "default_extractor",
     "load_external",
@@ -122,6 +125,48 @@ def path_depth(url: str) -> int:
     except ValueError:
         return 0
     return sum(1 for seg in path.split("/") if seg)
+
+
+#: :func:`shape_features`가 내는 컬럼 순서. 경로 기준선(``path_lr``)이 그대로 쓴다.
+SHAPE_FEATURE_NAMES: tuple[str, ...] = (
+    "has_path",
+    "path_depth",
+    "n_slash",
+    "n_dot",
+    "n_dash",
+    "n_query",
+)
+
+
+def shape_feature_names() -> tuple[str, ...]:
+    """:func:`shape_features` 행렬의 컬럼 이름."""
+    return SHAPE_FEATURE_NAMES
+
+
+def shape_features(urls) -> np.ndarray:
+    """URL의 **모양**만 담은 ``(N, 6)`` 행렬 — 길이·문자 조성은 넣지 않는다.
+
+    컬럼은 :data:`SHAPE_FEATURE_NAMES` 순서로 경로 유무, 경로 깊이, ``/``·``.``·``-``·``?``
+    개수다. 리뷰 03의 4번 항목 — "외부 전이 신호가 경로/구분자 구조만으로 설명되는가"를
+    직접 재는 기준선(``path_lr``)의 입력이다. 길이 자체는 이미 길이 매칭으로 통제되므로
+    일부러 빼고, 길이와 상관이 큰 개수 특징만 남긴다.
+    """
+    arr = list(urls)
+    X = np.zeros((len(arr), len(SHAPE_FEATURE_NAMES)), dtype=np.float64)
+    for i, u in enumerate(arr):
+        s = str(u)
+        d = path_depth(s)
+        # 스킴의 "//"는 경로 구분자가 아니다. 있으면 빼고 센다.
+        body = strip_leading_scheme(s)
+        X[i] = (
+            1.0 if d >= 1 else 0.0,
+            float(d),
+            float(body.count("/")),
+            float(body.count(".")),
+            float(body.count("-")),
+            float(body.count("?")),
+        )
+    return X
 
 
 def _read_table(path: Path, category_col: str, url_col: str) -> pd.DataFrame:

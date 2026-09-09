@@ -15,8 +15,11 @@ import pandas as pd
 import pytest
 
 from qrphish.campaign import (
+    MAJOR_THRESHOLD,
+    SESOI,
     SOLO_PREFIX,
     build_campaign_split,
+    campaign_verdict,
     length_match_campaign,
     sizematched_train_a,
 )
@@ -225,9 +228,16 @@ def test_run_campaign_holdout_smoke(tmp_path: Path) -> None:
         assert agg[tag]["paired"] is True
         assert agg[tag]["delta_ci"][0] <= agg[tag]["delta_auroc"] <= agg[tag]["delta_ci"][1]
         assert 0.0 <= agg[tag]["perm_p"] <= 1.0
-    # 사전 등록 판정은 주 지표(A_sm − B)에만 붙는다.
-    assert agg["cnn_sm"]["verdict"]
-    assert "verdict" not in agg["cnn"]
+    # 판정은 네 CNN 태그 모두에 붙지만 주 지표 표식은 cnn_sm에만 붙는다.
+    for tag in ("cnn_sm", "cnn", "cnn_sm_leaky_vs_contrast", "cnn_leaky_vs_contrast"):
+        assert agg[tag]["verdict"]["code"] in set(agg["verdict_rule"]["definitions"])
+    assert agg["cnn_sm"]["primary"] is True
+    assert agg["cnn"]["primary"] is False
+    assert "verdict" not in agg["charngram_lr_sm"]
+    # 누출 대조 부집합에는 표본 수 경고가 함께 실린다.
+    warn = agg["cnn_sm_leaky_vs_contrast"]["sample_size_warning"]
+    assert warn["n_leaky_rows_per_seed"] and "평균" in warn["warning"]
+    assert agg["verdict_rule"]["sesoi"] == SESOI
     assert agg["cnn_sm"]["model_a"] == "A_sm" and agg["cnn"]["model_a"] == "A"
 
     written = json.loads(
@@ -287,3 +297,67 @@ def test_sizematched_train_a_keeps_all_siblings(campaign_frame: pd.DataFrame) ->
     assert got <= set(cs.train_a["url"].astype(str))   # train_a 밖의 행은 없다
     assert len(sm) == len(cs.train_b)                  # B와 같은 크기
     assert sizematched_train_a(cs, seed=0)["url"].tolist() == sm["url"].tolist()
+
+
+# ------------------------------------------------------- 판정 규칙 (review_03 5절)
+def test_campaign_verdict_separates_negligible_from_not_detected() -> None:
+    """CI 하한 ≤ 0만으로는 "무시 가능"이 되지 않는다.
+
+    옛 규칙은 ``lo <= 0``이면 곧장 "누출 무시 가능"이라 CI ``[-0.10, +0.30]``도 같은
+    판정을 받았다. 새 규칙에서는 SESOI를 넘는 상한이 남으면 ``not_detected``다.
+    """
+    assert campaign_verdict(-0.10, 0.30, 0.10)["code"] == "not_detected"
+    assert campaign_verdict(-0.005, SESOI - 1e-6, 0.0)["code"] == "negligible"
+    # 경계: 상한이 정확히 SESOI면 무시 가능이라고 부르지 않는다.
+    assert campaign_verdict(-0.005, SESOI, 0.0)["code"] == "not_detected"
+
+
+def test_campaign_verdict_detected_and_edge_cases() -> None:
+    assert campaign_verdict(0.001, 0.01, 0.005)["code"] == "detected_minor"
+    assert campaign_verdict(0.02, 0.30, MAJOR_THRESHOLD)["code"] == "detected_major"
+    # 역방향(누출 허용 모델이 더 나쁘다)을 "무시 가능"으로 삼키지 않는다.
+    assert campaign_verdict(-0.30, -0.10, -0.20)["code"] == "negative"
+    assert campaign_verdict(float("nan"), 0.1, 0.0)["code"] == "undetermined"
+    v = campaign_verdict(-0.001, 0.001, 0.0)
+    assert v["sesoi"] == SESOI and v["major_threshold"] == MAJOR_THRESHOLD
+
+
+def test_recompute_campaign_verdicts_rewrites_without_retraining(tmp_path: Path) -> None:
+    """저장된 Δ·CI만 읽어 판정을 새 규칙으로 갈아끼운다(모델·예측 파일 없이)."""
+    from qrphish.runner import recompute_campaign_verdicts
+
+    cfg = _smoke_cfg(tmp_path)
+    rp = tmp_path / "reports" / "campaign" / "v3" / "results.json"
+    rp.parent.mkdir(parents=True, exist_ok=True)
+    rp.write_text(
+        json.dumps(
+            {
+                "stratum": "v3",
+                "per_seed": [{"seed": 0, "n_test_leaky": 38}, {"seed": 1, "n_test_leaky": 34}],
+                "aggregate": {
+                    "cnn_sm": {
+                        "delta_auroc": 0.10,
+                        "delta_ci": [-0.10, 0.30],
+                        "verdict": "누출 무시 가능 (CI가 0을 포함하거나 하한이 0 이하)",
+                    },
+                    "cnn_sm_leaky_vs_contrast": {
+                        "delta_auroc": 0.0169,
+                        "delta_ci": [-0.0465, 0.0909],
+                    },
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    res = recompute_campaign_verdicts(cfg)
+    row = res["strata"]["v3"]["cnn_sm"]
+    assert row["old"].startswith("누출 무시 가능") and row["new"] == "not_detected"
+
+    written = json.loads(rp.read_text(encoding="utf-8"))["aggregate"]
+    assert written["cnn_sm"]["verdict"]["code"] == "not_detected"
+    assert written["verdict_rule"]["sesoi"] == SESOI
+    # 부집합에도 같은 규칙 + 표본 수 경고가 붙는다.
+    leaky = written["cnn_sm_leaky_vs_contrast"]
+    assert leaky["verdict"]["code"] == "not_detected"
+    assert leaky["sample_size_warning"]["n_leaky_rows_per_seed"] == [38, 34]

@@ -23,9 +23,15 @@ import pytest
 from qrphish import baselines as bl
 from qrphish.transfer import (
     REQUIRED_TRANSFER_KEYS,
+    apply_path_lr,
+    bias_direction_ok,
+    fit_path_lr,
     jaccard,
+    match_by_length_and_path,
     motif_replication,
+    paired_delta_auroc,
     permutation_null,
+    row_permutation_null,
     sign_match_rate,
     verdict,
 )
@@ -180,6 +186,177 @@ def test_permutation_null_group_unit_is_wider_than_row_unit():
     assert grp["ci_upper"] == grp["ci"][1]
 
 
+def test_permutation_null_records_positive_count_drift():
+    """그룹 블록 교환은 양성 총수를 보존하지 않을 수 있다 — 그 사실을 결과에 남긴다.
+
+    리뷰 03 항목 8. "정식 순열 검정"이라고 부르려면 무엇을 교환 가능하다고 가정했는지
+    적어야 하므로, method/note와 양성 총수 보존 여부를 결과가 직접 들고 있어야 한다.
+    """
+    y = np.array([1, 1, 1, 0, 0, 0, 0, 0])
+    p = np.linspace(0, 1, y.size)
+    groups = np.array(["a", "a", "a", "b", "b", "c", "c", "c"])
+    res = permutation_null(y, p, groups, n_perm=50, seed=0)
+    assert res["method"] == "group_block_exchange_approx"
+    assert "교환" in res["note"]
+    assert res["positives_observed"] == 3
+    assert res["positives_preserved"] is False
+    lo, hi = res["positives_range"]
+    assert lo <= 3 <= hi
+
+
+def test_row_permutation_null_preserves_positive_count_and_is_deterministic():
+    y, p, _groups = _perm_inputs()
+    a = row_permutation_null(y, p, n_perm=30, seed=3)
+    b = row_permutation_null(y, p, n_perm=30, seed=3)
+    assert a["auroc_mean"] == b["auroc_mean"]
+    assert a["unit"] == "row"
+    assert a["positives_preserved"] is True
+
+
+def test_row_permutation_null_is_narrower_than_group_block():
+    """행 순열은 그룹 안 라벨 상관을 깨서 바닥선을 낮게(좁게) 잡는다."""
+    y, p, groups = _perm_inputs()
+    grp = permutation_null(y, p, groups, n_perm=200, seed=0)
+    row = row_permutation_null(y, p, n_perm=200, seed=0)
+    assert (row["ci"][1] - row["ci"][0]) < (grp["ci"][1] - grp["ci"][0])
+    assert row["ci_upper"] < grp["ci_upper"]
+
+
+# --------------------------------------------------------------- 편향 방향 플래그
+def _bias_frame(benign_paths, phish_paths):
+    rows = [(f"b{i}.example" + "/x" * d, 0, d) for i, d in enumerate(benign_paths)]
+    rows += [(f"p{i}.example" + "/y" * d, 1, d) for i, d in enumerate(phish_paths)]
+    return pd.DataFrame(rows, columns=["url", "label", "path_depth"])
+
+
+# WebPhish 실제 방향: benign 쪽 경로 보유율이 높다(diff > 0).
+_WP = _bias_frame([1, 1, 1, 1], [1, 0, 0, 0])
+
+
+def test_bias_direction_ok_flags_common_sign():
+    """두 데이터셋에서 (benign - phishing) 부호가 같으면 공통 편향 플래그가 켜진다."""
+    res = bias_direction_ok(_bias_frame([1, 1, 1, 0], [1, 0, 0, 0]), _WP)
+    assert res["sign_external"] == 1 and res["sign_webphish"] == 1
+    assert res["common_direction_bias"] is True
+    assert res["ok"] is False  # 표시용 (차단하지 않는다)
+    assert res["rule_version"] == "common_sign_v2"
+
+
+def test_bias_direction_ok_clear_on_opposite_sign():
+    res = bias_direction_ok(_bias_frame([0, 0, 0, 1], [1, 1, 1, 1]), _WP)
+    assert res["sign_external"] == -1
+    assert res["common_direction_bias"] is False
+
+
+def test_bias_direction_ok_treats_small_difference_as_neutral():
+    """|d| <= eps면 방향이 없다고 본다 — 공통 편향으로 세지 않는다."""
+    ext = _bias_frame([1] * 100, [1] * 99 + [0])  # diff = +0.01
+    res = bias_direction_ok(ext, _WP, eps=0.02)
+    assert res["sign_external"] == 0
+    assert res["common_direction_bias"] is False
+
+
+def test_bias_direction_ok_without_reference_is_unchecked():
+    res = bias_direction_ok(_bias_frame([1, 1], [0, 0]), None)
+    assert res["checked"] is False and res["common_direction_bias"] is False
+
+
+def test_path_shortcut_flag_threshold_and_fail_closed():
+    from qrphish.transfer import GATE_PATH_LR_MAX, path_shortcut_flag
+
+    assert path_shortcut_flag({"path_lr": {"auroc": 0.79}})["path_shortcut_dominant"] is False
+    hi = path_shortcut_flag({"path_lr": {"auroc": GATE_PATH_LR_MAX}})
+    assert hi["path_shortcut_dominant"] is True
+    # 못 재면 fail-closed로 켠다.
+    assert path_shortcut_flag({})["path_shortcut_dominant"] is True
+    assert path_shortcut_flag({"path_lr": {"auroc": float("nan")}})[
+        "path_shortcut_dominant"
+    ] is True
+
+
+# ------------------------------------------------------------------ 경로 기준선
+def test_path_lr_separates_by_path_presence_only():
+    """경로 유무만 다르고 길이는 같은 두 클래스를 path_lr이 완전히 가른다."""
+    from qrphish.evaluate import auroc
+
+    urls = [f"b{i:02d}.example/aaaa" for i in range(40)]
+    urls += [f"p{i:02d}.exampleaaaaa" for i in range(40)]
+    y = np.array([0] * 40 + [1] * 40)
+    m = fit_path_lr(urls, y, seed=0)
+    assert auroc(y, apply_path_lr(m, urls)) > 0.95  # 경로 유무만으로 완전 분리
+
+
+def test_transfer_baselines_includes_path_lr_and_preds_out():
+    from qrphish.transfer import transfer_baselines
+
+    fit = pd.DataFrame(
+        {"url": [f"b{i:02d}.example/aa" for i in range(20)]
+                + [f"p{i:02d}.exampleaaa" for i in range(20)],
+         "label": [0] * 20 + [1] * 20}
+    )
+    fit["group"] = [f"b{i:02d}.example" for i in range(20)] + [
+        f"p{i:02d}.example" for i in range(20)
+    ]
+    ev = fit.copy()
+    preds: dict = {}
+    out = transfer_baselines(fit, ev, seed=0, preds_out=preds)
+    assert "path_lr" in out
+    assert preds["path_lr"].shape == (len(ev),)
+
+
+# ------------------------------------------------------------ 길이+경로 동시 매칭
+def test_match_by_length_and_path_equalizes_both_marginals():
+    df = pd.DataFrame(
+        {
+            "split": ["train"] * 12,
+            "url_bytes_len": [10] * 6 + [20] * 6,
+            "path_depth": [1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0],
+            "label": [1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0],
+        }
+    )
+    out, rep = match_by_length_and_path(df, 1, seed=0)
+    assert rep["mode"] == "length_path"
+    for _, cell in out.groupby(["url_bytes_len", out["path_depth"] >= 1]):
+        assert int((cell["label"] == 0).sum()) == int((cell["label"] == 1).sum())
+    # 두 주변분포가 모두 클래스 간에 같아진다.
+    ben, phi = out[out["label"] == 0], out[out["label"] == 1]
+    assert list(sorted(ben["url_bytes_len"])) == list(sorted(phi["url_bytes_len"]))
+    assert (ben["path_depth"] >= 1).sum() == (phi["path_depth"] >= 1).sum()
+
+
+def test_match_by_length_and_path_handles_empty_and_none_bucket():
+    empty = pd.DataFrame(
+        {"split": [], "url_bytes_len": [], "path_depth": [], "label": []}
+    )
+    out, rep = match_by_length_and_path(empty, 1, 0)
+    assert len(out) == 0 and rep["n_after"] == 0
+    df = pd.DataFrame(
+        {"split": ["train"] * 4, "url_bytes_len": [10, 20, 30, 40],
+         "path_depth": [1, 1, 0, 0], "label": [1, 0, 1, 0]}
+    )
+    out, rep = match_by_length_and_path(df, None, 0)
+    assert rep["bucket"] is None
+    assert len(out) == 4  # 길이는 셀에 안 들어가고 경로 유무만 맞춘다
+
+
+# --------------------------------------------------------------- 쌍체 ΔAUROC
+def test_paired_delta_auroc_signs_and_zero_for_identical_scores():
+    rng = np.random.default_rng(0)
+    n = 400
+    y = rng.integers(0, 2, n)
+    groups = np.array([f"g{i % 40}" for i in range(n)])
+    seeds = np.repeat([0, 1], n // 2)
+    good = y * 0.7 + rng.random(n) * 0.3
+    weak = y * 0.2 + rng.random(n) * 0.8
+    same = paired_delta_auroc(y, good, good, groups, seeds, n_boot=100, seed=0)
+    assert same["delta"] == pytest.approx(0.0, abs=1e-12)
+    assert same["ci"] == [pytest.approx(0.0, abs=1e-12)] * 2
+    better = paired_delta_auroc(y, good, weak, groups, seeds, n_boot=200, seed=0)
+    assert better["delta"] > 0
+    assert better["ci"][0] > 0  # 쌍체라 CI가 0을 넘지 않는다
+    assert better["paired"] is True
+
+
 # ------------------------------------------------------------------ motif 재현성
 def test_sign_match_rate_and_jaccard():
     wp = np.array([1.0, -1.0, 2.0, -2.0, 0.5])
@@ -219,13 +396,43 @@ def test_motif_replication_recovers_known_signal():
 # ---------------------------------------------------------------------- 사전 등록 판정
 def test_verdict_prereg_labels():
     gates = {"length_lr_neutral": True, "version_lr_neutral": True,
-             "bias_direction_ok": True, "group_concentration_ok": True}
+             "group_concentration_ok": True}
     assert verdict(0.85, [0.80, 0.90], 0.60, 0.88, gates)["label"] == "reproduced_strong"
     assert verdict(0.72, [0.68, 0.76], 0.60, 0.88, gates)["label"] == "reproduced_weak"
     assert verdict(0.65, [0.62, 0.70], 0.60, 0.90, gates)["label"] == "partial_collapse"
     assert verdict(0.60, [0.55, 0.65], 0.60, 0.88, gates)["label"] == "collapse"
     bad = dict(gates, length_lr_neutral=False)
     assert verdict(0.85, [0.80, 0.90], 0.60, 0.88, bad)["label"] == "descriptive_only"
+
+
+def test_verdict_common_direction_bias_defers_to_length_path_cohort():
+    """플래그가 켜지면 길이만 맞춘 cohort는 주 판정이 아니다 (reported_unmatched_path)."""
+    gates = {"length_lr_neutral": True, "version_lr_neutral": True,
+             "group_concentration_ok": True}
+    unmatched = verdict(0.85, [0.80, 0.90], 0.60, 0.88, gates,
+                        common_direction_bias=True, match="length")
+    assert unmatched["label"] == "reported_unmatched_path"
+    assert unmatched["is_primary_verdict"] is False
+    assert unmatched["flags"]["common_direction_bias"] is True
+    # 경로까지 맞춘 cohort는 플래그가 켜져 있어도 정상 판정을 갖는다.
+    matched = verdict(0.85, [0.80, 0.90], 0.60, 0.88, gates,
+                      common_direction_bias=True, match="length_path")
+    assert matched["label"] == "reproduced_strong"
+    assert matched["is_primary_verdict"] is True
+    # 플래그가 꺼져 있으면 길이 매칭 cohort가 그대로 주 판정이다.
+    off = verdict(0.85, [0.80, 0.90], 0.60, 0.88, gates, common_direction_bias=False)
+    assert off["label"] == "reproduced_strong"
+
+
+def test_verdict_path_shortcut_dominates_everything():
+    """path_lr이 지배적이면 어떤 cohort든 descriptive_only."""
+    gates = {"length_lr_neutral": True, "version_lr_neutral": True,
+             "group_concentration_ok": True}
+    for match in ("length", "length_path"):
+        res = verdict(0.95, [0.93, 0.97], 0.55, 0.96, gates,
+                      path_shortcut_dominant=True, match=match)
+        assert res["label"] == "descriptive_only"
+        assert res["reason"] == "path_shortcut_dominant"
 
 
 # ------------------------------------------------------------------------ 전 경로 스모크
@@ -276,7 +483,11 @@ def test_transfer_modes_run_and_write_schema(_smoke, mode):
     assert res["model"]["auroc_mean"] == res["model"]["auroc_mean"]  # NaN 아님
     assert res["null_permutation"]["unit"] == "etld1_group"
     assert "charngram_lr" in res["baselines"]
-    assert res["verdict"]["criteria_version"] == "prereg_v1"
+    assert res["verdict"]["criteria_version"] == "prereg_v2"
+    assert set(res["verdict"]["flags"]) == {
+        "common_direction_bias", "path_shortcut_dominant", "match",
+    }
+    assert "path_shortcut" in res["data"]
 
     mode_dir = "a_fixed" if mode == "a" else mode
     path = (
@@ -347,11 +558,11 @@ def test_gates_from_fails_closed_when_value_missing():
     from qrphish.transfer import gates_from
 
     notes: dict[str, str] = {}
-    g = gates_from({"length_lr": {"auroc": 0.50}}, 0.1, True, notes=notes)
+    g = gates_from({"length_lr": {"auroc": 0.50}}, 0.1, notes=notes)
     assert g["length_lr_neutral"] is True
     assert g["version_lr_neutral"] is False  # 값 자체가 없다
     assert "version_lr_neutral" in notes
-    g2 = gates_from({"length_lr": {"auroc": float("nan")}}, 0.1, True)
+    g2 = gates_from({"length_lr": {"auroc": float("nan")}}, 0.1)
     assert g2["length_lr_neutral"] is False
     assert verdict(0.85, [0.80, 0.90], 0.60, 0.88, g2)["label"] == "descriptive_only"
 
@@ -413,9 +624,11 @@ def test_collection_gate_fail_forces_descriptive_only(_smoke, tmp_path):
                        n_perm=20, motif=False)
     res = out["a"]["v3"]
     assert res["data"]["bias_gate"]["source"] == "collection"
-    assert res["data"]["bias_gate"]["gate_passed"] is False
-    assert res["verdict"]["gates_passed"]["bias_direction_ok"] is False
-    assert res["verdict"]["label"] == "descriptive_only"
+    assert res["data"]["bias_gate"]["common_direction_bias"] is True
+    assert res["data"]["bias_gate"]["blocking"] is False
+    # 차단이 아니다 — 길이만 맞춘 cohort는 주 판정을 갖지 않는다는 표시로 내려간다.
+    assert res["verdict"]["flags"]["common_direction_bias"] is True
+    assert res["verdict"]["label"] in ("reported_unmatched_path", "descriptive_only")
 
 
 def test_external_artifact_dirs_are_separated_by_mode(_smoke):

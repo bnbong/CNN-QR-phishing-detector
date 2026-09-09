@@ -49,6 +49,14 @@ __all__ = [
     "prepare_external_frame",
     "build_external_stratum",
     "permutation_null",
+    "row_permutation_null",
+    "path_frac_by_class",
+    "bias_direction_ok",
+    "match_by_length_and_path",
+    "path_shortcut_flag",
+    "paired_delta_auroc",
+    "fit_path_lr",
+    "apply_path_lr",
     "transfer_baselines",
     "motif_replication",
     "verdict",
@@ -81,6 +89,10 @@ DROP_WEAK = 0.20
 # 게이트: 층 안에서 길이·버전 단독 LR은 우연 수준이어야 한다(설계 6.1 추가 필수 조건).
 GATE_NEUTRAL = (0.48, 0.52)
 GATE_TOP5_GROUP_FRAC = 0.40
+# 경로 지름길 게이트: 외부 cohort에서 경로 모양만 쓰는 LR(``path_lr``)이 이 값 이상이면
+# 그 세트는 경로 유무만으로 거의 갈린다(EXT-B2 같은 경우). 전이 검증으로 무의미하므로
+# 판정을 descriptive_only로 내린다.
+GATE_PATH_LR_MAX = 0.80
 
 
 # --------------------------------------------------------------------- 외부 프레임
@@ -183,35 +195,163 @@ def filter_sources(df: pd.DataFrame, sources: list[str] | None) -> pd.DataFrame:
     return df[np.asarray(keep)].reset_index(drop=True)
 
 
-def bias_direction_ok(ext_df: pd.DataFrame, wp_df: pd.DataFrame | None) -> dict:
-    """설계 2.3·6.1 게이트 — 외부의 경로 편향이 WebPhish와 **같은 방향**이면 안 된다.
+def path_frac_by_class(df: pd.DataFrame) -> dict[str, float]:
+    """클래스별 ``path_depth>=1`` 보유율. 한쪽이 비면 NaN."""
+    out: dict[str, float] = {}
+    for lab, name in ((0, "benign"), (1, "phishing")):
+        sub = df[df["label"] == lab]
+        out[name] = float((sub["path_depth"] >= 1).mean()) if len(sub) else float("nan")
+    return out
 
-    WebPhish의 편향축은 "benign은 루트 도메인, phishing은 긴 경로"다. 외부에서도
-    ``path_depth>=1`` 보유율이 benign < phishing이면 편향을 복제한 것이라 전이 실험이
-    검증이 아니게 된다. 두 데이터셋 모두에서 phishing 쪽이 더 높을 때만 게이트가 깨진다.
+
+#: 부호를 "0"으로 볼 경로 보유율 차이의 크기. 이보다 작으면 편향 방향이 없다고 본다.
+BIAS_DIFF_EPS = 0.02
+
+
+def bias_direction_ok(
+    ext_df: pd.DataFrame, wp_df: pd.DataFrame | None, *, eps: float = BIAS_DIFF_EPS
+) -> dict:
+    """**공통 경로 편향 플래그** (리뷰 03 항목 4). 차단 게이트가 아니다.
+
+    각 데이터셋에서 ``d = P(path_depth>=1 | benign) - P(path_depth>=1 | phishing)``를 재고,
+    두 데이터셋의 ``d`` **부호가 같으면** ``common_direction_bias``를 켠다. 부호가 같다는 것은
+    외부 세트가 WebPhish와 같은 축의 구조 차이를 (방향까지) 되풀이한다는 뜻이고, 그러면
+    길이만 맞춘 cohort의 전이 AUROC는 "피싱성"의 전이인지 "경로 유무"라는 공통 편향의
+    전이인지 가를 수 없다.
+
+    옛 규칙은 ``phishing > benign``인 경우만 실패로 봤다. 실제 두 데이터셋은 모두
+    ``benign > phishing``(WebPhish 0.998 대 0.443, 외부 0.868 대 0.337)이라 옛 규칙에서는
+    항상 통과했다 — 잡으려던 상황을 정확히 놓치고 있었다.
+
+    **플래그이지 차단이 아니다.** 플래그가 켜진 세트에서는 층을 버리는 대신 **매칭을 더 한다**:
+    길이 + 경로 유무를 동시에 맞춘 cohort(``run_transfer(match="length_path")``)의 결과가
+    그 세트의 주 판정이 되고, 길이만 맞춘 cohort의 판정은 ``reported_unmatched_path``로
+    표시된다(:func:`verdict`). 플래그가 꺼져 있으면 길이 매칭 cohort가 그대로 주 판정이다.
+
+    ``|d| <= eps``면 그 데이터셋에는 방향이 없다고 보고(부호 0), 공통 편향으로 세지 않는다.
+
+    **방향만 본다.** 크기 축 — 경로 유무만으로 거의 완전히 갈리는 세트(EXT-B2 등) — 은
+    ``path_lr`` 기준선이 맡는다(:data:`GATE_PATH_LR_MAX`, :func:`path_shortcut_flag`).
+
+    Returns:
+        ``common_direction_bias``가 플래그다. ``ok``는 그 부정으로, 표시용으로만 남긴다
+        (판정을 차단하지 않는다). ``checked``가 ``False``면 참조 프레임이 없어 판단하지
+        않았다는 뜻이고, 그때 플래그는 꺼진 상태다.
     """
+    ext = path_frac_by_class(ext_df)
+    ref = path_frac_by_class(wp_df) if wp_df is not None and len(wp_df) else None
 
-    def frac(df: pd.DataFrame) -> dict[str, float]:
-        out = {}
-        for lab, name in ((0, "benign"), (1, "phishing")):
-            sub = df[df["label"] == lab]
-            out[name] = float((sub["path_depth"] >= 1).mean()) if len(sub) else float("nan")
-        return out
+    def diff(d: dict[str, float]) -> float:
+        return float(d["benign"] - d["phishing"])
 
-    ext = frac(ext_df)
-    ref = frac(wp_df) if wp_df is not None and len(wp_df) else None
-    ext_same = bool(ext["phishing"] > ext["benign"])
+    def sign(v: float) -> int:
+        if v != v:  # NaN
+            return 0
+        return 0 if abs(v) <= eps else (1 if v > 0 else -1)
+
+    d_ext = diff(ext)
+    res: dict = {
+        "external": ext,
+        "webphish": ref,
+        "diff_external": d_ext,
+        "sign_external": sign(d_ext),
+        "eps": float(eps),
+        "rule": (
+            "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 "
+            "공통 편향으로 보고 게이트 실패"
+        ),
+        "rule_version": "common_sign_v2",
+    }
     if ref is None:
         # WebPhish 프레임을 못 받았으면 외부 방향만 기록하고 게이트는 통과시킨다
         # (판단 근거가 없는 상태에서 층을 강등하지 않는다).
-        return {"external": ext, "webphish": None, "ok": True, "checked": False}
-    wp_same = bool(ref["phishing"] > ref["benign"])
-    return {
-        "external": ext,
-        "webphish": ref,
-        "ok": not (ext_same and wp_same),
-        "checked": True,
+        res.update(
+            {
+                "diff_webphish": None,
+                "sign_webphish": 0,
+                "common_direction_bias": False,
+                "ok": True,
+                "checked": False,
+            }
+        )
+        return res
+    d_wp = diff(ref)
+    same = sign(d_ext) != 0 and sign(d_ext) == sign(d_wp)
+    res.update(
+        {
+            "diff_webphish": d_wp,
+            "sign_webphish": sign(d_wp),
+            "same_direction": bool(same),
+            "common_direction_bias": bool(same),
+            "ok": not same,
+            "checked": True,
+            "note": (
+                f"두 데이터셋 모두 benign-phishing 경로 보유율 차이가 "
+                f"{'양수' if sign(d_ext) > 0 else '음수'}다 "
+                f"(외부 {d_ext:+.3f}, WebPhish {d_wp:+.3f}) — 공통 편향. "
+                "길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다"
+                if same
+                else f"부호가 다르거나 한쪽이 중립이다 (외부 {d_ext:+.3f}, WebPhish {d_wp:+.3f})"
+            ),
+        }
+    )
+    return res
+
+
+def match_by_length_and_path(
+    df: pd.DataFrame, bucket: int | None = 1, seed: int = 0
+) -> tuple[pd.DataFrame, dict]:
+    """이미 split별 길이 매칭이 끝난 프레임에서 **경로 유무까지** 1:1로 맞춘다.
+
+    민감도 분석용이다(리뷰 03 항목 4). ``(split, 길이 버킷, path_depth>=1)`` 셀마다 두
+    클래스를 같은 수로 잘라 내므로, 길이 주변분포 동일성은 그대로 유지된 채 경로 보유율의
+    주변분포까지 두 클래스에서 같아진다. 남은 AUROC는 "길이도 경로 유무도 아닌 무엇"이다.
+
+    행 제거만 하므로 split 간 그룹 교집합 0은 유지된다. ``bucket``은 길이 버킷 폭이고
+    ``exact`` 매칭에서는 1이다. ``None``이면 길이를 셀에 넣지 않고 경로 유무만 맞춘다
+    (``length_match: none`` 조건).
+    """
+    if not len(df):
+        return df, {"n_before": 0, "n_after": 0, "n_dropped": 0, "bucket": bucket}
+    work = df.reset_index(drop=True)
+    b = None if bucket is None else max(int(bucket), 1)
+    len_key = (
+        pd.Series(["*"] * len(work))
+        if b is None
+        else (work["url_bytes_len"].astype(int) // b).astype(str)
+    )
+    cell = (
+        work["split"].astype(str).to_numpy()
+        + "|"
+        + len_key.to_numpy().astype(str)
+        + "|"
+        + (work["path_depth"].astype(int) >= 1).astype(int).astype(str).to_numpy()
+    )
+    rng = np.random.default_rng(seed)
+    keep: list[np.ndarray] = []
+    for _, idx in work.groupby(cell, sort=True).indices.items():
+        idx = np.asarray(idx)
+        lab = work["label"].to_numpy()[idx]
+        pos, neg = idx[lab == 1], idx[lab == 0]
+        n = min(pos.size, neg.size)
+        if n == 0:
+            continue
+        keep.append(rng.permutation(pos)[:n])
+        keep.append(rng.permutation(neg)[:n])
+    if not keep:
+        out = work.iloc[[]].reset_index(drop=True)
+    else:
+        sel = np.sort(np.concatenate(keep))
+        out = work.iloc[sel].reset_index(drop=True)
+    report = {
+        "n_before": int(len(work)),
+        "n_after": int(len(out)),
+        "n_dropped": int(len(work) - len(out)),
+        "bucket": b,
+        "cells": int(len(set(cell.tolist()))),
+        "mode": "length_path",
     }
+    return out, report
 
 
 def ensure_version_column(cfg: Any, ext_df: pd.DataFrame) -> pd.DataFrame:
@@ -236,18 +376,35 @@ def ensure_version_column(cfg: Any, ext_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_external_frame(
-    cfg: Any, ext_df: pd.DataFrame, stratum: str, seed: int
+    cfg: Any, ext_df: pd.DataFrame, stratum: str, seed: int, *, match: str = "length"
 ) -> tuple[pd.DataFrame, dict]:
     """``runner._prepare_frame``의 외부판. **같은 함수**에 프레임만 주입한다.
 
     별도 구현을 두면 두 경로가 갈라져 F-a 대 in-domain 비교가 조용히 무의미해진다.
     ``version`` 컬럼은 :func:`ensure_version_column`으로 한 번만 계산해 캐시한다.
+
+    ``match="length_path"``면 표준 절차가 끝난 뒤 :func:`match_by_length_and_path`를 한 번 더
+    적용한다(민감도 분석). ``"length"``(기본)는 1차 실험과 완전히 같은 경로다.
     """
     from qrphish.runner import _prepare_frame
 
+    if match not in ("length", "length_path"):
+        raise ValueError(f"match는 'length'|'length_path'여야 한다 (got {match!r})")
     _check_columns(ext_df)
     ensure_version_column(cfg, ext_df)
-    return _prepare_frame(cfg, stratum, seed, frame=ext_df)
+    df, diag = _prepare_frame(cfg, stratum, seed, frame=ext_df)
+    diag["match"] = match
+    if match == "length_path" and len(df):
+        from qrphish.runner import _get, _length_bucket
+        from qrphish.splits import assert_length_matched
+
+        bucket = _length_bucket(_get(cfg, "condition"))
+        df, rep = match_by_length_and_path(df, bucket, seed)
+        diag["path_match"] = rep
+        diag["n_after_match"] = int(len(df))
+        if len(df) and bucket is not None:
+            assert_length_matched(df, bucket)
+    return df, diag
 
 
 def build_external_stratum(cfg: Any, df: pd.DataFrame, stratum: str, seed: int, out_dir: Path):
@@ -333,8 +490,63 @@ def permutation_null(
     blocks = _group_blocks(groups)
     rng = np.random.default_rng(seed)
     vals = np.empty(int(n_perm), dtype=np.float64)
+    n_pos = np.empty(int(n_perm), dtype=np.int64)
     for b in range(int(n_perm)):
         yp = _permute_labels_by_group(y, blocks, rng)
+        n_pos[b] = int(yp.sum())
+        per = [float(auroc_fn(yp[r], p[r])) for r in per_seed_rows]
+        per = [v for v in per if v == v]
+        vals[b] = float(np.mean(per)) if per else float("nan")
+    ok = vals[np.isfinite(vals)]
+    lo = float(np.percentile(ok, 2.5)) if ok.size else float("nan")
+    hi = float(np.percentile(ok, 97.5)) if ok.size else float("nan")
+    n_pos_obs = int(y.sum())
+    return {
+        "auroc_mean": float(np.mean(ok)) if ok.size else float("nan"),
+        "ci": [lo, hi],
+        "ci_upper": hi,
+        "n_perm": int(n_perm),
+        "n_valid": int(ok.size),
+        "unit": "etld1_group",
+        "method": "group_block_exchange_approx",
+        "note": (
+            "정식 순열 검정이 아니라 **그룹 블록 교환 근사**다. 교환 가능성 가정은 "
+            "'eTLD+1 그룹은 서로 바꿔 놓아도 무방하다'이며, 크기가 다른 그룹 사이에서는 "
+            "라벨 구성을 순환 복사하므로 양성 총수가 보존되지 않는다. 행 단위 라벨 순열 "
+            "바닥선은 별도로 `null_row_permutation`에 낸다."
+        ),
+        "positives_observed": n_pos_obs,
+        "positives_preserved": bool(np.all(n_pos == n_pos_obs)) if n_perm else True,
+        "positives_range": [int(n_pos.min()), int(n_pos.max())] if n_perm else [n_pos_obs, n_pos_obs],
+    }
+
+
+def row_permutation_null(
+    y: np.ndarray,
+    p: np.ndarray,
+    seeds: np.ndarray | None = None,
+    n_perm: int = 200,
+    seed: int = 0,
+) -> dict:
+    """참조용 **행 단위** 라벨 순열 바닥선. 양성 총수를 정확히 보존한다.
+
+    행을 교환 가능하다고 가정하므로 그룹 안의 라벨 상관 구조를 깬다 — 그만큼 바닥선이
+    낮게(=관대하게) 잡힌다. 판정에는 :func:`permutation_null`(그룹 블록 교환)을 쓰고,
+    이 값은 "두 바닥선 중 어느 쪽을 써도 결론이 같은가"를 보이기 위해 함께 보고한다.
+    """
+    from qrphish.evaluate import auroc as auroc_fn
+
+    y = np.asarray(y).astype(np.int64)
+    p = np.asarray(p, dtype=np.float64)
+    if seeds is None:
+        seeds = np.zeros(y.size, dtype=np.int64)
+    seeds = np.asarray(seeds).astype(np.int64)
+    per_seed_rows = [np.flatnonzero(seeds == c) for c in np.unique(seeds)]
+
+    rng = np.random.default_rng(seed)
+    vals = np.empty(int(n_perm), dtype=np.float64)
+    for b in range(int(n_perm)):
+        yp = y[rng.permutation(y.size)]
         per = [float(auroc_fn(yp[r], p[r])) for r in per_seed_rows]
         per = [v for v in per if v == v]
         vals[b] = float(np.mean(per)) if per else float("nan")
@@ -347,7 +559,130 @@ def permutation_null(
         "ci_upper": hi,
         "n_perm": int(n_perm),
         "n_valid": int(ok.size),
-        "unit": "etld1_group",
+        "unit": "row",
+        "method": "row_label_permutation",
+        "note": (
+            "행 교환 가능성을 가정한 참조 바닥선. 양성 총수는 정확히 보존되지만 "
+            "그룹 안 라벨 상관을 깨므로 판정 기준으로 쓰지 않는다."
+        ),
+        "positives_preserved": True,
+    }
+
+
+# -------------------------------------------------------------------- 경로 기준선
+def fit_path_lr(urls_fit, y_fit, seed: int = 0):
+    """경로 모양만 쓰는 LR (리뷰 03 항목 4). 입력은 :func:`qrphish.urls.shape_features`.
+
+    길이·문자 조성·n-gram은 넣지 않는다. 이 기준선이 CNN에 가깝게 나오면, 외부 전이의
+    상당 부분이 "경로/구분자 구조"라는 두 데이터셋 공통의 표면 특징으로 설명된다는 뜻이다.
+    """
+    from qrphish import baselines as bl
+    from qrphish.urls import shape_features
+
+    return bl._fit_core("path_lr", shape_features(urls_fit), y_fit, seed)
+
+
+def apply_path_lr(model, urls) -> np.ndarray:
+    from qrphish.urls import shape_features
+
+    return model.predict(shape_features(urls))
+
+
+def path_shortcut_flag(
+    baselines: dict, *, threshold: float = GATE_PATH_LR_MAX
+) -> dict:
+    """경로 지름길 플래그 — 평가 cohort가 경로 모양만으로 갈리는가.
+
+    ``path_lr`` AUROC가 ``threshold`` 이상이면 그 세트는 "경로 있음/없음"만으로 라벨이
+    거의 결정된다(EXT-B2: Tranco 맨 도메인 benign 대 경로 있는 phishing). 그런 세트에서
+    CNN이 잘 맞히는 것은 전이의 증거가 아니므로 판정을 ``descriptive_only``로 내린다.
+
+    ``path_lr``을 못 냈으면 fail-closed로 **플래그를 켠다** — 못 잰 축을 통과로 두면
+    지름길 세트가 조용히 결론에 쓰인다.
+    """
+    v = (baselines.get("path_lr") or {}).get("auroc")
+    if v is None or v != v:
+        return {
+            "path_lr_auroc": None,
+            "threshold": float(threshold),
+            "path_shortcut_dominant": True,
+            "note": "path_lr AUROC를 내지 못해 fail-closed로 플래그를 켠다.",
+        }
+    dominant = bool(float(v) >= float(threshold))
+    return {
+        "path_lr_auroc": float(v),
+        "threshold": float(threshold),
+        "path_shortcut_dominant": dominant,
+        "note": (
+            f"path_lr AUROC={float(v):.4f} >= {threshold} — 경로 모양만으로 거의 갈리는 "
+            "세트다. 전이 검증으로 쓸 수 없다."
+            if dominant
+            else f"path_lr AUROC={float(v):.4f} < {threshold} — 경로 지름길이 지배적이지 않다."
+        ),
+    }
+
+
+# ------------------------------------------------------------------ 쌍체 ΔAUROC
+def paired_delta_auroc(
+    y: np.ndarray,
+    p_a: np.ndarray,
+    p_b: np.ndarray,
+    groups: np.ndarray,
+    seeds: np.ndarray | None = None,
+    *,
+    n_boot: int = 2000,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> dict:
+    """같은 행에서 두 점수의 AUROC 차이(``a - b``)와 그 CI. 시드 층화 그룹 부트스트랩.
+
+    각 리샘플에서 **같은 그룹 집합**으로 두 AUROC를 모두 다시 계산하므로, 두 CI를 따로
+    내서 겹침을 눈으로 보는 것과 달리 상관을 반영한 쌍체 비교가 된다(리뷰 03 항목 8).
+    """
+    from qrphish.evaluate import (
+        _block_indices,
+        _block_metric_fns,
+        _mean_over_seeds,
+        _seed_blocks,
+        auroc,
+        percentile_ci,
+    )
+
+    y = np.asarray(y)
+    p_a = np.asarray(p_a, dtype=np.float64)
+    p_b = np.asarray(p_b, dtype=np.float64)
+    groups = np.asarray(groups).astype(str)
+    if seeds is None:
+        seeds = np.zeros(y.size, dtype=np.int64)
+    seeds = np.asarray(seeds).astype(np.int64)
+
+    n_codes, blocks = _seed_blocks(groups, seeds)
+    fa = _block_metric_fns(y, p_a, blocks, auroc)
+    fb = _block_metric_fns(y, p_b, blocks, auroc)
+    point_a = _mean_over_seeds(float(auroc(y[b["rows"]], p_a[b["rows"]])) for b in blocks)
+    point_b = _mean_over_seeds(float(auroc(y[b["rows"]], p_b[b["rows"]])) for b in blocks)
+
+    rng = np.random.default_rng(seed)
+    vals = np.empty(int(n_boot), dtype=np.float64)
+    for i in range(int(n_boot)):
+        if n_codes == 0:
+            vals[i] = float("nan")
+            continue
+        pick = rng.integers(0, n_codes, size=n_codes)
+        idx = [_block_indices(blk, pick) for blk in blocks]
+        va = _mean_over_seeds(f(ix) for f, ix in zip(fa, idx, strict=True))
+        vb = _mean_over_seeds(f(ix) for f, ix in zip(fb, idx, strict=True))
+        vals[i] = va - vb
+    lo, hi, n_valid = percentile_ci(vals, alpha)
+    return {
+        "auroc_a": point_a,
+        "auroc_b": point_b,
+        "delta": float(point_a - point_b),
+        "ci": [lo, hi],
+        "n_boot": int(n_boot),
+        "n_valid": int(n_valid),
+        "paired": True,
+        "pooling": "seed_stratified_group_cluster_bootstrap",
     }
 
 
@@ -359,6 +694,7 @@ def transfer_baselines(
     *,
     fit_on: str = "webphish_train",
     motif: dict | None = None,
+    preds_out: dict | None = None,
 ) -> dict:
     """``fit_frame``(train)에서 fit → ``eval_frame``에 apply. 재fit하지 않는다.
 
@@ -366,6 +702,8 @@ def transfer_baselines(
         fit_frame: ``url``/``label``(+선택 ``version``) 컬럼을 가진 학습용 프레임.
         eval_frame: 같은 컬럼의 평가 프레임.
         motif: ``{"H_fit": (N,D), "H_eval": (M,D)}`` motif 히스토그램 쌍. 없으면 생략.
+        preds_out: 주면 기준선별 ``eval_frame`` 예측 점수 배열을 여기에 담는다. CNN과의
+            쌍체 ΔAUROC(:func:`paired_delta_auroc`)를 내려면 필요하다.
 
     Returns:
         ``{name: {"auroc", "ci", "p", "fit_on"}}``. ``length_lr``/``version_lr``은 게이트다.
@@ -384,6 +722,8 @@ def transfer_baselines(
 
     def record(name: str, p: np.ndarray) -> None:
         p = np.asarray(p, dtype=np.float64)
+        if preds_out is not None:
+            preds_out[name] = p
         cb = cluster_bootstrap(y_ev, p, g_ev, auroc_fn, n_boot=200, seed=seed)
         out[name] = {
             "auroc": float(auroc_fn(y_ev, p)),
@@ -395,6 +735,8 @@ def transfer_baselines(
     record("charngram_lr", bl.apply_charngram_lr(bl.fit_charngram_lr(u_fit, y_fit, seed), u_ev))
     record("bytehist_lr", bl.apply_bytehist_lr(bl.fit_bytehist_lr(u_fit, y_fit, seed), u_ev))
     record("length_lr", bl.apply_length_lr(bl.fit_length_lr(u_fit, y_fit, seed), u_ev))
+    # 경로 모양 단독 기준선(리뷰 03 항목 4). 게이트가 아니라 해석용 대조다.
+    record("path_lr", apply_path_lr(fit_path_lr(u_fit, y_fit, seed), u_ev))
     if "version" in fit_frame.columns and "version" in eval_frame.columns:
         m = bl.fit_version_lr(np.asarray(fit_frame["version"], dtype=float), y_fit, seed)
         record("version_lr", bl.apply_version_lr(m, np.asarray(eval_frame["version"], dtype=float)))
@@ -589,20 +931,53 @@ def verdict(
     null_ci_upper: float,
     in_domain_auroc: float | None,
     gates: dict,
+    *,
+    common_direction_bias: bool = False,
+    path_shortcut_dominant: bool = False,
+    match: str = "length",
 ) -> dict:
-    """설계 6.1의 사전 등록 판정. 게이트가 하나라도 깨지면 ``descriptive_only``."""
+    """설계 6.1의 사전 등록 판정 + 리뷰 03 항목 4의 두 플래그.
+
+    순서가 규칙이다.
+
+    1. ``path_shortcut_dominant``(``path_lr`` AUROC >= :data:`GATE_PATH_LR_MAX`)이면
+       ``descriptive_only``. 경로 유무만으로 갈리는 세트는 전이 검증으로 무의미하다.
+    2. 게이트(길이·버전 중립, 그룹 집중도, 표본 등급)가 깨졌거나 CI/바닥선을 못 냈으면
+       ``descriptive_only``.
+    3. ``common_direction_bias``가 켜졌는데 cohort가 길이만 맞춘 것(``match="length"``)이면
+       ``reported_unmatched_path`` — 숫자는 내되 주 판정으로 쓰지 않는다는 표시다. 그 세트의
+       주 판정은 같은 조건을 ``match="length_path"``로 다시 돌린 결과가 갖는다.
+    4. 그 외에는 기존 규칙(collapse / reproduced_strong / weak / partial_collapse).
+
+    ``match="length_path"``인 cohort는 경로 유무 주변분포까지 맞췄으므로 3을 건너뛴다 —
+    공통 편향 플래그가 켜져 있어도 그 결과가 주 판정이다.
+    """
     gates_passed = {k: bool(v) for k, v in gates.items()}
     have_numbers = bool(transfer_ci) and transfer_ci[0] == transfer_ci[0] and (
         null_ci_upper == null_ci_upper
     )
-    if not all(gates_passed.values()) or not have_numbers:
+    flags = {
+        "common_direction_bias": bool(common_direction_bias),
+        "path_shortcut_dominant": bool(path_shortcut_dominant),
+        "match": str(match),
+    }
+    if path_shortcut_dominant:
+        label = "descriptive_only"
+        reason = "path_shortcut_dominant"
+    elif not all(gates_passed.values()) or not have_numbers:
         # 게이트가 깨졌거나 CI/바닥선을 못 낸 층은 결론에 쓰지 않는다(설계 6.1).
         label = "descriptive_only"
+        reason = "gate_failed" if not all(gates_passed.values()) else "missing_numbers"
+    elif common_direction_bias and match != "length_path":
+        label = "reported_unmatched_path"
+        reason = "common_direction_bias_without_path_matching"
     elif transfer_ci[0] <= null_ci_upper:
         # 우연과 구분 불가.
         label = "collapse"
+        reason = "ci_lower_below_null"
     elif in_domain_auroc is None or in_domain_auroc != in_domain_auroc:
         label = "reproduced_unknown_reference"
+        reason = "no_in_domain_reference"
     else:
         drop = float(in_domain_auroc) - float(transfer_auroc)
         if drop <= DROP_STRONG:
@@ -611,17 +986,28 @@ def verdict(
             label = "reproduced_weak"
         else:
             label = "partial_collapse"
-    return {"label": label, "gates_passed": gates_passed, "criteria_version": "prereg_v1"}
+        reason = f"drop={drop:.4f}"
+    return {
+        "label": label,
+        "gates_passed": gates_passed,
+        "flags": flags,
+        "reason": reason,
+        "is_primary_verdict": bool(label != "reported_unmatched_path"),
+        "criteria_version": "prereg_v2",
+    }
 
 
 def gates_from(
     baselines: dict,
     top5_group_frac: float | None,
-    bias_ok: bool,
     *,
     notes: dict | None = None,
 ) -> dict:
-    """설계 6.1 게이트 네 개를 결과 블록에서 뽑아낸다.
+    """설계 6.1 게이트를 결과 블록에서 뽑아낸다.
+
+    편향 방향은 더 이상 게이트가 아니다 — :func:`bias_direction_ok`의 플래그로 빠졌고,
+    판정 규칙은 :func:`verdict`가 들고 있다. 경로 지름길(``path_shortcut``)도 게이트가
+    아니라 플래그로, 역시 :func:`verdict`에서 처리한다.
 
     값이 없는 게이트는 **실패**로 둔다. 못 낸 게이트를 통과로 두면(fail-open) 베이스라인이
     터진 층이 조용히 결론에 쓰인다. 이유는 ``notes``(호출자가 넘긴 dict)에 남는다.
@@ -648,7 +1034,6 @@ def gates_from(
     return {
         "length_lr_neutral": neutral("length_lr"),
         "version_lr_neutral": neutral("version_lr"),
-        "bias_direction_ok": bool(bias_ok),
         "group_concentration_ok": bool(frac <= GATE_TOP5_GROUP_FRAC),
     }
 
@@ -656,11 +1041,12 @@ def gates_from(
 def collection_bias_gate(
     external_csv: str | Path, reports_dir: str | Path | None = None
 ) -> dict | None:
-    """수집 단계가 내린 편향 게이트(``bias_diagnostics.json``의 ``gate_passed``)를 찾는다.
+    """수집 단계가 기록한 편향 플래그(``bias_diagnostics.json``)를 찾는다.
 
-    전이 단계에서 길이 매칭된 프레임으로 편향을 **재계산**하면 수집 단계의 판정이 조용히
-    뒤집힌다(길이 매칭이 경로 보유율 분포를 바꾸므로). 수집 단계 게이트가 있으면 그것을
-    승계하고, 없을 때만 재계산한다.
+    전이 단계에서 길이 매칭된 프레임으로 편향을 **재계산**하면 수집 단계의 값이 조용히
+    뒤집힌다(길이 매칭이 경로 보유율 분포를 바꾸므로). 수집 단계 기록이 있으면 그것을
+    승계하고, 없을 때만 재계산한다. 이 값은 차단 게이트가 아니라
+    :func:`verdict`에 넘기는 ``common_direction_bias`` 플래그다.
 
     찾는 곳: 외부 CSV와 같은 폴더 → ``reports_dir`` → ``reports/external/``.
     어느 블록인지는 진단에 기록된 ``output_csv``로 맞춘다(``sets`` 아래 세트별 블록 포함).
@@ -693,8 +1079,13 @@ def collection_bias_gate(
         blk = blocks.get(key)
         if not isinstance(blk, dict) or "gate_passed" not in blk:
             continue
+        direction = blk.get("direction") or {}
         return {
             "gate_passed": bool(blk["gate_passed"]),
+            "common_direction_bias": bool(
+                direction.get("common_direction_bias", not blk["gate_passed"])
+            ),
+            "path_shortcut": blk.get("path_shortcut"),
             "gate_note": blk.get("gate_note"),
             "source": str(c),
             "block": key,

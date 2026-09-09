@@ -12,5 +12,734 @@
   "sha256": "1bae7823690a9cd3c5f5d3b7cc9b676e5907e963491005cd1a9afd8501f80276",
   "n_raw": 43990,
   "license_note": "OpenPhish community feed, openphish.com/terms.html (비상업 연구, 재배포 금지)",
-  "method_note": "shallow clone 대신 GitHub API 커밋 목록 + 커밋별 raw feed.txt 누적. 리포 전체를 내려받지 않는다."
+  "method_note": "shallow clone 대신 GitHub API 커밋 목록 + 커밋별 raw feed.txt 누적. 리포 전체를 내려받지 않는다.",
+  "commits": [
+    {
+      "sha": "f74b4d26437073f46e62eb4aa6b35884c1a4921f",
+      "committed_at": "2026-06-10T12:00:06Z"
+    },
+    {
+      "sha": "aa20785a3de4e57c83c260993faeca9c0017929c",
+      "committed_at": "2026-06-11T00:00:07Z"
+    },
+    {
+      "sha": "4b13cf32cd720979e387984e783e1de07307aace",
+      "committed_at": "2026-06-11T12:00:06Z"
+    },
+    {
+      "sha": "26ea924311af3cf2c575f78dcbb9f173401f1237",
+      "committed_at": "2026-06-12T00:00:05Z"
+    },
+    {
+      "sha": "5da498ae991805a57f13802775d45efc7eac7ee6",
+      "committed_at": "2026-06-12T12:00:06Z"
+    },
+    {
+      "sha": "4e4f6cc11909a44b18585abbb7446843d6d71d55",
+      "committed_at": "2026-06-13T00:00:07Z"
+    },
+    {
+      "sha": "58a9424f8485d775f30fbf0c292f4bb9fb7237cc",
+      "committed_at": "2026-06-13T12:00:06Z"
+    },
+    {
+      "sha": "409012f54b935db8c9cbd40f975639aaf9592628",
+      "committed_at": "2026-06-14T00:00:08Z"
+    },
+    {
+      "sha": "c3a1d2c00cd63144ac448b119a10428f467103e3",
+      "committed_at": "2026-06-14T12:00:05Z"
+    },
+    {
+      "sha": "719faf79635ddbe701d1e93ffcce03d968d6cef4",
+      "committed_at": "2026-06-15T00:00:06Z"
+    },
+    {
+      "sha": "bf250dafafa0fee0c68d96da059ac1a2e3a23712",
+      "committed_at": "2026-06-15T12:00:05Z"
+    },
+    {
+      "sha": "0cd133efd6ce962c21b6b6d3423db61af8743467",
+      "committed_at": "2026-06-16T00:00:07Z"
+    },
+    {
+      "sha": "9264bd1cde58e49174cce17e92f27c32fc14f1f9",
+      "committed_at": "2026-06-16T12:00:05Z"
+    },
+    {
+      "sha": "f76ee3cd35f1cf529173f2612c137b962e1688e3",
+      "committed_at": "2026-06-17T00:00:07Z"
+    },
+    {
+      "sha": "38303fbdc549016224d57e00feef6ef4fc13719f",
+      "committed_at": "2026-06-17T12:00:05Z"
+    },
+    {
+      "sha": "4ba682586c03487005f8fd77ef41ffb678a85664",
+      "committed_at": "2026-06-18T00:00:07Z"
+    },
+    {
+      "sha": "d39b6459c38c98390d90fa878da24db7dd8669f7",
+      "committed_at": "2026-06-18T12:00:05Z"
+    },
+    {
+      "sha": "2ec1ecad28334b3080917ce130690bba3375ac1c",
+      "committed_at": "2026-06-19T00:00:07Z"
+    },
+    {
+      "sha": "6f8077fc9f7b080a93212a088b48103788df175b",
+      "committed_at": "2026-06-19T12:00:05Z"
+    },
+    {
+      "sha": "92b60013cf72458198738e4f7af741053e8c5524",
+      "committed_at": "2026-06-20T00:00:10Z"
+    },
+    {
+      "sha": "87e5597eed93d04cbbe5608fb1b82e83743ea42d",
+      "committed_at": "2026-06-20T12:00:06Z"
+    },
+    {
+      "sha": "65d14a255ae83330f0b741e3d94b26e25745de91",
+      "committed_at": "2026-06-21T00:00:12Z"
+    },
+    {
+      "sha": "8bc21cac36bffffe2a635b50da9b92889ffa8d27",
+      "committed_at": "2026-06-21T12:00:05Z"
+    },
+    {
+      "sha": "fa6fbdf117b45792901036ed49504a90ac859eb1",
+      "committed_at": "2026-06-22T00:00:05Z"
+    },
+    {
+      "sha": "89a54279f43284fc1612fb0f3d84c209894ca570",
+      "committed_at": "2026-06-22T12:00:05Z"
+    },
+    {
+      "sha": "a6f4ef3dfa53daee038bc072c740321714f6e077",
+      "committed_at": "2026-06-23T00:00:07Z"
+    },
+    {
+      "sha": "6653885533b917cb851dfb4e6ec70c9eac55221f",
+      "committed_at": "2026-06-23T12:00:05Z"
+    },
+    {
+      "sha": "28e26d404cc0c38345252b6ce824a2fd1a399b11",
+      "committed_at": "2026-06-24T00:00:08Z"
+    },
+    {
+      "sha": "1dfd74e6ebe7644aebe51ec97d5f42d2e9f78e58",
+      "committed_at": "2026-06-24T12:00:06Z"
+    },
+    {
+      "sha": "00e5dc8f805c0b7d0071c868f51084e265996dc4",
+      "committed_at": "2026-06-25T00:00:07Z"
+    },
+    {
+      "sha": "426369876805383ca48f1b64fdeee8252aacd953",
+      "committed_at": "2026-06-25T12:00:06Z"
+    },
+    {
+      "sha": "3d5d4df31a42fcdd8d8bfa385e93d861e85ef5fa",
+      "committed_at": "2026-06-26T00:00:08Z"
+    },
+    {
+      "sha": "ebcd91cc70e217b7ab176505af1835dea4a11851",
+      "committed_at": "2026-06-26T12:00:05Z"
+    },
+    {
+      "sha": "651ea1af3d74b34b64b3c3ed3e48c268c283d3c1",
+      "committed_at": "2026-06-27T00:00:06Z"
+    },
+    {
+      "sha": "b9539f959b85b962f0cebb6794914ad2c2216e45",
+      "committed_at": "2026-06-27T12:00:05Z"
+    },
+    {
+      "sha": "521c4155c9831fcdee80c7b0144e03ffbdedadb0",
+      "committed_at": "2026-06-28T00:00:08Z"
+    },
+    {
+      "sha": "0d5223902e862ac97afda73e16d20ed1495f74de",
+      "committed_at": "2026-06-28T12:00:05Z"
+    },
+    {
+      "sha": "1a55f8d137e27a2dfbe99391abfe947e2a149615",
+      "committed_at": "2026-06-29T00:00:06Z"
+    },
+    {
+      "sha": "5ac323ba0b394839ca24a7d8fc2c17f7cf4ec30e",
+      "committed_at": "2026-06-29T12:00:05Z"
+    },
+    {
+      "sha": "5295039aeedfdc0654495f9d52be9218d933b7b0",
+      "committed_at": "2026-06-30T00:00:08Z"
+    },
+    {
+      "sha": "2b3fe92e18afc98d8b373e87e99593531b393abd",
+      "committed_at": "2026-06-30T12:00:05Z"
+    },
+    {
+      "sha": "6763660c6e17e3e805a19c0b9add1043f42c5947",
+      "committed_at": "2026-07-01T00:00:08Z"
+    },
+    {
+      "sha": "8821db3e32702d5acef9f5a3712476a351e70e50",
+      "committed_at": "2026-07-01T12:00:06Z"
+    },
+    {
+      "sha": "b2be93a2903ed0fad03ef3cdcae04c39ff6391f5",
+      "committed_at": "2026-07-02T00:00:07Z"
+    },
+    {
+      "sha": "58e380ddc453b0aea1bf6b71b1a06ef7bb861bcb",
+      "committed_at": "2026-07-02T12:00:06Z"
+    },
+    {
+      "sha": "140f94e8c65179dee66926feebd820f243521abc",
+      "committed_at": "2026-07-03T00:00:08Z"
+    },
+    {
+      "sha": "fdbcf264b215473cc558e00b791f27f9070e3158",
+      "committed_at": "2026-07-03T12:00:05Z"
+    },
+    {
+      "sha": "54bcfaa91348620d4db736a93fe5d6df1505307d",
+      "committed_at": "2026-07-04T00:00:07Z"
+    },
+    {
+      "sha": "1c62fd56087f3882ca7495e98aea0a6396d1e30a",
+      "committed_at": "2026-07-04T12:00:05Z"
+    },
+    {
+      "sha": "7e0bf0e3076e5170513e2759cfd1efc88ba7f795",
+      "committed_at": "2026-07-05T00:00:08Z"
+    },
+    {
+      "sha": "3012b1308f441d95b4e057c8d76524a977393dd7",
+      "committed_at": "2026-07-05T12:00:05Z"
+    },
+    {
+      "sha": "88a807de0f6e29d91383663bb962591297881594",
+      "committed_at": "2026-07-06T00:00:07Z"
+    },
+    {
+      "sha": "98d8b4facd22f46f96e52a7d070483b1f7c9f9db",
+      "committed_at": "2026-07-06T12:00:05Z"
+    },
+    {
+      "sha": "1bd1b07e6fa6114c3dddcb0fecc7bb136a132651",
+      "committed_at": "2026-07-07T00:00:06Z"
+    },
+    {
+      "sha": "6dcfc45d81c73386c7942d2455649623994eafa0",
+      "committed_at": "2026-07-07T12:00:06Z"
+    },
+    {
+      "sha": "2185c297e952ef9e40e15f151b615f89deec4610",
+      "committed_at": "2026-07-08T00:00:07Z"
+    },
+    {
+      "sha": "b3de2d0f053a039bdf478713062008e3f7cbed17",
+      "committed_at": "2026-07-08T12:00:05Z"
+    },
+    {
+      "sha": "42d284551950288c36fd3c5e5fa268969365835c",
+      "committed_at": "2026-07-09T00:00:06Z"
+    },
+    {
+      "sha": "31dd770e9e545590a516fe40c1832bfd3e72ba68",
+      "committed_at": "2026-07-09T12:00:04Z"
+    },
+    {
+      "sha": "0150a0b6e1ff9b43254ee84fd96f7c1f36005f9e",
+      "committed_at": "2026-07-10T00:00:07Z"
+    },
+    {
+      "sha": "aa18f6e69af620cfa32b07778172d81ea5f58988",
+      "committed_at": "2026-07-10T12:00:05Z"
+    },
+    {
+      "sha": "467b0e2571d1f7146c6525909375f3955f86c18e",
+      "committed_at": "2026-07-11T00:00:06Z"
+    },
+    {
+      "sha": "ddf73f9d23dd01520c247b8178a00219fbe2e2ec",
+      "committed_at": "2026-07-11T12:00:04Z"
+    },
+    {
+      "sha": "dbf140e2c1c12e48a604eef7cb3f9227bdefbdaa",
+      "committed_at": "2026-07-12T00:00:07Z"
+    },
+    {
+      "sha": "85473c920940baa064dd9095b85d7db53cce643b",
+      "committed_at": "2026-07-12T12:00:04Z"
+    },
+    {
+      "sha": "d78668814f204ca95e561747c636e36ac2ab87e9",
+      "committed_at": "2026-07-13T00:00:08Z"
+    },
+    {
+      "sha": "aeb3324b520b4a9ca50b32c1bc7c110e4c3945d8",
+      "committed_at": "2026-07-13T12:00:05Z"
+    },
+    {
+      "sha": "a91349ea4852e2fc4099ac12a4c1c32496d19f18",
+      "committed_at": "2026-07-14T00:00:11Z"
+    },
+    {
+      "sha": "94dc5a09df89737732070cb12ba4b30ffabbbc3c",
+      "committed_at": "2026-07-14T12:00:06Z"
+    },
+    {
+      "sha": "c21adad9e312c444bca996ca9c1decfb2190c1bc",
+      "committed_at": "2026-07-15T00:00:08Z"
+    },
+    {
+      "sha": "fa1c3d763afaf523690aa284d0ad15c3859abcbb",
+      "committed_at": "2026-07-15T12:00:07Z"
+    },
+    {
+      "sha": "b8aac69d779233d89e72d2dcaa6f89fcbe5a3962",
+      "committed_at": "2026-07-16T00:00:10Z"
+    },
+    {
+      "sha": "f69048ba884975ca45f2a9dadb31bbdde4cc67f1",
+      "committed_at": "2026-07-16T12:00:05Z"
+    },
+    {
+      "sha": "9cce11650f27eb021611e169cf463174caca3df4",
+      "committed_at": "2026-07-17T00:00:10Z"
+    },
+    {
+      "sha": "73bd97c812f93c3bddf7bff1d4e5114d08d8738c",
+      "committed_at": "2026-07-17T12:00:06Z"
+    },
+    {
+      "sha": "145efe8bb34142d18f4679c37d0630cf5f199fd0",
+      "committed_at": "2026-07-18T00:00:09Z"
+    },
+    {
+      "sha": "18aec7465abe515cb63410e420ee782ee94df943",
+      "committed_at": "2026-07-18T12:00:06Z"
+    },
+    {
+      "sha": "fa5f9dfd62b878f880fc729c07bd10165d0d2957",
+      "committed_at": "2026-07-19T00:00:14Z"
+    },
+    {
+      "sha": "2cf2629d279d990601bd242c4673b5dda9cae363",
+      "committed_at": "2026-07-19T12:00:05Z"
+    },
+    {
+      "sha": "b008b895266add6ed2832b7b76c5e7f5a8fcfe21",
+      "committed_at": "2026-07-20T00:00:09Z"
+    },
+    {
+      "sha": "3bba11bc763423da1af808d6da2c81675a85cc23",
+      "committed_at": "2026-07-20T12:00:07Z"
+    },
+    {
+      "sha": "3972bbf9b0c3ee55b30dd1009fbdb1cb47797132",
+      "committed_at": "2026-07-21T00:00:10Z"
+    },
+    {
+      "sha": "72304a148a697aad029dd7fc092ac9ab14d1679c",
+      "committed_at": "2026-07-21T12:00:06Z"
+    },
+    {
+      "sha": "5034accb291d745c857ddc381e23ab4709d4e618",
+      "committed_at": "2026-07-22T00:00:10Z"
+    },
+    {
+      "sha": "f6d4bf9882e3d32ee8791dfe44cfa5e8cfad48b4",
+      "committed_at": "2026-07-22T12:00:07Z"
+    },
+    {
+      "sha": "bef8df13bbaa23745b82c2407e5630526978b3bc",
+      "committed_at": "2026-07-23T00:00:10Z"
+    },
+    {
+      "sha": "2bedc5519cba291cc5d7340d9523b0bfc322d7c7",
+      "committed_at": "2026-07-23T12:00:06Z"
+    },
+    {
+      "sha": "fba9167d705f10772c803a41df34b1cbf1b78613",
+      "committed_at": "2026-07-24T00:00:10Z"
+    },
+    {
+      "sha": "c77828c3da92145ae20e5027849eb451fa5c2ce9",
+      "committed_at": "2026-07-24T12:00:06Z"
+    },
+    {
+      "sha": "9176751bfdfd281e5f0f0c237e16a49f5714705e",
+      "committed_at": "2026-07-25T00:00:09Z"
+    },
+    {
+      "sha": "b0abed8136886a6eec6a12d4b4380d7a2ccb8f31",
+      "committed_at": "2026-07-25T12:00:08Z"
+    },
+    {
+      "sha": "0c71e15f93bb4ab6cba6ac0c205c37b6d6b4ce41",
+      "committed_at": "2026-07-26T00:00:15Z"
+    },
+    {
+      "sha": "a0631c62da220826ffbff5eb37de96f0be372b01",
+      "committed_at": "2026-07-26T12:00:06Z"
+    },
+    {
+      "sha": "d7e130a1803345e3a02c7c61404bcf124acdc969",
+      "committed_at": "2026-07-27T00:00:09Z"
+    },
+    {
+      "sha": "3aa6d3f48c92335c361218c15222efcd51d709a5",
+      "committed_at": "2026-07-27T12:00:06Z"
+    },
+    {
+      "sha": "5ceee07d5be0f91f42d0636bae9e8ecf56972618",
+      "committed_at": "2026-07-28T00:00:07Z"
+    },
+    {
+      "sha": "9913aeadf9c418e4d5598fd8749f66e0bb7236a0",
+      "committed_at": "2026-07-28T12:00:06Z"
+    },
+    {
+      "sha": "c1827baa627b631965d51acd4d2945c27c47e60b",
+      "committed_at": "2026-07-29T00:00:08Z"
+    },
+    {
+      "sha": "b1ae260238a2826afe1b16986948cac0352d506b",
+      "committed_at": "2026-07-29T12:00:06Z"
+    },
+    {
+      "sha": "890fcea78c0b810ff87487a8c7cadb59e02e9067",
+      "committed_at": "2026-07-30T00:00:08Z"
+    },
+    {
+      "sha": "990a5168508e7b94496655d77bf502ce22a24033",
+      "committed_at": "2026-07-30T12:00:06Z"
+    },
+    {
+      "sha": "cebd80e67e690874878f6bcc54fb06bcf5d97fc0",
+      "committed_at": "2026-07-31T00:00:08Z"
+    },
+    {
+      "sha": "2529eb49cf8a177aab0a5bf5db3f33a545e7cc2d",
+      "committed_at": "2026-07-31T12:00:06Z"
+    },
+    {
+      "sha": "9b25b31c9cbdbeb1226fea2253e1d120bce95e6f",
+      "committed_at": "2026-08-01T00:00:10Z"
+    },
+    {
+      "sha": "466e70d6e0a200627d135a83a7bac238b75ea42d",
+      "committed_at": "2026-08-01T12:00:06Z"
+    },
+    {
+      "sha": "f62f5f60d23c202a34caab4c04f4711696333a43",
+      "committed_at": "2026-08-02T00:00:11Z"
+    },
+    {
+      "sha": "ec485c9578ae8f45769e10491fb2cae71c8f9f31",
+      "committed_at": "2026-08-02T12:00:06Z"
+    },
+    {
+      "sha": "48f7a982b2a4ebf679c99457fd5467359323e4c6",
+      "committed_at": "2026-08-03T00:00:08Z"
+    },
+    {
+      "sha": "a20cb30a76f5279d85ff4c16e6b07a9eb36292b1",
+      "committed_at": "2026-08-03T12:00:05Z"
+    },
+    {
+      "sha": "eb2f84ee94e38d7c8b628eacd1f5f73a6bbded04",
+      "committed_at": "2026-08-04T00:00:09Z"
+    },
+    {
+      "sha": "f6430e516cabc0666f795d3c2de0315e798d6d9b",
+      "committed_at": "2026-08-04T12:00:07Z"
+    },
+    {
+      "sha": "6d65b8252c9f2d241e6b12c67db03ea297e0fc2b",
+      "committed_at": "2026-08-05T00:00:08Z"
+    },
+    {
+      "sha": "638fd3ad734a93e05bdfad44bef579cae36c8b5c",
+      "committed_at": "2026-08-05T12:00:06Z"
+    },
+    {
+      "sha": "bfe98c8166e751d84ed74e87f7dc69be581de766",
+      "committed_at": "2026-08-06T00:00:08Z"
+    },
+    {
+      "sha": "278e2c74966ada4d25dc48f6c38558abc594524a",
+      "committed_at": "2026-08-06T12:00:07Z"
+    },
+    {
+      "sha": "80dcce65d60427374c24960a0d920ab3b8b0aba6",
+      "committed_at": "2026-08-07T00:00:08Z"
+    },
+    {
+      "sha": "7cda5936feefc0b0f8146ec46e6661ba46c1409e",
+      "committed_at": "2026-08-07T12:00:07Z"
+    },
+    {
+      "sha": "7515270778dd5ecda12d73eab389c6d9c89b1a40",
+      "committed_at": "2026-08-08T00:00:10Z"
+    },
+    {
+      "sha": "c33239ce925148be868f5be843b64e9bc87715c5",
+      "committed_at": "2026-08-08T12:00:07Z"
+    },
+    {
+      "sha": "e58fa54dfb34049c6528bdacb5e8b4162156240d",
+      "committed_at": "2026-08-09T00:00:11Z"
+    },
+    {
+      "sha": "33ad53758341cd93550d24accc4dc07b4090f335",
+      "committed_at": "2026-08-09T12:00:07Z"
+    },
+    {
+      "sha": "585bf9cb5216e62c00c9729b6473d76e21f2b960",
+      "committed_at": "2026-08-10T00:00:09Z"
+    },
+    {
+      "sha": "3a4f79b355d2b404e0cc865ce9ce03456cf71ebf",
+      "committed_at": "2026-08-10T12:00:08Z"
+    },
+    {
+      "sha": "37720791406da7b404b07e77767af20c9482a5ea",
+      "committed_at": "2026-08-11T00:00:11Z"
+    },
+    {
+      "sha": "34ab370179aa1f64008b8805df0a4c158b87f977",
+      "committed_at": "2026-08-11T12:00:07Z"
+    },
+    {
+      "sha": "a442d500e1ca4ac6b14de18f1599511f725decb4",
+      "committed_at": "2026-08-12T00:00:09Z"
+    },
+    {
+      "sha": "ef4fdfb8d6eb0537168d0ebd55a1e40aacac757e",
+      "committed_at": "2026-08-12T12:00:06Z"
+    },
+    {
+      "sha": "ce436fcae9d6fdf778db1534797242b90e356a71",
+      "committed_at": "2026-08-13T00:00:09Z"
+    },
+    {
+      "sha": "37df84cfe37ab57a3fa07dc2c66503aacb43b6c8",
+      "committed_at": "2026-08-13T12:00:05Z"
+    },
+    {
+      "sha": "bb8d369bde80be1ba16a6e7a1ecf27daf99a7b0b",
+      "committed_at": "2026-08-14T00:00:11Z"
+    },
+    {
+      "sha": "3483ade6ce34a1563ada94e92df82725abe8c751",
+      "committed_at": "2026-08-14T12:00:07Z"
+    },
+    {
+      "sha": "f50ea62bee12119c892170f1bc42a8c7ddf6b504",
+      "committed_at": "2026-08-15T00:00:11Z"
+    },
+    {
+      "sha": "50b71efe8f219dd66b67d116b773ab7a4f62f94a",
+      "committed_at": "2026-08-15T12:00:06Z"
+    },
+    {
+      "sha": "a9acaa2291e8754c7e04006e7c43b9653e1c4c15",
+      "committed_at": "2026-08-16T00:00:13Z"
+    },
+    {
+      "sha": "db81e7352e919c2c20280c542e68e6cfe0e298ea",
+      "committed_at": "2026-08-16T12:00:06Z"
+    },
+    {
+      "sha": "288dfdb34fc80e9478bd9ccb271da96f69fe7903",
+      "committed_at": "2026-08-17T00:00:10Z"
+    },
+    {
+      "sha": "8702995a588a1b410746410439bb356dec4b2d6b",
+      "committed_at": "2026-08-17T12:00:07Z"
+    },
+    {
+      "sha": "049de7a39c09fa3f9f31f2d93a74259b98d4ac11",
+      "committed_at": "2026-08-18T00:00:09Z"
+    },
+    {
+      "sha": "df85b1922bbb0f2a1f69457163305af3562c2626",
+      "committed_at": "2026-08-18T12:00:06Z"
+    },
+    {
+      "sha": "00204ecb54877436d83c802e32634679df14e20b",
+      "committed_at": "2026-08-19T00:00:07Z"
+    },
+    {
+      "sha": "f1f3810d203bd60ab703b62560067248a2de3f79",
+      "committed_at": "2026-08-19T12:00:05Z"
+    },
+    {
+      "sha": "042d5b3da597491d187d04445bf19c462189cf31",
+      "committed_at": "2026-08-20T00:00:05Z"
+    },
+    {
+      "sha": "74a5336f51b6661c15fe9986bae78a0b1ec566fa",
+      "committed_at": "2026-08-20T12:00:05Z"
+    },
+    {
+      "sha": "579672e0bed2319c0ea5948180fb994ca2f47d47",
+      "committed_at": "2026-08-21T00:00:06Z"
+    },
+    {
+      "sha": "034c485383113750f077836b83232ccbac60f809",
+      "committed_at": "2026-08-21T12:00:05Z"
+    },
+    {
+      "sha": "ed4bea43a56eccfd0d34e8c839439c7ffd346165",
+      "committed_at": "2026-08-22T00:00:07Z"
+    },
+    {
+      "sha": "5610d1ffe6a19faca39230146d73803e88ce4a18",
+      "committed_at": "2026-08-22T12:00:05Z"
+    },
+    {
+      "sha": "5f50dc2b65df4ec15c91a5a6ebfa2a3ba8262261",
+      "committed_at": "2026-08-23T00:00:08Z"
+    },
+    {
+      "sha": "2ea4e4adf05cb988e9101e21e8f88c58cbc0e657",
+      "committed_at": "2026-08-23T12:00:05Z"
+    },
+    {
+      "sha": "63df13e803ef9ab28c1d842b3097ab35e022b7ce",
+      "committed_at": "2026-08-24T00:00:07Z"
+    },
+    {
+      "sha": "894a81e8f862759d8ebe3dc9218c22abd0171e0f",
+      "committed_at": "2026-08-24T12:00:06Z"
+    },
+    {
+      "sha": "2d29fe42996f955e58291616b6672736f711aca1",
+      "committed_at": "2026-08-25T00:00:06Z"
+    },
+    {
+      "sha": "e4459eaea8b44162b6024d23a9d0123b83957490",
+      "committed_at": "2026-08-25T12:00:05Z"
+    },
+    {
+      "sha": "2aa6509afc8d915fbc4bc0e7763b37a0de208236",
+      "committed_at": "2026-08-26T00:00:06Z"
+    },
+    {
+      "sha": "bf963df3bf473eb9b5c9f18c65de493f9dae0658",
+      "committed_at": "2026-08-26T12:00:05Z"
+    },
+    {
+      "sha": "be1038506892a95027e77bfa4be7af895573aad6",
+      "committed_at": "2026-08-27T00:00:05Z"
+    },
+    {
+      "sha": "7ec020c188689bb22fa4c68f79b2a982c701100c",
+      "committed_at": "2026-08-27T12:00:05Z"
+    },
+    {
+      "sha": "334b6530f63f47148a0d7e8eb10f7c8417e01baf",
+      "committed_at": "2026-08-28T00:00:07Z"
+    },
+    {
+      "sha": "775d9ae2d8cfeec7d65855f2c32c58459d70f9d2",
+      "committed_at": "2026-08-28T12:00:05Z"
+    },
+    {
+      "sha": "c8918720fe69e98695d5a08cab7ee07eb3ef8d7b",
+      "committed_at": "2026-08-29T00:00:07Z"
+    },
+    {
+      "sha": "7b6e2f60092ee75dbeca9dc56fd8238e21926e13",
+      "committed_at": "2026-08-29T12:00:07Z"
+    },
+    {
+      "sha": "911e90c3e3a78a698a33dc0a81c1720f5fcddb6a",
+      "committed_at": "2026-08-30T00:00:13Z"
+    },
+    {
+      "sha": "c11400f6d41edfdd449708ca786e9ce52663b35a",
+      "committed_at": "2026-08-30T12:00:06Z"
+    },
+    {
+      "sha": "329af02b0c9d5ac944ac58116b4abe4438d334e4",
+      "committed_at": "2026-08-31T00:00:10Z"
+    },
+    {
+      "sha": "b1358577efdac682cd0a46fc9dbe858b722d1bf4",
+      "committed_at": "2026-08-31T12:00:07Z"
+    },
+    {
+      "sha": "9f15af529bca3b47829dfe58a887cf0790eedf9a",
+      "committed_at": "2026-09-01T00:00:11Z"
+    },
+    {
+      "sha": "6c5a56e940585c6a512e236c78a15063cc626620",
+      "committed_at": "2026-09-01T12:00:07Z"
+    },
+    {
+      "sha": "6955cc16b95656ed5091b29148a56cdcc66ec4af",
+      "committed_at": "2026-09-02T00:00:11Z"
+    },
+    {
+      "sha": "d24fd47b4e5231c9daac4703c10dd6381fd9f4d4",
+      "committed_at": "2026-09-02T12:00:07Z"
+    },
+    {
+      "sha": "cfa34067403f5d38e99bb767e9f2fb51b1f508f6",
+      "committed_at": "2026-09-03T00:00:10Z"
+    },
+    {
+      "sha": "4e91932ce839d587c9490d869c0b2fb9d07393ed",
+      "committed_at": "2026-09-03T12:00:06Z"
+    },
+    {
+      "sha": "ccae36bdac6c7429aa98e456c7a6446481d80f18",
+      "committed_at": "2026-09-04T00:00:09Z"
+    },
+    {
+      "sha": "bfdcee51de2c60a67abeead1ec09f5c268ba9e82",
+      "committed_at": "2026-09-04T12:00:07Z"
+    },
+    {
+      "sha": "e87404f27fd0a68001a08849911174075f64819e",
+      "committed_at": "2026-09-05T00:00:09Z"
+    },
+    {
+      "sha": "c1c28124dbdd4bc20559461aae7fcbbf466def09",
+      "committed_at": "2026-09-05T12:00:07Z"
+    },
+    {
+      "sha": "639ce24855e6b81f5c04f2f2410b9bfc499aa320",
+      "committed_at": "2026-09-06T00:00:06Z"
+    },
+    {
+      "sha": "c7fe5e7382a66bd5a3a98bda0789d75214cdbf34",
+      "committed_at": "2026-09-06T12:00:08Z"
+    },
+    {
+      "sha": "615b9da9fe9cf5634636417981bc3111efb5896c",
+      "committed_at": "2026-09-07T00:00:08Z"
+    },
+    {
+      "sha": "a788939590ade64a38e0cb6efff134fb49be099b",
+      "committed_at": "2026-09-07T12:00:06Z"
+    },
+    {
+      "sha": "0ba365f53beea528c5df21aaf54f5d520b17c12e",
+      "committed_at": "2026-09-08T00:00:07Z"
+    }
+  ],
+  "commit_window": {
+    "first": "2026-06-10T12:00:06Z",
+    "last": "2026-09-08T00:00:07Z"
+  },
+  "n_commits_backfilled": 180,
+  "backfill_note": "수집 당시 manifest에는 마지막 5개 SHA만 있었다. 같은 since/until로 GitHub API 커밋 목록만 다시 받아 전체 180개를 채웠다(feed 본문은 재수집하지 않음). since=2026-06-10T01:42:47Z, until=2026-09-08T01:44:23.445967Z",
+  "backfilled_at": "2026-09-09T00:09:33.899329+00:00"
 }

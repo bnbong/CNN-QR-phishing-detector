@@ -1,0 +1,1021 @@
+{
+  "config": "configs/base.yaml",
+  "external_csv": "data/external/external_primary_2026-09-08.csv",
+  "seed": 0,
+  "strata": [
+    "v2",
+    "v3",
+    "v4",
+    "v5plus"
+  ],
+  "label_definitions": {
+    "webphish": {
+      "csv": "data/webphish.csv",
+      "category_col": "Category",
+      "url_col": "Data",
+      "positive_label": "spam",
+      "mapping": {
+        "spam": "phishing(1)",
+        "ham|benign|legitimate|good|0": "benign(0)"
+      }
+    },
+    "external": {
+      "category_col": "Category",
+      "url_col": "Data",
+      "mapping": {
+        "spam": "phishing(1)",
+        "ham|benign|legitimate|good|0": "benign(0)"
+      },
+      "note": "조립이 끝난 external_*.csv는 Category/Data가 아니라 url/label 컬럼을 갖는다. 이 스크립트의 raw 단계는 그 파일을 읽으므로 '수집 파이프라인 출력'이 원본이다."
+    }
+  },
+  "loader_stats": {
+    "webphish": {
+      "n_raw": 45373,
+      "n_dropped_empty_url": 0,
+      "n_dropped_unknown_label": 0,
+      "n_dropped_empty_after_norm": 0,
+      "n_conflicting_urls": 0,
+      "n_dropped_label_conflict": 0,
+      "n_dropped_duplicate": 3926,
+      "n_final": 41447,
+      "n_final_benign": 22687,
+      "n_final_phishing": 18760,
+      "n_groups": 18294
+    },
+    "external": {
+      "n_final": 92408,
+      "n_final_benign": 60824,
+      "n_final_phishing": 31584,
+      "n_groups": 19962,
+      "dedup_against_webphish": false,
+      "loader": "transfer._load_external_fallback(already_normalized)"
+    }
+  },
+  "datasets": {
+    "webphish": {
+      "raw": {
+        "benign": {
+          "n": 22687,
+          "path_ge1_frac": 0.9973112355093225,
+          "path_depth_mean": 1.950059505443646,
+          "bytes_median": 32.0,
+          "www_frac": 0.607616696786706,
+          "slash_mean": 2.2999074359765506
+        },
+        "phishing": {
+          "n": 22686,
+          "path_ge1_frac": 0.6976108613241647,
+          "path_depth_mean": 1.802565458873314,
+          "bytes_median": 38.0,
+          "www_frac": 0.1287578242087631,
+          "slash_mean": 2.3362866966411002
+        },
+        "path_diff_benign_minus_phishing": 0.2997003741851578
+      },
+      "norm": {
+        "benign": {
+          "n": 22687,
+          "path_ge1_frac": 0.9973112355093225,
+          "path_depth_mean": 1.950059505443646,
+          "bytes_median": 29.0,
+          "www_frac": 0.0,
+          "slash_mean": 1.964428968131529
+        },
+        "phishing": {
+          "n": 18760,
+          "path_ge1_frac": 0.6931769722814499,
+          "path_depth_mean": 1.7920575692963752,
+          "bytes_median": 38.0,
+          "www_frac": 0.00042643923240938164,
+          "slash_mean": 1.94909381663113
+        },
+        "path_diff_benign_minus_phishing": 0.3041342632278726
+      },
+      "strata": {
+        "v2": {
+          "matched": {
+            "benign": {
+              "n": 6059,
+              "path_ge1_frac": 0.9975243439511471,
+              "path_depth_mean": 1.3942894867139792,
+              "bytes_median": 25.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.3979204489189636
+            },
+            "phishing": {
+              "n": 6059,
+              "path_ge1_frac": 0.44314243274467735,
+              "path_depth_mean": 0.6172635748473345,
+              "bytes_median": 25.0,
+              "www_frac": 0.0006601749463607857,
+              "slash_mean": 0.642845354018815
+            },
+            "path_diff_benign_minus_phishing": 0.5543819112064697
+          },
+          "counts": {
+            "n_loaded": 41447,
+            "n_in_stratum": 18718,
+            "n_after_split": 16627,
+            "n_after_match": 12118,
+            "n_dropped_capacity": 0
+          },
+          "length_match": {
+            "bucket": 1,
+            "per_split": {
+              "train": {
+                "n": 8502,
+                "n_benign": 4251,
+                "n_phishing": 4251,
+                "histograms_identical": true
+              },
+              "val": {
+                "n": 1840,
+                "n_benign": 920,
+                "n_phishing": 920,
+                "histograms_identical": true
+              },
+              "test": {
+                "n": 1776,
+                "n_benign": 888,
+                "n_phishing": 888,
+                "histograms_identical": true
+              }
+            },
+            "all_identical": true
+          },
+          "stratum": {
+            "benign": {
+              "n": 12580,
+              "path_ge1_frac": 0.9980127186009539,
+              "path_depth_mean": 1.528616852146264,
+              "bytes_median": 27.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.5313990461049285
+            },
+            "phishing": {
+              "n": 6138,
+              "path_ge1_frac": 0.44069729553600523,
+              "path_depth_mean": 0.6127403062886934,
+              "bytes_median": 25.0,
+              "www_frac": 0.0006516780710329097,
+              "slash_mean": 0.6379928315412187
+            },
+            "path_diff_benign_minus_phishing": 0.5573154230649486
+          },
+          "split": {
+            "benign": {
+              "n": 10489,
+              "path_ge1_frac": 0.9976165506721327,
+              "path_depth_mean": 1.4344551434836494,
+              "bytes_median": 26.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.4377919725426638
+            },
+            "phishing": {
+              "n": 6138,
+              "path_ge1_frac": 0.44069729553600523,
+              "path_depth_mean": 0.6127403062886934,
+              "bytes_median": 25.0,
+              "www_frac": 0.0006516780710329097,
+              "slash_mean": 0.6379928315412187
+            },
+            "path_diff_benign_minus_phishing": 0.5569192551361275
+          },
+          "match_effect": {
+            "benign": {
+              "n_before": 10489,
+              "n_after": 6059,
+              "n_dropped": 4430,
+              "path_ge1_before": 0.9976165506721327,
+              "path_ge1_after": 0.9975243439511471,
+              "bytes_median_before": 26.0,
+              "bytes_median_after": 25.0
+            },
+            "phishing": {
+              "n_before": 6138,
+              "n_after": 6059,
+              "n_dropped": 79,
+              "path_ge1_before": 0.44069729553600523,
+              "path_ge1_after": 0.44314243274467735,
+              "bytes_median_before": 25.0,
+              "bytes_median_after": 25.0
+            }
+          }
+        },
+        "v3": {
+          "matched": {
+            "benign": {
+              "n": 4589,
+              "path_ge1_frac": 0.9973850512094138,
+              "path_depth_mean": 2.470037045107867,
+              "bytes_median": 40.0,
+              "www_frac": 0.0,
+              "slash_mean": 2.4850730006537374
+            },
+            "phishing": {
+              "n": 4589,
+              "path_ge1_frac": 0.7932011331444759,
+              "path_depth_mean": 1.7169317934190456,
+              "bytes_median": 40.0,
+              "www_frac": 0.0006537371976465461,
+              "slash_mean": 1.77162780562214
+            },
+            "path_diff_benign_minus_phishing": 0.20418391806493785
+          },
+          "counts": {
+            "n_loaded": 41447,
+            "n_in_stratum": 11996,
+            "n_after_split": 11996,
+            "n_after_match": 9178,
+            "n_dropped_capacity": 0
+          },
+          "length_match": {
+            "bucket": 1,
+            "per_split": {
+              "train": {
+                "n": 6496,
+                "n_benign": 3248,
+                "n_phishing": 3248,
+                "histograms_identical": true
+              },
+              "val": {
+                "n": 1318,
+                "n_benign": 659,
+                "n_phishing": 659,
+                "histograms_identical": true
+              },
+              "test": {
+                "n": 1364,
+                "n_benign": 682,
+                "n_phishing": 682,
+                "histograms_identical": true
+              }
+            },
+            "all_identical": true
+          },
+          "stratum": {
+            "benign": {
+              "n": 7350,
+              "path_ge1_frac": 0.9971428571428571,
+              "path_depth_mean": 2.395374149659864,
+              "bytes_median": 39.0,
+              "www_frac": 0.0,
+              "slash_mean": 2.4114285714285715
+            },
+            "phishing": {
+              "n": 4646,
+              "path_ge1_frac": 0.7953077916487301,
+              "path_depth_mean": 1.728798966853207,
+              "bytes_median": 40.0,
+              "www_frac": 0.0006457167455876022,
+              "slash_mean": 1.7830391734825657
+            },
+            "path_diff_benign_minus_phishing": 0.201835065494127
+          },
+          "split": {
+            "benign": {
+              "n": 7350,
+              "path_ge1_frac": 0.9971428571428571,
+              "path_depth_mean": 2.395374149659864,
+              "bytes_median": 39.0,
+              "www_frac": 0.0,
+              "slash_mean": 2.4114285714285715
+            },
+            "phishing": {
+              "n": 4646,
+              "path_ge1_frac": 0.7953077916487301,
+              "path_depth_mean": 1.728798966853207,
+              "bytes_median": 40.0,
+              "www_frac": 0.0006457167455876022,
+              "slash_mean": 1.7830391734825657
+            },
+            "path_diff_benign_minus_phishing": 0.201835065494127
+          },
+          "match_effect": {
+            "benign": {
+              "n_before": 7350,
+              "n_after": 4589,
+              "n_dropped": 2761,
+              "path_ge1_before": 0.9971428571428571,
+              "path_ge1_after": 0.9973850512094138,
+              "bytes_median_before": 39.0,
+              "bytes_median_after": 40.0
+            },
+            "phishing": {
+              "n_before": 4646,
+              "n_after": 4589,
+              "n_dropped": 57,
+              "path_ge1_before": 0.7953077916487301,
+              "path_ge1_after": 0.7932011331444759,
+              "bytes_median_before": 40.0,
+              "bytes_median_after": 40.0
+            }
+          }
+        },
+        "v4": {
+          "matched": {
+            "benign": {
+              "n": 1357,
+              "path_ge1_frac": 0.9948415622697127,
+              "path_depth_mean": 3.6315401621223287,
+              "bytes_median": 60.0,
+              "www_frac": 0.0,
+              "slash_mean": 3.6927044952100223
+            },
+            "phishing": {
+              "n": 1357,
+              "path_ge1_frac": 0.9034635224760501,
+              "path_depth_mean": 2.828297715549005,
+              "bytes_median": 60.0,
+              "www_frac": 0.0,
+              "slash_mean": 2.9646278555637435
+            },
+            "path_diff_benign_minus_phishing": 0.09137803979366255
+          },
+          "counts": {
+            "n_loaded": 41447,
+            "n_in_stratum": 3930,
+            "n_after_split": 3930,
+            "n_after_match": 2714,
+            "n_dropped_capacity": 0
+          },
+          "length_match": {
+            "bucket": 1,
+            "per_split": {
+              "train": {
+                "n": 1932,
+                "n_benign": 966,
+                "n_phishing": 966,
+                "histograms_identical": true
+              },
+              "val": {
+                "n": 382,
+                "n_benign": 191,
+                "n_phishing": 191,
+                "histograms_identical": true
+              },
+              "test": {
+                "n": 400,
+                "n_benign": 200,
+                "n_phishing": 200,
+                "histograms_identical": true
+              }
+            },
+            "all_identical": true
+          },
+          "stratum": {
+            "benign": {
+              "n": 1404,
+              "path_ge1_frac": 0.9950142450142451,
+              "path_depth_mean": 3.643162393162393,
+              "bytes_median": 60.0,
+              "www_frac": 0.0,
+              "slash_mean": 3.702279202279202
+            },
+            "phishing": {
+              "n": 2526,
+              "path_ge1_frac": 0.8939034045922407,
+              "path_depth_mean": 2.8194774346793348,
+              "bytes_median": 63.0,
+              "www_frac": 0.000395882818685669,
+              "slash_mean": 2.9493269992082345
+            },
+            "path_diff_benign_minus_phishing": 0.10111084042200436
+          },
+          "split": {
+            "benign": {
+              "n": 1404,
+              "path_ge1_frac": 0.9950142450142451,
+              "path_depth_mean": 3.643162393162393,
+              "bytes_median": 60.0,
+              "www_frac": 0.0,
+              "slash_mean": 3.702279202279202
+            },
+            "phishing": {
+              "n": 2526,
+              "path_ge1_frac": 0.8939034045922407,
+              "path_depth_mean": 2.8194774346793348,
+              "bytes_median": 63.0,
+              "www_frac": 0.000395882818685669,
+              "slash_mean": 2.9493269992082345
+            },
+            "path_diff_benign_minus_phishing": 0.10111084042200436
+          },
+          "match_effect": {
+            "benign": {
+              "n_before": 1404,
+              "n_after": 1357,
+              "n_dropped": 47,
+              "path_ge1_before": 0.9950142450142451,
+              "path_ge1_after": 0.9948415622697127,
+              "bytes_median_before": 60.0,
+              "bytes_median_after": 60.0
+            },
+            "phishing": {
+              "n_before": 2526,
+              "n_after": 1357,
+              "n_dropped": 1169,
+              "path_ge1_before": 0.8939034045922407,
+              "path_ge1_after": 0.9034635224760501,
+              "bytes_median_before": 63.0,
+              "bytes_median_after": 60.0
+            }
+          }
+        },
+        "v5plus": {
+          "matched": {
+            "benign": {
+              "n": 266,
+              "path_ge1_frac": 1.0,
+              "path_depth_mean": 4.285714285714286,
+              "bytes_median": 89.0,
+              "www_frac": 0.0,
+              "slash_mean": 4.515037593984962
+            },
+            "phishing": {
+              "n": 266,
+              "path_ge1_frac": 0.943609022556391,
+              "path_depth_mean": 3.2481203007518795,
+              "bytes_median": 89.0,
+              "www_frac": 0.0,
+              "slash_mean": 3.5
+            },
+            "path_diff_benign_minus_phishing": 0.05639097744360899
+          },
+          "counts": {
+            "n_loaded": 41447,
+            "n_in_stratum": 4147,
+            "n_after_split": 4147,
+            "n_after_match": 532,
+            "n_dropped_capacity": 0
+          },
+          "length_match": {
+            "bucket": 1,
+            "per_split": {
+              "train": {
+                "n": 382,
+                "n_benign": 191,
+                "n_phishing": 191,
+                "histograms_identical": true
+              },
+              "val": {
+                "n": 80,
+                "n_benign": 40,
+                "n_phishing": 40,
+                "histograms_identical": true
+              },
+              "test": {
+                "n": 70,
+                "n_benign": 35,
+                "n_phishing": 35,
+                "histograms_identical": true
+              }
+            },
+            "all_identical": true
+          },
+          "stratum": {
+            "benign": {
+              "n": 272,
+              "path_ge1_frac": 1.0,
+              "path_depth_mean": 4.235294117647059,
+              "bytes_median": 89.0,
+              "www_frac": 0.0,
+              "slash_mean": 4.533088235294118
+            },
+            "phishing": {
+              "n": 3875,
+              "path_ge1_frac": 0.9501935483870968,
+              "path_depth_mean": 3.6178064516129034,
+              "bytes_median": 124.0,
+              "www_frac": 0.0,
+              "slash_mean": 4.186322580645161
+            },
+            "path_diff_benign_minus_phishing": 0.0498064516129032
+          },
+          "split": {
+            "benign": {
+              "n": 272,
+              "path_ge1_frac": 1.0,
+              "path_depth_mean": 4.235294117647059,
+              "bytes_median": 89.0,
+              "www_frac": 0.0,
+              "slash_mean": 4.533088235294118
+            },
+            "phishing": {
+              "n": 3875,
+              "path_ge1_frac": 0.9501935483870968,
+              "path_depth_mean": 3.6178064516129034,
+              "bytes_median": 124.0,
+              "www_frac": 0.0,
+              "slash_mean": 4.186322580645161
+            },
+            "path_diff_benign_minus_phishing": 0.0498064516129032
+          },
+          "match_effect": {
+            "benign": {
+              "n_before": 272,
+              "n_after": 266,
+              "n_dropped": 6,
+              "path_ge1_before": 1.0,
+              "path_ge1_after": 1.0,
+              "bytes_median_before": 89.0,
+              "bytes_median_after": 89.0
+            },
+            "phishing": {
+              "n_before": 3875,
+              "n_after": 266,
+              "n_dropped": 3609,
+              "path_ge1_before": 0.9501935483870968,
+              "path_ge1_after": 0.943609022556391,
+              "bytes_median_before": 124.0,
+              "bytes_median_after": 89.0
+            }
+          }
+        }
+      }
+    },
+    "external": {
+      "raw": {
+        "benign": {
+          "n": 60824,
+          "path_ge1_frac": 0.939464684992766,
+          "path_depth_mean": 2.2218696567144547,
+          "bytes_median": 51.0,
+          "www_frac": 0.000674076022622649,
+          "slash_mean": 2.308513086939366
+        },
+        "phishing": {
+          "n": 31584,
+          "path_ge1_frac": 0.45982142857142855,
+          "path_depth_mean": 0.9663120567375887,
+          "bytes_median": 34.0,
+          "www_frac": 6.332320162107397e-05,
+          "slash_mean": 1.0006648936170213
+        },
+        "path_diff_benign_minus_phishing": 0.4796432564213375
+      },
+      "norm": {
+        "benign": {
+          "n": 60824,
+          "path_ge1_frac": 0.939464684992766,
+          "path_depth_mean": 2.2218696567144547,
+          "bytes_median": 51.0,
+          "www_frac": 0.000674076022622649,
+          "slash_mean": 2.308513086939366
+        },
+        "phishing": {
+          "n": 31584,
+          "path_ge1_frac": 0.45982142857142855,
+          "path_depth_mean": 0.9663120567375887,
+          "bytes_median": 34.0,
+          "www_frac": 6.332320162107397e-05,
+          "slash_mean": 1.0006648936170213
+        },
+        "path_diff_benign_minus_phishing": 0.4796432564213375
+      },
+      "strata": {
+        "v2": {
+          "matched": {
+            "benign": {
+              "n": 7740,
+              "path_ge1_frac": 0.8683462532299742,
+              "path_depth_mean": 1.4177002583979328,
+              "bytes_median": 25.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.4587855297157624
+            },
+            "phishing": {
+              "n": 7740,
+              "path_ge1_frac": 0.33733850129198967,
+              "path_depth_mean": 0.4408268733850129,
+              "bytes_median": 25.0,
+              "www_frac": 0.0,
+              "slash_mean": 0.45503875968992247
+            },
+            "path_diff_benign_minus_phishing": 0.5310077519379846
+          },
+          "counts": {
+            "n_loaded": 92408,
+            "n_in_stratum": 19900,
+            "n_after_split": 19785,
+            "n_after_match": 15480,
+            "n_dropped_capacity": 4
+          },
+          "length_match": {
+            "bucket": 1,
+            "per_split": {
+              "train": {
+                "n": 10358,
+                "n_benign": 5179,
+                "n_phishing": 5179,
+                "histograms_identical": true
+              },
+              "val": {
+                "n": 2352,
+                "n_benign": 1176,
+                "n_phishing": 1176,
+                "histograms_identical": true
+              },
+              "test": {
+                "n": 2770,
+                "n_benign": 1385,
+                "n_phishing": 1385,
+                "histograms_identical": true
+              }
+            },
+            "all_identical": true
+          },
+          "stratum": {
+            "benign": {
+              "n": 10152,
+              "path_ge1_frac": 0.8850472813238771,
+              "path_depth_mean": 1.4868991331757289,
+              "bytes_median": 27.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.5290583136327818
+            },
+            "phishing": {
+              "n": 9748,
+              "path_ge1_frac": 0.3003693065244153,
+              "path_depth_mean": 0.38674599917931884,
+              "bytes_median": 24.0,
+              "www_frac": 0.0,
+              "slash_mean": 0.39915880180549856
+            },
+            "path_diff_benign_minus_phishing": 0.5846779747994618
+          },
+          "split": {
+            "benign": {
+              "n": 10152,
+              "path_ge1_frac": 0.8850472813238771,
+              "path_depth_mean": 1.4868991331757289,
+              "bytes_median": 27.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.5290583136327818
+            },
+            "phishing": {
+              "n": 9633,
+              "path_ge1_frac": 0.3031246755943112,
+              "path_depth_mean": 0.3902211149174712,
+              "bytes_median": 24.0,
+              "www_frac": 0.0,
+              "slash_mean": 0.4027821031869615
+            },
+            "path_diff_benign_minus_phishing": 0.5819226057295659
+          },
+          "match_effect": {
+            "benign": {
+              "n_before": 10152,
+              "n_after": 7740,
+              "n_dropped": 2412,
+              "path_ge1_before": 0.8850472813238771,
+              "path_ge1_after": 0.8683462532299742,
+              "bytes_median_before": 27.0,
+              "bytes_median_after": 25.0
+            },
+            "phishing": {
+              "n_before": 9633,
+              "n_after": 7740,
+              "n_dropped": 1893,
+              "path_ge1_before": 0.3031246755943112,
+              "path_ge1_after": 0.33733850129198967,
+              "bytes_median_before": 24.0,
+              "bytes_median_after": 25.0
+            }
+          }
+        },
+        "v3": {
+          "matched": {
+            "benign": {
+              "n": 7849,
+              "path_ge1_frac": 0.9794878328449484,
+              "path_depth_mean": 2.1127532169703147,
+              "bytes_median": 40.0,
+              "www_frac": 0.00025480952987641737,
+              "slash_mean": 2.1662632182443624
+            },
+            "phishing": {
+              "n": 7849,
+              "path_ge1_frac": 0.5861893234806982,
+              "path_depth_mean": 1.2834756019875144,
+              "bytes_median": 40.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.313160912218117
+            },
+            "path_diff_benign_minus_phishing": 0.39329850936425026
+          },
+          "counts": {
+            "n_loaded": 92408,
+            "n_in_stratum": 30752,
+            "n_after_split": 28446,
+            "n_after_match": 15698,
+            "n_dropped_capacity": 4
+          },
+          "length_match": {
+            "bucket": 1,
+            "per_split": {
+              "train": {
+                "n": 11440,
+                "n_benign": 5720,
+                "n_phishing": 5720,
+                "histograms_identical": true
+              },
+              "val": {
+                "n": 2518,
+                "n_benign": 1259,
+                "n_phishing": 1259,
+                "histograms_identical": true
+              },
+              "test": {
+                "n": 1740,
+                "n_benign": 870,
+                "n_phishing": 870,
+                "histograms_identical": true
+              }
+            },
+            "all_identical": true
+          },
+          "stratum": {
+            "benign": {
+              "n": 20049,
+              "path_ge1_frac": 0.980896802833059,
+              "path_depth_mean": 2.1568656790862386,
+              "bytes_median": 43.0,
+              "www_frac": 0.00014963339817447254,
+              "slash_mean": 2.209237368447304
+            },
+            "phishing": {
+              "n": 10703,
+              "path_ge1_frac": 0.48883490610109315,
+              "path_depth_mean": 1.091282817901523,
+              "bytes_median": 40.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.1135195739512287
+            },
+            "path_diff_benign_minus_phishing": 0.4920618967319659
+          },
+          "split": {
+            "benign": {
+              "n": 20049,
+              "path_ge1_frac": 0.980896802833059,
+              "path_depth_mean": 2.1568656790862386,
+              "bytes_median": 43.0,
+              "www_frac": 0.00014963339817447254,
+              "slash_mean": 2.209237368447304
+            },
+            "phishing": {
+              "n": 8397,
+              "path_ge1_frac": 0.6062879599857092,
+              "path_depth_mean": 1.3632249612957008,
+              "bytes_median": 40.0,
+              "www_frac": 0.0,
+              "slash_mean": 1.3912111468381565
+            },
+            "path_diff_benign_minus_phishing": 0.37460884284734985
+          },
+          "match_effect": {
+            "benign": {
+              "n_before": 20049,
+              "n_after": 7849,
+              "n_dropped": 12200,
+              "path_ge1_before": 0.980896802833059,
+              "path_ge1_after": 0.9794878328449484,
+              "bytes_median_before": 43.0,
+              "bytes_median_after": 40.0
+            },
+            "phishing": {
+              "n_before": 8397,
+              "n_after": 7849,
+              "n_dropped": 548,
+              "path_ge1_before": 0.6062879599857092,
+              "path_ge1_after": 0.5861893234806982,
+              "bytes_median_before": 40.0,
+              "bytes_median_after": 40.0
+            }
+          }
+        },
+        "v4": {
+          "matched": {
+            "benign": {
+              "n": 3580,
+              "path_ge1_frac": 0.9896648044692737,
+              "path_depth_mean": 2.6002793296089384,
+              "bytes_median": 67.0,
+              "www_frac": 0.00027932960893854746,
+              "slash_mean": 2.6885474860335195
+            },
+            "phishing": {
+              "n": 3580,
+              "path_ge1_frac": 0.8583798882681565,
+              "path_depth_mean": 2.093854748603352,
+              "bytes_median": 67.0,
+              "www_frac": 0.0,
+              "slash_mean": 2.142737430167598
+            },
+            "path_diff_benign_minus_phishing": 0.13128491620111726
+          },
+          "counts": {
+            "n_loaded": 92408,
+            "n_in_stratum": 18759,
+            "n_after_split": 18759,
+            "n_after_match": 7160,
+            "n_dropped_capacity": 4
+          },
+          "length_match": {
+            "bucket": 1,
+            "per_split": {
+              "train": {
+                "n": 5062,
+                "n_benign": 2531,
+                "n_phishing": 2531,
+                "histograms_identical": true
+              },
+              "val": {
+                "n": 1084,
+                "n_benign": 542,
+                "n_phishing": 542,
+                "histograms_identical": true
+              },
+              "test": {
+                "n": 1014,
+                "n_benign": 507,
+                "n_phishing": 507,
+                "histograms_identical": true
+              }
+            },
+            "all_identical": true
+          },
+          "stratum": {
+            "benign": {
+              "n": 15144,
+              "path_ge1_frac": 0.9882461701003697,
+              "path_depth_mean": 2.5653724247226624,
+              "bytes_median": 64.0,
+              "www_frac": 0.0002641310089804543,
+              "slash_mean": 2.6489698890649764
+            },
+            "phishing": {
+              "n": 3615,
+              "path_ge1_frac": 0.851728907330567,
+              "path_depth_mean": 2.078008298755187,
+              "bytes_median": 67.0,
+              "www_frac": 0.0,
+              "slash_mean": 2.126417704011065
+            },
+            "path_diff_benign_minus_phishing": 0.1365172627698027
+          },
+          "split": {
+            "benign": {
+              "n": 15144,
+              "path_ge1_frac": 0.9882461701003697,
+              "path_depth_mean": 2.5653724247226624,
+              "bytes_median": 64.0,
+              "www_frac": 0.0002641310089804543,
+              "slash_mean": 2.6489698890649764
+            },
+            "phishing": {
+              "n": 3615,
+              "path_ge1_frac": 0.851728907330567,
+              "path_depth_mean": 2.078008298755187,
+              "bytes_median": 67.0,
+              "www_frac": 0.0,
+              "slash_mean": 2.126417704011065
+            },
+            "path_diff_benign_minus_phishing": 0.1365172627698027
+          },
+          "match_effect": {
+            "benign": {
+              "n_before": 15144,
+              "n_after": 3580,
+              "n_dropped": 11564,
+              "path_ge1_before": 0.9882461701003697,
+              "path_ge1_after": 0.9896648044692737,
+              "bytes_median_before": 64.0,
+              "bytes_median_after": 67.0
+            },
+            "phishing": {
+              "n_before": 3615,
+              "n_after": 3580,
+              "n_dropped": 35,
+              "path_ge1_before": 0.851728907330567,
+              "path_ge1_after": 0.8583798882681565,
+              "bytes_median_before": 67.0,
+              "bytes_median_after": 67.0
+            }
+          }
+        },
+        "v5plus": {
+          "matched": {
+            "benign": {
+              "n": 2356,
+              "path_ge1_frac": 0.9775042444821732,
+              "path_depth_mean": 2.7983870967741935,
+              "bytes_median": 105.5,
+              "www_frac": 0.0,
+              "slash_mean": 2.969439728353141
+            },
+            "phishing": {
+              "n": 2356,
+              "path_ge1_frac": 0.9575551782682513,
+              "path_depth_mean": 2.6353989813242786,
+              "bytes_median": 105.5,
+              "www_frac": 0.00042444821731748726,
+              "slash_mean": 2.814516129032258
+            },
+            "path_diff_benign_minus_phishing": 0.019949066213921895
+          },
+          "counts": {
+            "n_loaded": 92408,
+            "n_in_stratum": 15836,
+            "n_after_split": 15836,
+            "n_after_match": 4712,
+            "n_dropped_capacity": 4
+          },
+          "length_match": {
+            "bucket": 1,
+            "per_split": {
+              "train": {
+                "n": 3426,
+                "n_benign": 1713,
+                "n_phishing": 1713,
+                "histograms_identical": true
+              },
+              "val": {
+                "n": 644,
+                "n_benign": 322,
+                "n_phishing": 322,
+                "histograms_identical": true
+              },
+              "test": {
+                "n": 642,
+                "n_benign": 321,
+                "n_phishing": 321,
+                "histograms_identical": true
+              }
+            },
+            "all_identical": true
+          },
+          "stratum": {
+            "benign": {
+              "n": 13298,
+              "path_ge1_frac": 0.9828545645961799,
+              "path_depth_mean": 2.815460971574673,
+              "bytes_median": 101.0,
+              "www_frac": 0.0025567754549556325,
+              "slash_mean": 2.996691231764175
+            },
+            "phishing": {
+              "n": 2538,
+              "path_ge1_frac": 0.9574468085106383,
+              "path_depth_mean": 2.6359338061465722,
+              "bytes_median": 109.0,
+              "www_frac": 0.0007880220646178094,
+              "slash_mean": 2.851063829787234
+            },
+            "path_diff_benign_minus_phishing": 0.025407756085541577
+          },
+          "split": {
+            "benign": {
+              "n": 13298,
+              "path_ge1_frac": 0.9828545645961799,
+              "path_depth_mean": 2.815460971574673,
+              "bytes_median": 101.0,
+              "www_frac": 0.0025567754549556325,
+              "slash_mean": 2.996691231764175
+            },
+            "phishing": {
+              "n": 2538,
+              "path_ge1_frac": 0.9574468085106383,
+              "path_depth_mean": 2.6359338061465722,
+              "bytes_median": 109.0,
+              "www_frac": 0.0007880220646178094,
+              "slash_mean": 2.851063829787234
+            },
+            "path_diff_benign_minus_phishing": 0.025407756085541577
+          },
+          "match_effect": {
+            "benign": {
+              "n_before": 13298,
+              "n_after": 2356,
+              "n_dropped": 10942,
+              "path_ge1_before": 0.9828545645961799,
+              "path_ge1_after": 0.9775042444821732,
+              "bytes_median_before": 101.0,
+              "bytes_median_after": 105.5
+            },
+            "phishing": {
+              "n_before": 2538,
+              "n_after": 2356,
+              "n_dropped": 182,
+              "path_ge1_before": 0.9574468085106383,
+              "path_ge1_after": 0.9575551782682513,
+              "bytes_median_before": 109.0,
+              "bytes_median_after": 105.5
+            }
+          }
+        }
+      }
+    }
+  }
+}

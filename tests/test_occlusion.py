@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -10,7 +11,9 @@ import torch
 
 from qrphish.motifs import extract_patch_ids
 from qrphish.occlusion import (
+    OCCLUSION_CONTRASTS,
     batch_logits,
+    delta_vs_random,
     flip_centers,
     load_enrichment,
     match_centers,
@@ -176,6 +179,29 @@ def test_occlude_stratum_end_to_end(setup: Setup, tmp_path) -> None:
             "mean_logit_delta_ci", "n_flipped",
         }, name
         assert block["d_auroc_ci"][0] <= block["d_auroc_ci"][1]
+    # 무작위 조건은 반복별 AUROC를 계산해 평균한다(로짓 평균 금지, review_03 3절).
+    for name in ("random", "random_benign_matched", "random_matched",
+                 "random_matched_benign"):
+        b = res["conditions"][name]
+        assert b["aggregation"] == "per_repeat_auroc_then_mean"
+        assert b["n_repeat"] == 2 and len(b["per_rep"]) == 2
+        assert b["d_auroc"] == pytest.approx(
+            float(np.mean([d["d_auroc"] for d in b["per_rep"]]))
+        )
+        assert b["auroc"] == pytest.approx(
+            float(np.mean([d["auroc"] for d in b["per_rep"]]))
+        )
+        assert b["d_auroc_range"][0] <= b["d_auroc"] <= b["d_auroc_range"][1]
+    # ΔΔ(표적 − 무작위) 대비 블록.
+    assert set(res["contrasts"]) == {n for n, _, _ in OCCLUSION_CONTRASTS}
+    for blk in res["contrasts"].values():
+        assert blk["ci"][0] <= blk["estimate"] + 1e-9
+        assert blk["estimate"] <= blk["ci"][1] + 1e-9
+        assert 0.0 < blk["perm_p"] <= 1.0
+        assert len(blk["per_rep"]) == 2
+    assert "_arrays" in res and set(res["_arrays"]["reps"]) == {
+        "random", "random_benign_matched", "random_matched", "random_matched_benign",
+    }
     # 무작위 대조는 짝이 되는 motif 조건과 같은 개수를 뒤집는다(개수 효과 상쇄).
     assert (
         res["conditions"]["random"]["n_flipped"]
@@ -288,3 +314,118 @@ def test_matched_random_centers_excludes_motif_centers():
     assert picked.isdisjoint({tuple(c) for c in tgt.tolist()})
     assert picked.isdisjoint({tuple(c) for c in other.tolist()})
     assert len(got) == len(tgt)
+
+
+# --------------------------------- review_03 3: 반복별 AUROC와 ΔΔ 쌍체 통계 ------
+def _dd_fixture(n: int = 60, seed: int = 0):
+    rng = np.random.default_rng(seed)
+    y = (np.arange(n) % 2).astype(np.int64)
+    groups = np.array([f"g{i % 12}" for i in range(n)])
+    p = y * 1.5 + rng.normal(size=n)
+    return y, groups, p
+
+
+def test_delta_vs_random_is_zero_for_identical_predictions() -> None:
+    """표적과 무작위 예측이 같으면 ΔΔ와 CI가 정확히 0이어야 한다."""
+    y, groups, p = _dd_fixture()
+    res = delta_vs_random(y, groups, p, [p.copy(), p.copy()], n_boot=50, seed=0, n_perm=50)
+    assert res["estimate"] == 0.0
+    assert res["ci"] == [0.0, 0.0]
+    assert res["per_rep"] == [0.0, 0.0]
+    assert res["sd_across_reps"] == 0.0
+    assert res["perm_p"] == 1.0
+
+
+def test_delta_vs_random_sign_and_determinism() -> None:
+    """표적이 더 크게 무너뜨리면 ΔΔ는 음수. 같은 시드에서 결정적이어야 한다."""
+    y, groups, p = _dd_fixture()
+    weak = p + np.random.default_rng(1).normal(scale=0.3, size=p.size)
+    strong = np.random.default_rng(2).normal(size=p.size)  # 신호를 완전히 지운다
+    a = delta_vs_random(y, groups, strong, [weak, weak.copy()],
+                        n_boot=100, seed=0, n_perm=100)
+    b = delta_vs_random(y, groups, strong, [weak, weak.copy()],
+                        n_boot=100, seed=0, n_perm=100)
+    assert a == b
+    assert a["estimate"] < 0
+    assert a["ci"][0] <= a["estimate"] <= a["ci"][1]
+
+
+def test_occlude_stratum_is_deterministic(setup: Setup, tmp_path) -> None:
+    _, val, dm = _sample(setup)
+    ids = np.bincount(extract_patch_ids(val > 0.5, dm, 3).astype(np.int64), minlength=512)
+    p = tmp_path / "det" / "enrichment_seed0.json"
+    _write_enrichment(p, [int(i) for i in np.argsort(-ids)[:2]],
+                      [int(i) for i in np.argsort(-ids)[2:4]])
+    te = np.nonzero(setup.split == 2)[0]
+
+    def run():
+        r = occlude_stratum(
+            setup.model, setup.ds, te, setup.groups[te], load_enrichment(p),
+            top_k=2, size=3, n_random_rep=2, seed=0, n_boot=20, n_perm=20,
+        )
+        r.pop("_arrays")
+        return r
+
+    assert run() == run()
+
+
+# ------------------------ review_03 2: 러너 경로 — 시드별 enrichment만 쓴다 -------
+@pytest.fixture(scope="module")
+def _occl_runner(tmp_path_factory):
+    """합성 WebPhish로 1차 학습 → run_motifs → run_occlusion 전 경로."""
+    from qrphish.runner import MAIN_CONDITION, _run_one_seed, run_motifs
+    from tests.test_transfer import _cfg, _frame, _write_webphish_csv
+
+    tmp = tmp_path_factory.mktemp("occl_runner")
+    csv = tmp / "webphish.csv"
+    _write_webphish_csv(csv, _frame(tag="wp"))
+    cfg = _cfg(tmp, csv)
+    res = _run_one_seed(cfg, "v3", 0, Path(cfg.output_dir) / MAIN_CONDITION, {"baselines": []})
+    assert "error" not in res, res
+    run_motifs(cfg, strata=["v3"])
+    mdir = Path(cfg.reports_dir) / "motifs" / "norm-exact-data_only-fixed" / "v3"
+    return cfg, mdir
+
+
+def test_run_occlusion_uses_per_seed_enrichment(_occl_runner) -> None:
+    from qrphish.runner import run_occlusion
+
+    cfg, mdir = _occl_runner
+    assert (mdir / "enrichment_seed0.json").exists()
+    # 시드 통합 파일은 보고용으로만 남는다.
+    assert json.loads((mdir / "enrichment.json").read_text())["usage"] == "reporting_only"
+
+    res = run_occlusion(cfg, strata=["v3"], top_k=3, n_random_rep=2, n_perm=10)["v3"]
+    assert res["motif_source"] == "per_seed_train"
+    assert res["motif_source_paths"]["0"].endswith("enrichment_seed0.json")
+    assert res["per_seed"][0]["motif_source"] == "per_seed_train"
+    agg = res["aggregate"]
+    assert agg["random"]["aggregation"] == "per_repeat_auroc_then_mean"
+    assert set(agg["delta_vs_random"]) == {n for n, _, _ in OCCLUSION_CONTRASTS}
+    for blk in agg["d_auroc_pooled"].values():
+        assert blk["pooling"] == "seed_stratified"
+        assert blk["ci"][0] <= blk["ci"][1]
+    # 결과 JSON은 직렬화 가능해야 한다(_arrays가 새어 나가면 실패한다).
+    json.dumps(res, default=str)
+    assert "_arrays" not in res["per_seed"][0]
+
+
+def test_run_occlusion_does_not_fall_back_to_pooled_enrichment(
+    _occl_runner, tmp_path
+) -> None:
+    """시드별 파일이 없으면 옛 통합 enrichment.json으로 되돌아가지 않고 실패해야 한다."""
+    import dataclasses
+    import shutil
+
+    from qrphish.runner import run_occlusion
+
+    cfg, _mdir = _occl_runner
+    dst = tmp_path / "reports"
+    shutil.copytree(cfg.reports_dir, dst)
+    shutil.rmtree(dst / "occlusion", ignore_errors=True)  # 앞 테스트의 결과 캐시 제거
+    d2 = dst / "motifs" / "norm-exact-data_only-fixed" / "v3"
+    (d2 / "enrichment_seed0.json").rename(d2 / "enrichment_seed9.json")  # glob은 통과
+    cfg2 = dataclasses.replace(cfg, reports_dir=str(dst))
+    out = run_occlusion(cfg2, strata=["v3"], top_k=3, n_random_rep=2, n_perm=10)["v3"]
+    assert out["error"] == "no usable seed"
+    assert "enrichment_seed0.json" in out["per_seed"][0]["error"]

@@ -449,9 +449,61 @@ def campaign_table() -> str:
             [_campaign_mean(camp, s, ("split", "overlap", "n_template_overlap_in_train", "B"))
              for s in STRATA],
         ),
-        ("판정 (A_sm−B 기준)", [str((agg[s].get("cnn_sm") or {}).get("verdict", "—")) for s in STRATA]),
+        ("판정 — 주 지표 (A_sm−B)", [_verdict_code(agg[s].get("cnn_sm")) for s in STRATA]),
+        ("판정 — 보조 (A−B)", [_verdict_code(agg[s].get("cnn")) for s in STRATA]),
+        ("판정 — 누출 대조 (A_sm−B)",
+         [_verdict_code(agg[s].get("cnn_sm_leaky_vs_contrast")) for s in STRATA]),
+        ("판정 — 누출 대조 (A−B)",
+         [_verdict_code(agg[s].get("cnn_leaky_vs_contrast")) for s in STRATA]),
     ]
-    return strata_table("지표", rows)
+    return strata_table("지표", rows) + _campaign_verdict_footnote(camp)
+
+
+def _verdict_code(block: dict | None) -> str:
+    """판정 코드. 옛 결과(문자열 verdict)는 그대로 보여준다."""
+    v = (block or {}).get("verdict")
+    if isinstance(v, dict):
+        return f"`{v.get('code', '—')}`"
+    return str(v) if v else "—"
+
+
+def _campaign_verdict_footnote(camp: dict) -> str:
+    """판정 정의 각주 — 코드만 봐서는 무엇을 주장하는지 알 수 없다.
+
+    특히 ``negligible``과 ``not_detected``의 차이(등가성 근거 유무)가 review_03 5절의
+    핵심이므로, 표 아래에 정의와 SESOI를 항상 함께 싣는다.
+    """
+    rule: dict = {}
+    for s in STRATA:
+        r = (camp.get(s, {}).get("aggregate") or {}).get("verdict_rule")
+        if isinstance(r, dict):
+            rule = r
+            break
+    if not rule:
+        return ""
+    lines = [
+        "",
+        f"판정 정의 (사전 등록). SESOI = **{rule['sesoi']}** AUROC — "
+        f"\"실질적으로 무시 가능\"이라고 부를 수 있는 최대 차이. "
+        f"결론 수정 임계 **{rule['major_threshold']}**과는 다른 질문의 임계다.",
+        "",
+    ]
+    lines += [f"- `{k}` — {v}" for k, v in (rule.get("definitions") or {}).items()]
+    warn = None
+    for s in STRATA:
+        b = ((camp.get(s, {}).get("aggregate") or {}).get("cnn_sm_leaky_vs_contrast") or {})
+        w = (b.get("sample_size_warning") or {}).get("warning")
+        if w:
+            warn = True
+            n = b["sample_size_warning"].get("n_leaky_rows_mean")
+            lines.append(f"- 누출 대조 표본 수 ({s}): 시드당 평균 {n:.0f}행")
+    if warn:
+        lines.append(
+            "- 누출 대조 부집합은 표본이 수십 행뿐이라 CI가 넓다. 구조적으로 "
+            "`negligible`이 나올 수 없으며, \"phishing kit 암기 가능성을 배제했다\"는 "
+            "결론의 근거로 쓸 수 없다."
+        )
+    return "\n".join(lines) + "\n"
 
 def _load_phase(name: str, condition: str = BASE) -> dict[str, dict]:
     """``reports/{name}/{condition_id}/{stratum}/results.json``. 안 돌렸으면 빈 dict.
@@ -468,45 +520,86 @@ def _load_phase(name: str, condition: str = BASE) -> dict[str, dict]:
     return out
 
 
+# 어휘 프로브가 답하는(또는 답하지 못하는) 세 질문. review_03 6절.
+PROBE_QUESTION_ROWS = (
+    ("① 선형으로 접근 가능한가 (`accessible`)", "accessible"),
+    ("② 학습이 접근성을 높였는가 (`learned_gain`)", "learned_gain"),
+    ("③ 둘 다 (`accessible_and_gained`, 옛 significant)", "accessible_and_gained"),
+)
+
+
 def table_probes() -> str:
-    """어휘 프로브 요약 — 유의 목표 수/전체와 상위 10개."""
+    """어휘 프로브 요약 — 세 질문별 목표 수/전체와 상위 목표.
+
+    옛 표는 단일 "유의" 한 줄이었다. 그 기준은 셔플과 무작위 초기화를 **둘 다** 넘을
+    것을 요구하므로 "정보가 있는가"가 아니라 "학습이 접근성을 높였는가"에 가깝다
+    (review_03 6절). 이제 두 질문을 나누어 싣고, 답할 수 없는 세 번째 질문은 답할 수
+    없다고 적는다.
+    """
     probes = _load_phase("probes")
     if not probes:
         return ""
     rows: list[tuple[str, list[str]]] = []
-    for label, key in (("유의 목표 수 / 전체", None), ("유의 비율", "frac_significant")):
+    for label, key in PROBE_QUESTION_ROWS:
         cells = []
         for s in STRATA:
             summ = (probes.get(s) or {}).get("summary")
+            blk = (summ or {}).get(key)
             if not summ:
                 cells.append("—")
-            elif key is None:
-                cells.append(f"{summ['n_significant']} / {summ['n_targets']}")
-            else:
-                cells.append(f"{float(summ[key]) * 100:.1f}%")
+            elif isinstance(blk, dict):
+                cells.append(f"{blk['n']} / {summ['n_targets']} ({blk['frac'] * 100:.1f}%)")
+            else:  # 재요약 전의 옛 결과
+                cells.append(f"{summ.get('n_significant', '—')} / {summ['n_targets']}")
         rows.append((label, cells))
+    only = []
+    for s in STRATA:
+        summ = (probes.get(s) or {}).get("summary")
+        blk = (summ or {}).get("accessible_only")
+        only.append(str(blk["n"]) if isinstance(blk, dict) else "—")
+    rows.append(("①만 만족 (②는 아님)", only))
+    rows.append(
+        ("④ 실제 분류 결정에 쓰이는가 (`used_in_decision`)",
+         ["측정 불가" if probes.get(s) else "—" for s in STRATA])
+    )
     lab = []
     for s in STRATA:
         d = ((probes.get(s) or {}).get("summary") or {}).get("label_probe")
         lab.append(f3(d["score"]) if d else "—")
     rows.append(("라벨 프로브 (참고 상한선)", lab))
-    out = [strata_table("어휘 프로브", rows)]
+    out = [
+        strata_table("어휘 프로브", rows),
+        "",
+        "① `accessible` = 전 시드에서 학습 표현 프로브 CI 하한 > 셔플 기준선 CI 상한. "
+        "② `learned_gain` = 전 시드에서 학습 표현 프로브 CI 하한 > 무작위 초기화 CNN "
+        "기준선 CI 상한. ④는 동결 표현 위의 선형 프로브로는 답할 수 없다 — 프로브는 "
+        "표현을 읽을 뿐 결정 경로에 개입하지 않는다.",
+        "",
+    ]
 
     for s in STRATA:
         summ = (probes.get(s) or {}).get("summary")
-        if not summ or not summ.get("top10"):
+        if not summ:
             continue
-        out.append(f"\n**{s} 상위 10 목표**\n")
-        out.append(
-            table(
-                ["목표", "지표", "점수", "셔플", "무작위 초기화"],
-                [
-                    [t["target"], t["metric"], f3(t["score"]), f3(t["shuffle"]),
-                     f3(t["random_init"])]
-                    for t in summ["top10"]
-                ],
+        for title, block in (
+            (f"{s} 상위 목표 — ①만 만족(정보는 읽히지만 학습 이득은 미확인)",
+             summ.get("accessible_only")),
+            (f"{s} 상위 목표 — ③ 둘 다 만족", summ.get("accessible_and_gained")),
+        ):
+            top = block.get("top10") if isinstance(block, dict) else None
+            if not top:
+                continue
+            out.append(f"\n**{title}**\n")
+            out.append(
+                table(
+                    ["목표", "지표", "점수", "셔플", "무작위 초기화"],
+                    [
+                        [t["target"], t["metric"], f3(t["score"]), f3(t["shuffle"]),
+                         f3(t["random_init"])]
+                        for t in top
+                    ],
+                )
             )
-        )
     return "\n".join(out)
 
 
@@ -520,9 +613,34 @@ OCC_CONDS = [
     ("random (benign topology 맞춤)", "random_matched_benign"),
 ]
 
+OCC_CONTRASTS = [
+    ("phishing motif − random(개수)", "phishing_motif_vs_random"),
+    ("phishing motif − random(topology)", "phishing_motif_vs_random_matched"),
+    ("benign motif − random(개수)", "benign_motif_vs_random"),
+    ("benign motif − random(topology)", "benign_motif_vs_random_matched"),
+]
+
+
+def _ci(pair) -> str:
+    """``[lo, hi]`` -> ``"[-0.120, -0.031]"``. 값이 없으면 em dash."""
+    if not pair or any(v is None for v in pair):
+        return "—"
+    try:
+        lo, hi = float(pair[0]), float(pair[1])
+    except (TypeError, ValueError):
+        return "—"
+    if lo != lo or hi != hi:
+        return "—"
+    return f"[{lo:+.3f}, {hi:+.3f}]"
+
 
 def table_occlusion() -> str:
-    """인과 절제 — 조건별 ΔAUROC, 평균 로짓 변화, 개입한 모듈 수."""
+    """인과 절제 — 절대 ΔAUROC와 시드 층화 CI, 그리고 ΔΔ(표적 − 무작위).
+
+    "무작위 대비 몇 배" 같은 비율은 싣지 않는다. 무작위 대조의 하락폭이 0 근처라 비율이
+    불안정하다(review_03 3절). 시드별 CI 경계 평균도 통합 효과의 95% CI로 읽히므로 뺐고,
+    시드 층화 클러스터 부트스트랩으로 만든 통합 CI 하나만 싣는다.
+    """
     occ = _load_phase("occlusion")
     if not occ:
         return ""
@@ -531,43 +649,74 @@ def table_occlusion() -> str:
         agg = (occ.get(s) or {}).get("aggregate")
         if not agg:
             continue
+        pooled = agg.get("d_auroc_pooled") or {}
         rows = []
         for label, key in OCC_CONDS:
             b = agg.get(key)
             if not b:
                 continue
-            per_seed = (occ[s].get("per_seed") or [])
-            cis = [
-                d["conditions"][key]["d_auroc_ci"]
-                for d in per_seed
-                if key in d.get("conditions", {})
-            ]
-            ci = (
-                f"[{f3(sum(c[0] for c in cis) / len(cis))}, "
-                f"{f3(sum(c[1] for c in cis) / len(cis))}]"
-                if cis
-                else "—"
-            )
+            pb = pooled.get(key) or {}
             rows.append(
                 [
                     label,
                     f"{float(b['d_auroc']):+.3f}",
-                    ci,
+                    _ci(pb.get("ci")),
+                    f3(b.get("d_auroc_sd_across_seeds")),
+                    (f3(b["d_auroc_sd_across_reps"]) if "d_auroc_sd_across_reps" in b
+                     else "—"),
                     f"{float(b['mean_logit_delta']):+.3f}",
                     f"{float(b['mean_logit_delta_phishing']):+.3f}",
                     f"{float(b['mean_logit_delta_benign']):+.3f}",
                     f"{float(b['n_flipped_mean']):.1f}",
-                    f"{int(b['n_seeds_d_auroc_ci_excludes_0'])}",
                 ]
             )
-        out.append(
+        head = (
             f"\n**{s}** (원본 AUROC {f3(agg.get('auroc_original'))})\n\n"
             + table(
-                ["조건", "ΔAUROC", "시드별 CI 평균", "로짓 Δ", "로짓 Δ(phishing)",
-                 "로짓 Δ(benign)", "개입한 모듈 수", "CI가 0을 제외한 시드"],
+                ["조건", "ΔAUROC", "95% CI(시드 층화)", "시드 간 SD", "반복 간 SD",
+                 "로짓 Δ", "로짓 Δ(phishing)", "로짓 Δ(benign)", "개입한 모듈 수"],
                 rows,
             )
         )
+
+        dd = agg.get("delta_vs_random") or {}
+        dd_seed = agg.get("contrasts") or {}
+        dd_rows = []
+        for label, key in OCC_CONTRASTS:
+            blk = dd.get(key)
+            if not blk:
+                continue
+            per_seed_p = (dd_seed.get(key) or {}).get("perm_p_per_seed") or []
+            dd_rows.append(
+                [
+                    label,
+                    f"{float(blk['estimate']):+.3f}",
+                    _ci(blk.get("ci")),
+                    f3((dd_seed.get(key) or {}).get("sd_across_seeds")),
+                    (
+                        "/".join(f"{float(v):.3f}" for v in per_seed_p)
+                        if per_seed_p else "—"
+                    ),
+                ]
+            )
+        if dd_rows:
+            head += (
+                "\n\nΔΔAUROC = 표적 개입 AUROC − 무작위 개입 AUROC(같은 test, 반복 평균). "
+                "음수면 표적 개입이 더 크게 무너뜨렸다는 뜻이다.\n\n"
+                + table(
+                    ["대비", "ΔΔAUROC", "95% CI(시드 층화)", "시드 간 SD", "순열 p(시드별)"],
+                    dd_rows,
+                )
+            )
+        ov = agg.get("motif_top_overlap")
+        if ov:
+            head += (
+                f"\n\nmotif 목록은 시드별 train에서만 골랐다 — 시드 간 top 목록 Jaccard "
+                f"평균 {f3(ov.get('jaccard_mean'))} (최소 {f3(ov.get('jaccard_min'))}), "
+                f"모든 시드에 공통 {ov.get('n_in_all_seeds')}개 / 합집합 "
+                f"{ov.get('n_in_any_seed')}개.\n"
+            )
+        out.append(head)
     return "\n".join(out)
 
 
@@ -639,6 +788,7 @@ TRANSFER_BASELINES = [
     ("charngram_lr", "char n-gram LR"),
     ("bytehist_lr", "byte-hist LR"),
     ("motif_patch3_lr", "motif-hist LR (3x3)"),
+    ("path_lr", "path-shape LR"),
     ("length_lr", "length LR (게이트)"),
     ("version_lr", "version LR (게이트)"),
 ]
@@ -725,6 +875,27 @@ def _set_rank(label: str) -> int:
     return len(SET_ORDER)
 
 
+def _flag_cell(r: dict) -> str:
+    """편향 플래그 요약. `주 판정 아님`은 길이만 맞춘 cohort라 판정을 보류했다는 뜻이다."""
+    f = (r.get("verdict") or {}).get("flags") or {}
+    bits = []
+    if f.get("common_direction_bias"):
+        bits.append("공통방향편향")
+    if f.get("path_shortcut_dominant"):
+        bits.append("경로지름길")
+    if (r.get("verdict") or {}).get("is_primary_verdict") is False:
+        bits.append("주 판정 아님")
+    return " · ".join(bits) if bits else "—"
+
+
+def _delta_cell(d: dict | None) -> str:
+    """쌍체 ΔAUROC 셀. 계산하지 못한 기준선은 대시로 남긴다."""
+    if not d or d.get("delta") is None:
+        return "—"
+    ci = d.get("ci") or [None, None]
+    return f"{f3(d['delta'])} [{f3(ci[0])}, {f3(ci[1])}]"
+
+
 def transfer_table() -> str:
     """F-a/F-b/F-c × 외부 세트 × 층 × {CNN, 텍스트 기준선, 순열 바닥선} (설계 6절).
 
@@ -732,14 +903,18 @@ def transfer_table() -> str:
     benign 정제 절제 3조건으로 나눠 적는다. F-a는 평가 cohort(fixed·per_seed)도 함께
     적는다 — 고정 cohort가 주 결과, 시드별 cohort는 F-b와의 쌍체 비교용이다.
 
-    바닥선은 그룹 단위 라벨 순열의 97.5 백분위다. CNN AUROC의 CI 하한이 이 값 이하면
-    "우연과 구분 불가"(collapse)다.
+    바닥선은 그룹 블록 교환 순열의 97.5 백분위다. CNN AUROC의 CI 하한이 이 값 이하면
+    "우연과 구분 불가"(collapse)다. 참조용 행 단위 라벨 순열 바닥선도 함께 적는다.
+
+    표본 수 열은 리뷰 03 항목 8 때문에 있다. CNN과 텍스트 기준선은 평가 cohort 전체를 보지만
+    motif-hist 기준선은 캡이 걸리면 부분집합만 본다 — 두 번째 표에 기준선별 n을 적는다.
     """
     data = load_transfer()
     if not data:
         return ""
     out: list[str] = []
     rows: list[list[str]] = []
+    n_rows: list[list[str]] = []
     for (tag, mode, st), r in data.items():
         if not r or "error" in r:
             continue
@@ -747,9 +922,12 @@ def transfer_table() -> str:
         ci = m.get("auroc_pooled_ci") or [None, None]
         nb = r.get("null_permutation", {})
         base = r.get("baselines", {})
-        run = TRANSFER_MODE_LABEL.get(mode.replace("_fixed", ""), mode)
-        if mode.startswith("a"):
-            run += " (고정 cohort)" if mode == "a_fixed" else " (시드별 cohort)"
+        base_mode = mode.split("_")[0]
+        run = TRANSFER_MODE_LABEL.get(base_mode, mode)
+        if base_mode == "a":
+            run += " (고정 cohort)" if mode.startswith("a_fixed") else " (시드별 cohort)"
+            if mode.endswith("_lenpath"):
+                run += " · 길이+경로 매칭"
         rows.append(
             [
                 set_label(tag, r),
@@ -758,17 +936,53 @@ def transfer_table() -> str:
                 f3(m.get("auroc_mean")),
                 f"[{f3(ci[0])}, {f3(ci[1])}]",
                 f3(nb.get("ci_upper")),
+                f3((r.get("null_row_permutation") or {}).get("ci_upper")),
+                str(nb.get("n_perm", "—")),
+                f"{m.get('n_boot', '—')}",
+                str((r.get("data") or {}).get("n_total", "—")),
+                _flag_cell(r),
                 *[f3((base.get(k) or {}).get("auroc")) for k, _ in TRANSFER_BASELINES],
                 str(r.get("verdict", {}).get("label", "—")),
             ]
         )
+        for k, label in TRANSFER_BASELINES:
+            b = base.get(k) or {}
+            if not b:
+                continue
+            n_rows.append(
+                [
+                    set_label(tag, r),
+                    run,
+                    st,
+                    label,
+                    str(b.get("n", "—")),
+                    str(b.get("n_fit", "—")),
+                    str(b.get("n_seeds", "—")),
+                    "예" if b.get("eval_rows_same_as_cnn", True) else "아니오",
+                    _delta_cell((r.get("comparison_to_baselines") or {}).get(k)),
+                ]
+            )
     if rows:
         rows.sort(key=lambda r: (_set_rank(r[0]), r[1], r[2]))
         out.append(
             table(
                 ["외부 세트", "실행", "층", "CNN AUROC", "95% CI", "순열 바닥선(97.5%)",
+                 "행순열 바닥선(97.5%)", "n_perm", "n_boot", "평가 n", "플래그",
                  *[label for _, label in TRANSFER_BASELINES], "판정"],
                 rows,
+            )
+        )
+    if n_rows:
+        n_rows.sort(key=lambda r: (_set_rank(r[0]), r[1], r[2], r[3]))
+        out.append(
+            "\n**기준선 표본 수와 CNN 대비 쌍체 ΔAUROC** "
+            "(Δ = CNN − 기준선, 시드 층화 그룹 클러스터 부트스트랩)\n"
+        )
+        out.append(
+            table(
+                ["외부 세트", "실행", "층", "기준선", "평가 n", "fit n", "시드 수",
+                 "CNN과 같은 행", "ΔAUROC [95% CI]"],
+                n_rows,
             )
         )
     rep = load_motif_replication()

@@ -1,9 +1,11 @@
 """인과 motif 절제 — 상위 motif를 뒤집으면 CNN 예측이 실제로 무너지는가.
 
 review_01 "2차 실험 설계" C안이다. :mod:`qrphish.motifs`가 만든
-``reports/motifs/{stratum}/enrichment.json``의 상위 phishing motif를 test QR에서
-찾아 **창 중심 모듈을 뒤집고**, 같은 개수의 무작위 데이터 모듈 뒤집기 및 상위 benign
-motif 뒤집기와 비교한다.
+``reports/motifs/{cid}/{stratum}/enrichment_seed{k}.json``(그 시드의 **train만**으로
+고른 목록)의 상위 phishing motif를 같은 시드의 test QR에서 찾아 **창 중심 모듈을 뒤집고**,
+같은 개수의 무작위 데이터 모듈 뒤집기 및 상위 benign motif 뒤집기와 비교한다.
+시드를 합친 ``enrichment.json``은 보고용이라 절제에 쓰지 않는다 — 시드 0의 test URL이
+시드 1의 train에 들어가 선정이 평가 라벨에 오염되기 때문이다(review_03 2절).
 
 .. warning::
    뒤집은 격자는 **더 이상 유효한 QR이 아니다.** RS 오류정정 덕분에 실제 스캐너는
@@ -35,7 +37,18 @@ __all__ = [
     "flip_centers",
     "batch_logits",
     "occlude_stratum",
+    "delta_vs_random",
+    "dd_cluster_permutation",
+    "OCCLUSION_CONTRASTS",
 ]
+
+#: ΔΔ(표적 개입 − 무작위 개입) 대비 쌍 — (이름, 표적 조건, 무작위 조건).
+OCCLUSION_CONTRASTS: tuple[tuple[str, str, str], ...] = (
+    ("phishing_motif_vs_random", "phishing_motif", "random"),
+    ("phishing_motif_vs_random_matched", "phishing_motif", "random_matched"),
+    ("benign_motif_vs_random", "benign_motif", "random_benign_matched"),
+    ("benign_motif_vs_random_matched", "benign_motif", "random_matched_benign"),
+)
 
 
 def load_enrichment(path: Path | str) -> dict:
@@ -288,6 +301,171 @@ def _paired_block(
     }
 
 
+def _random_rep_block(
+    y: np.ndarray,
+    groups: np.ndarray,
+    base: np.ndarray,
+    reps: list[np.ndarray],
+    counts: np.ndarray,
+    n_boot: int,
+    seed: int,
+) -> dict:
+    """무작위 개입 조건 블록 — **반복마다** AUROC/로짓 Δ를 내고 그 분포를 보고한다.
+
+    옛 구현은 반복별 로짓을 평균한 뒤 AUROC를 한 번 냈다. 서로 다르게 훼손한 입력의
+    예측을 평균하면 무작위 훼손의 효과가 서로 상쇄되어 대조군의 하락이 실제보다 작게
+    보인다(review_03 3절). 여기서는 반복 r마다 AUROC(y, p_r)를 따로 계산해 평균·표준편차
+    ·범위를 싣고, CI는 "반복 평균 ΔAUROC"라는 통계량 자체를 그룹 클러스터 부트스트랩으로
+    흔들어 만든다(리샘플된 행 집합이 모든 반복에 똑같이 적용되므로 쌍체가 유지된다).
+    """
+    y = np.asarray(y)
+    a0 = float(auroc_fn(y, base))
+    per_rep = [
+        {
+            "auroc": float(auroc_fn(y, r)),
+            "d_auroc": float(auroc_fn(y, r)) - a0,
+            "mean_logit_delta": float((r - base).mean()),
+        }
+        for r in reps
+    ]
+    da = np.array([d["d_auroc"] for d in per_rep], dtype=np.float64)
+    au = np.array([d["auroc"] for d in per_rep], dtype=np.float64)
+    dl = np.array([d["mean_logit_delta"] for d in per_rep], dtype=np.float64)
+
+    def d_auroc(idx: np.ndarray) -> float:
+        b = auroc_fn(y[idx], base[idx])
+        return float(np.mean([auroc_fn(y[idx], r[idx]) - b for r in reps]))
+
+    def d_logit(idx: np.ndarray) -> float:
+        return float(np.mean([float((r[idx] - base[idx]).mean()) for r in reps]))
+
+    ci_a = group_bootstrap(groups, d_auroc, n_boot=n_boot, seed=seed)
+    ci_l = group_bootstrap(groups, d_logit, n_boot=n_boot, seed=seed + 1)
+    ph = y == 1
+    return {
+        "auroc": float(au.mean()) if au.size else float("nan"),
+        "auroc_sd_across_reps": float(au.std(ddof=0)) if au.size > 1 else 0.0,
+        "d_auroc": float(da.mean()) if da.size else float("nan"),
+        "d_auroc_ci": [ci_a["lo"], ci_a["hi"]],
+        "d_auroc_sd_across_reps": float(da.std(ddof=0)) if da.size > 1 else 0.0,
+        "d_auroc_range": ([float(da.min()), float(da.max())] if da.size
+                          else [float("nan"), float("nan")]),
+        "mean_logit_delta": float(dl.mean()) if dl.size else float("nan"),
+        "mean_logit_delta_ci": [ci_l["lo"], ci_l["hi"]],
+        "mean_logit_delta_sd_across_reps": float(dl.std(ddof=0)) if dl.size > 1 else 0.0,
+        "mean_logit_delta_phishing": (
+            float(np.mean([float((r - base)[ph].mean()) for r in reps])) if ph.any()
+            else float("nan")
+        ),
+        "mean_logit_delta_benign": (
+            float(np.mean([float((r - base)[~ph].mean()) for r in reps])) if (~ph).any()
+            else float("nan")
+        ),
+        "n_repeat": int(len(reps)),
+        "per_rep": per_rep,
+        "n_flipped": _count_stats(counts),
+        "aggregation": "per_repeat_auroc_then_mean",
+    }
+
+
+def dd_cluster_permutation(
+    y: np.ndarray,
+    target: np.ndarray,
+    reps: list[np.ndarray],
+    groups: np.ndarray,
+    *,
+    n_perm: int = 500,
+    seed: int = 0,
+    alternative: str = "two-sided",
+) -> dict:
+    """ΔΔ(표적 − 무작위)의 클러스터 순열 검정.
+
+    영가설은 "표적 개입과 무작위 개입이 교환 가능하다"다.
+    :func:`qrphish.evaluate.paired_cluster_permutation_test`와 같은 규약으로 **그룹 단위**
+    교환을 하되, 무작위 조건이 반복 여러 벌이라 반복마다 독립적으로 맞바꾼 뒤 반복 평균을
+    검정통계량으로 쓴다(그래서 표적/무작위 어느 쪽에도 치우치지 않는다).
+    """
+    y = np.asarray(y)
+    groups = np.asarray(groups)
+    _, ginv = np.unique(groups, return_inverse=True)
+    n_g = int(ginv.max()) + 1 if ginv.size else 0
+    if not reps or n_g == 0:
+        return {"estimate": float("nan"), "perm_p": float("nan"), "n_perm": int(n_perm),
+                "alternative": alternative}
+    at = float(auroc_fn(y, target))
+    obs = float(np.mean([at - float(auroc_fn(y, r)) for r in reps]))
+    rng = np.random.default_rng(seed)
+    vals = np.empty(int(n_perm), dtype=np.float64)
+    for i in range(int(n_perm)):
+        swap = rng.integers(0, 2, size=n_g).astype(bool)[ginv]
+        acc = []
+        for r in reps:
+            pa = np.where(swap, r, target)
+            pb = np.where(swap, target, r)
+            acc.append(float(auroc_fn(y, pa)) - float(auroc_fn(y, pb)))
+        vals[i] = float(np.mean(acc))
+    valid = vals[~np.isnan(vals)]
+    if valid.size == 0 or np.isnan(obs):
+        p = float("nan")
+    elif alternative == "greater":
+        p = float((1 + np.sum(valid >= obs)) / (1 + valid.size))
+    elif alternative == "less":
+        p = float((1 + np.sum(valid <= obs)) / (1 + valid.size))
+    else:
+        p = float((1 + np.sum(np.abs(valid) >= abs(obs))) / (1 + valid.size))
+    return {
+        "estimate": obs,
+        "perm_p": p,
+        "n_perm": int(n_perm),
+        "n_valid": int(valid.size),
+        "alternative": alternative,
+        "null_sd": float(np.std(valid, ddof=0)) if valid.size else float("nan"),
+    }
+
+
+def delta_vs_random(
+    y: np.ndarray,
+    groups: np.ndarray,
+    target: np.ndarray,
+    reps: list[np.ndarray],
+    *,
+    n_boot: int = 500,
+    seed: int = 0,
+    n_perm: int = 500,
+) -> dict:
+    """같은 test에서 **표적 개입 − 무작위 개입**의 AUROC 차(ΔΔ)와 쌍체 CI.
+
+    각 반복 r에 대해 AUROC(target) − AUROC(random_r)를 낸 뒤 반복 평균을 점추정으로 쓴다.
+    CI는 같은 통계량을 그룹 클러스터 부트스트랩으로 흔든 백분위 CI다(모든 조건이 같은 행을
+    공유하므로 리샘플이 쌍체로 상쇄된다). 음수면 표적 개입이 더 크게 무너뜨렸다는 뜻이다.
+    """
+    y = np.asarray(y)
+    if not reps:
+        return {"estimate": float("nan"), "ci": [float("nan"), float("nan")],
+                "per_rep": [], "sd_across_reps": 0.0, "n_repeat": 0,
+                "perm_p": float("nan"), "n_perm": 0}
+    at = float(auroc_fn(y, target))
+    per_rep = [at - float(auroc_fn(y, r)) for r in reps]
+
+    def stat(idx: np.ndarray) -> float:
+        t = auroc_fn(y[idx], target[idx])
+        return float(np.mean([t - auroc_fn(y[idx], r[idx]) for r in reps]))
+
+    ci = group_bootstrap(groups, stat, n_boot=n_boot, seed=seed)
+    perm = dd_cluster_permutation(y, target, reps, groups, n_perm=n_perm, seed=seed + 1)
+    arr = np.asarray(per_rep, dtype=np.float64)
+    return {
+        "estimate": float(arr.mean()),
+        "ci": [ci["lo"], ci["hi"]],
+        "per_rep": [float(v) for v in per_rep],
+        "sd_across_reps": float(arr.std(ddof=0)) if arr.size > 1 else 0.0,
+        "n_repeat": int(len(reps)),
+        "perm_p": perm["perm_p"],
+        "n_perm": perm["n_perm"],
+        "perm_alternative": perm["alternative"],
+    }
+
+
 def occlude_stratum(
     model,
     dataset,
@@ -300,18 +478,25 @@ def occlude_stratum(
     n_random_rep: int = 5,
     seed: int = 0,
     n_boot: int = 500,
+    n_perm: int = 500,
     device=None,
 ) -> dict:
     """한 (층, 시드)의 절제 결과.
 
     조건: ``phishing_motif`` / ``benign_motif`` / ``random`` / ``random_benign_matched``
-    / ``random_matched`` / ``random_matched_benign`` (무작위 조건은 각각 ``n_random_rep``회
-    평균).
+    / ``random_matched`` / ``random_matched_benign``.
 
     무작위 대조는 각 샘플에서 motif가 맞은 **개수와 정확히 같은 수**를 뒤집어 "뒤집은 모듈
     수" 자체의 효과를 상쇄한다. phishing motif와 benign motif는 매칭 개수가 서로 다르므로
     무작위 대조도 둘로 나눈다. ``random``은 phishing 매칭 수에, ``random_benign_matched``는
     benign 매칭 수에 맞춘다. 짝이 맞는 대조와만 비교해야 개수 효과가 실제로 상쇄된다.
+
+    무작위 조건은 ``n_random_rep``번 **각각 AUROC를 계산해 평균**한다(로짓 평균 금지,
+    review_03 3절). ``contrasts``에는 같은 test에서 표적 개입과 무작위 개입의 차이
+    ΔΔAUROC와 그 쌍체 CI·순열 p가 들어간다.
+
+    ``_arrays``에는 시드 층화 통합 CI를 만들기 위한 원자료(라벨·그룹·조건별 로짓)가 담긴다.
+    JSON으로 직렬화하면 안 되므로 러너가 집계에 쓰고 나서 떼어낸다.
     """
     rows = np.asarray(test_rows, dtype=np.int64)
     top_p = [int(v) for v in enrichment.get("top_phishing", [])[:top_k]]
@@ -369,52 +554,67 @@ def occlude_stratum(
         "top_k": int(top_k),
         "size": int(size),
         "n_motifs_used": {"phishing": len(top_p), "benign": len(top_b)},
+        "n_random_rep": int(n_random_rep),
         "conditions": {},
+        "contrasts": {},
     }
     npi = np.asarray(n_phi)
+    nbi = np.asarray(n_ben)
+    logit_phi = batch_logits(model, x_phi, device=device)
+    logit_ben = batch_logits(model, x_ben, device=device)
     out["conditions"]["phishing_motif"] = _paired_block(
-        y, groups, base, batch_logits(model, x_phi, device=device), npi, n_boot, seed
+        y, groups, base, logit_phi, npi, n_boot, seed
     )
     out["conditions"]["benign_motif"] = _paired_block(
-        y, groups, base, batch_logits(model, x_ben, device=device),
-        np.asarray(n_ben), n_boot, seed + 100,
+        y, groups, base, logit_ben, nbi, n_boot, seed + 100
     )
-    # 무작위 대조는 반복별 로짓을 평균해 한 벌로 만든 뒤 같은 쌍체 절차를 쓴다.
-    rnd_logits = np.mean(
-        [batch_logits(model, x_rnd[r], device=device) for r in range(n_random_rep)], axis=0
-    )
-    out["conditions"]["random"] = _paired_block(
-        y, groups, base, rnd_logits, npi, n_boot, seed + 200
-    )
-    out["conditions"]["random"]["n_repeat"] = int(n_random_rep)
-    rnd_b_logits = np.mean(
-        [batch_logits(model, x_rnd_b[r], device=device) for r in range(n_random_rep)], axis=0
-    )
-    out["conditions"]["random_benign_matched"] = _paired_block(
-        y, groups, base, rnd_b_logits, np.asarray(n_ben), n_boot, seed + 300
-    )
-    out["conditions"]["random_benign_matched"]["n_repeat"] = int(n_random_rep)
 
-    # topology-matched 무작위 대조(review_02 4절). 후보 부족으로 밀도 제약을 풀어야 했던
-    # 횟수를 함께 기록해 "얼마나 잘 매칭됐는지"를 표에서 읽을 수 있게 한다.
-    mrnd_logits = np.mean(
-        [batch_logits(model, x_mrnd[r], device=device) for r in range(n_random_rep)], axis=0
-    )
-    out["conditions"]["random_matched"] = _paired_block(
-        y, groups, base, mrnd_logits, npi, n_boot, seed + 400
-    )
-    out["conditions"]["random_matched"]["n_repeat"] = int(n_random_rep)
+    reps: dict[str, list[np.ndarray]] = {
+        "random": [batch_logits(model, x_rnd[r], device=device) for r in range(n_random_rep)],
+        "random_benign_matched": [
+            batch_logits(model, x_rnd_b[r], device=device) for r in range(n_random_rep)
+        ],
+        "random_matched": [
+            batch_logits(model, x_mrnd[r], device=device) for r in range(n_random_rep)
+        ],
+        "random_matched_benign": [
+            batch_logits(model, x_mrnd_b[r], device=device) for r in range(n_random_rep)
+        ],
+    }
+    rep_counts = {
+        "random": npi,
+        "random_benign_matched": nbi,
+        "random_matched": npi,
+        "random_matched_benign": nbi,
+    }
+    for off, name in enumerate(
+        ("random", "random_benign_matched", "random_matched", "random_matched_benign")
+    ):
+        out["conditions"][name] = _random_rep_block(
+            y, groups, base, reps[name], rep_counts[name], n_boot, seed + 200 + 100 * off
+        )
+    # topology-matched 대조에만 있는 진단값: 후보 부족으로 밀도 제약을 푼 비율.
     out["conditions"]["random_matched"]["frac_relaxed"] = (
         float(n_relaxed_p / sum(n_matched_p)) if sum(n_matched_p) else 0.0
     )
-    mrnd_b_logits = np.mean(
-        [batch_logits(model, x_mrnd_b[r], device=device) for r in range(n_random_rep)], axis=0
-    )
-    out["conditions"]["random_matched_benign"] = _paired_block(
-        y, groups, base, mrnd_b_logits, np.asarray(n_ben), n_boot, seed + 500
-    )
-    out["conditions"]["random_matched_benign"]["n_repeat"] = int(n_random_rep)
     out["conditions"]["random_matched_benign"]["frac_relaxed"] = (
         float(n_relaxed_b / sum(n_matched_b)) if sum(n_matched_b) else 0.0
     )
+
+    targets = {"phishing_motif": logit_phi, "benign_motif": logit_ben}
+    for off, (name, tgt, rnd) in enumerate(OCCLUSION_CONTRASTS):
+        out["contrasts"][name] = delta_vs_random(
+            y, groups, targets[tgt], reps[rnd],
+            n_boot=n_boot, seed=seed + 700 + 50 * off, n_perm=n_perm,
+        )
+        out["contrasts"][name]["target"] = tgt
+        out["contrasts"][name]["control"] = rnd
+
+    out["_arrays"] = {
+        "y": y,
+        "groups": np.asarray(groups).astype(str),
+        "base": base,
+        "cond": {"phishing_motif": logit_phi, "benign_motif": logit_ben},
+        "reps": reps,
+    }
     return out

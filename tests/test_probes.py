@@ -142,7 +142,11 @@ def test_probe_suite_digit_target_beats_shuffle(setup: Setup) -> None:
     assert "skipped" not in hd
     assert hd["kind"] == "binary"
     assert hd["score"] > hd["shuffle"]
-    assert set(hd) >= {"score", "ci", "shuffle", "shuffle_ci", "random_init", "significant"}
+    assert set(hd) >= {
+        "score", "ci", "shuffle", "shuffle_ci", "random_init",
+        "accessible", "learned_gain", "accessible_and_gained", "used_in_decision",
+        "significant",
+    }
     assert res["digit_ratio"]["kind"] == "continuous"
 
 
@@ -248,7 +252,11 @@ def test_probe_suite_parallel_matches_serial(setup: Setup) -> None:
 
 
 def test_probe_significance_rule_is_unchanged(setup: Setup) -> None:
-    """유의 = CI 하한 > max(셔플 CI 상한, 무작위 초기화 CI 상한) — 저장된 값으로 재검산."""
+    """세 질문의 판정을 저장된 CI로 재검산한다 (review_03 6절).
+
+    ``accessible``은 셔플 기준선만, ``learned_gain``은 무작위 초기화 기준선만 본다.
+    옛 ``significant``는 둘의 AND이며 값이 그대로 유지된다(별칭).
+    """
     tr = np.nonzero(setup.split == 0)[0]
     te = np.nonzero(setup.split == 2)[0]
     targets = build_targets(setup.urls, setup.y, top_char_ngrams(setup.urls[tr], size=3, top=4))
@@ -265,9 +273,126 @@ def test_probe_significance_rule_is_unchanged(setup: Setup) -> None:
         bars = [v for v in (row["shuffle_ci"][1], row["random_init_ci"][1]) if np.isfinite(v)]
         bar = max(bars) if bars else float("nan")
         expect = bool(np.isfinite(row["ci"][0]) and np.isfinite(bar) and row["ci"][0] > bar)
-        assert row["significant"] is expect
-        assert row["above_random_init"] is bool(
+        acc = bool(
+            np.isfinite(row["ci"][0])
+            and np.isfinite(row["shuffle_ci"][1])
+            and row["ci"][0] > row["shuffle_ci"][1]
+        )
+        gain = bool(
             np.isfinite(row["random_init_ci"][1]) and row["ci"][0] > row["random_init_ci"][1]
         )
+        assert row["accessible"] is acc
+        assert row["learned_gain"] is gain
+        assert row["accessible_and_gained"] is (acc and gain)
+        # 옛 AND 규칙과 값이 같아야 한다(이름만 바꿨다).
+        assert row["accessible_and_gained"] is expect
+        assert row["significant"] is expect
+        assert row["above_random_init"] is gain
+        # 세 번째 질문은 현재 실험으로 답할 수 없다 — 항상 null.
+        assert row["used_in_decision"] is None
         checked += 1
     assert checked > 0
+
+
+def test_accessible_and_learned_gain_can_disagree() -> None:
+    """"접근 가능"과 "학습 이득"은 다른 질문이다 — 한쪽만 참인 경우가 있어야 한다.
+
+    review_03의 예(ngram:jp. 학습 0.909 vs 무작위 초기화 0.849)처럼, 셔플은 크게 넘지만
+    무작위 초기화는 넘지 못하는 목표가 실제로 존재한다. 집계 함수가 그 구분을 유지하는지
+    본다.
+    """
+    from qrphish.runner import _probe_aggregate, _probe_summary
+
+    def row(lo: float, shuf_hi: float, rnd_hi: float) -> dict:
+        return {
+            "kind": "binary", "family": "ngram", "score": lo + 0.05,
+            "ci": [lo, lo + 0.1], "shuffle": 0.5, "shuffle_ci": [0.4, shuf_hi],
+            "random_init": rnd_hi - 0.05, "random_init_ci": [rnd_hi - 0.1, rnd_hi],
+            "accessible": lo > shuf_hi, "learned_gain": lo > rnd_hi,
+            "accessible_and_gained": lo > shuf_hi and lo > rnd_hi,
+            "above_random_init": lo > rnd_hi,
+            "significant": lo > shuf_hi and lo > rnd_hi,
+            "used_in_decision": None,
+        }
+
+    per_seed = [
+        {"targets": {"ngram:jp.": row(0.86, 0.59, 0.91), "ngram:xx": row(0.86, 0.59, 0.70)}}
+        for _ in range(2)
+    ]
+    agg = _probe_aggregate(per_seed, n_seeds=2)
+    assert agg["ngram:jp."]["accessible"] is True
+    assert agg["ngram:jp."]["learned_gain"] is False
+    assert agg["ngram:jp."]["accessible_and_gained"] is False
+    assert agg["ngram:xx"]["accessible_and_gained"] is True
+    assert agg["ngram:jp."]["used_in_decision"] is None
+
+    summ = _probe_summary(agg)
+    assert summ["accessible"]["n"] == 2
+    assert summ["learned_gain"]["n"] == 1
+    assert summ["accessible_and_gained"]["n"] == 1
+    assert [t["target"] for t in summ["accessible_only"]["top10"]] == ["ngram:jp."]
+    assert summ["used_in_decision"] is None
+    # 하위 호환 별칭이 옛 키를 그대로 채운다.
+    assert summ["n_significant"] == 1
+
+
+def test_probe_aggregate_recovers_accessible_from_old_rows() -> None:
+    """``accessible`` 필드가 없는 옛 시드 행도 저장된 CI로 정확히 복원된다."""
+    from qrphish.runner import _probe_aggregate
+
+    old = {
+        "kind": "binary", "family": "ngram", "score": 0.9,
+        "ci": [0.86, 0.95], "shuffle": 0.5, "shuffle_ci": [0.4, 0.59],
+        "random_init": 0.85, "random_init_ci": [0.78, 0.91],
+        "above_random_init": False, "significant": False,
+    }
+    agg = _probe_aggregate([{"targets": {"ngram:jp.": old}}], n_seeds=1)
+    assert agg["ngram:jp."]["accessible"] is True
+    assert agg["ngram:jp."]["learned_gain"] is False
+
+
+def test_recompute_probe_summaries_from_stored_results(tmp_path) -> None:
+    """저장된 층 results.json만으로 세 질문 보고를 다시 만든다(재학습 없음)."""
+    import json
+
+    from qrphish.config import from_dict
+    from qrphish.runner import MAIN_CONDITION, recompute_probe_summaries
+
+    d = tmp_path / "reports" / "probes" / MAIN_CONDITION / "v2"
+    d.mkdir(parents=True)
+    (d / "results.json").write_text(
+        json.dumps(
+            {
+                "stratum": "v2",
+                "targets": {
+                    "ngram:jp.": {
+                        "kind": "binary", "metric": "auroc", "family": "ngram",
+                        "score": 0.909, "ci": [0.865, 0.947],
+                        "shuffle": 0.497, "shuffle_ci": [0.418, 0.587],
+                        "random_init": 0.849, "random_init_ci": [0.780, 0.908],
+                        "significant": False, "above_random_init": False,
+                    },
+                    "label:phishing": {
+                        "kind": "binary", "metric": "auroc", "family": "label",
+                        "score": 0.99, "ci": [0.98, 1.0],
+                        "shuffle": 0.5, "shuffle_ci": [0.4, 0.6],
+                        "random_init": 0.6, "random_init_ci": [0.5, 0.7],
+                        "significant": True, "above_random_init": True,
+                    },
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    cfg = from_dict({"reports_dir": str(tmp_path / "reports")})
+    res = recompute_probe_summaries(cfg)
+    assert res["strata"]["v2"]["accessible"]["n"] == 1
+    assert res["strata"]["v2"]["learned_gain"]["n"] == 0
+    # 시드별 CI가 없으므로 accessible은 근사다 — 그 사실을 반환값이 알린다.
+    assert res["missing_fields"]
+    written = json.loads((d / "results.json").read_text(encoding="utf-8"))
+    assert written["targets"]["ngram:jp."]["accessible_basis"] == "approx:mean_ci"
+    assert written["summary"]["used_in_decision"] is None
+    # 라벨 프로브는 어휘 카운트에서 빠진다(참고 상한선일 뿐).
+    assert written["summary"]["n_targets"] == 1
