@@ -1,0 +1,601 @@
+{
+  "schema_version": 2,
+  "phase": "transfer",
+  "mode": "a",
+  "source_tag": "external_primary_2026-09-08__secondary",
+  "condition_id": "norm-exact-data_only-fixed-small_cnn",
+  "stratum": "v3",
+  "git_sha": "80e7405149ed16d678eb03a3909f579b0ae2d5f7",
+  "qrphish_version": "0.1.0",
+  "created_at": "2026-09-09T11:56:29.227829+00:00",
+  "config": {
+    "seed_list": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "data": {
+      "csv_path": "/content/drive/MyDrive/qrphish/webphish.csv",
+      "category_col": "Category",
+      "url_col": "Data",
+      "positive_label": "spam"
+    },
+    "qr": {
+      "ec": "L",
+      "optimize": 0,
+      "border": 0,
+      "mask_mode": "fixed",
+      "mask_pattern": 0,
+      "pad_mode": "spec"
+    },
+    "condition": {
+      "url_mode": "norm",
+      "length_match": "exact",
+      "length_bucket": 1,
+      "features": "data_only",
+      "path_filter": false,
+      "shuffle_positions": false
+    },
+    "strata": [
+      "v2",
+      "v3",
+      "v4",
+      "v5plus"
+    ],
+    "stratum_rules": {
+      "primary_min_per_class": 1000,
+      "secondary_min_per_class": 300
+    },
+    "split": {
+      "ratios": [
+        0.7,
+        0.15,
+        0.15
+      ],
+      "max_group_frac": 0.05,
+      "group_key": "etld1",
+      "template_threshold": 0.7,
+      "template_shingle": 3,
+      "min_template_tokens": 3
+    },
+    "model": {
+      "arch": "small_cnn",
+      "lr": 0.001,
+      "weight_decay": 0.0001,
+      "batch_size": 256,
+      "max_epochs": 60,
+      "patience": 8,
+      "class_weight": "balanced",
+      "amp": true
+    },
+    "eval": {
+      "n_bootstrap": 2000,
+      "primary_metric": "auroc"
+    },
+    "output_dir": "/content/drive/MyDrive/qrphish_out_v2/artifacts",
+    "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
+  },
+  "data": {
+    "n_total": 36526,
+    "n_benign": 18263,
+    "n_phishing": 18263,
+    "base_rate": 0.5,
+    "n_groups": 18549,
+    "tier": "primary",
+    "eval_rows": "all",
+    "split_diagnostics": {
+      "top5_test_group_frac": 0.03479196556671449
+    },
+    "length_match": {
+      "bucket": 1,
+      "all_identical": true
+    },
+    "external_loader": "transfer._load_external_fallback(already_normalized)",
+    "benign_cleaning": null,
+    "cohort": "fixed",
+    "cohort_seed": 0,
+    "bias_diagnostics": {
+      "external": {
+        "benign": 0.9791381481684279,
+        "phishing": 0.9791381481684279
+      },
+      "webphish": {
+        "benign": 0.9973850512094138,
+        "phishing": 0.7932011331444759
+      },
+      "diff_external": 0.0,
+      "sign_external": 0,
+      "eps": 0.02,
+      "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+      "rule_version": "common_sign_v2",
+      "diff_webphish": 0.20418391806493785,
+      "sign_webphish": 1,
+      "same_direction": false,
+      "common_direction_bias": false,
+      "ok": true,
+      "checked": true,
+      "note": "부호가 다르거나 한쪽이 중립이다 (외부 +0.000, WebPhish +0.204)"
+    },
+    "baseline_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "match": "length_path",
+    "path_match": {
+      "n_before": 40098,
+      "n_after": 36526,
+      "n_dropped": 3572,
+      "bucket": 1,
+      "cells": 126,
+      "mode": "length_path"
+    },
+    "bias_gate": {
+      "source": "collection",
+      "common_direction_bias": true,
+      "path": "reports/external/bias_diagnostics.json",
+      "block": "sets.secondary",
+      "note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.162, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 아님 — path_lr AUROC=0.7517 < 0.8 — 경로 지름길이 지배적이지 않다.",
+      "recomputed_transfer_stage": false,
+      "blocking": false
+    },
+    "path_shortcut": {
+      "path_lr_auroc": 0.35474710766043593,
+      "threshold": 0.8,
+      "path_shortcut_dominant": false,
+      "note": "path_lr AUROC=0.3547 < 0.8 — 경로 지름길이 지배적이지 않다."
+    },
+    "gate_notes": {}
+  },
+  "model": {
+    "auroc_mean": 0.7003625209159223,
+    "auroc_sd": 0.005454916816319549,
+    "auroc_per_seed": [
+      0.7057901888589815,
+      0.6939862825303288,
+      0.699374364180683,
+      0.7061296637676984,
+      0.6965321052419198
+    ],
+    "auroc_pooled": 0.7003625209159223,
+    "auroc_pooled_ci": [
+      0.6933427559158235,
+      0.708029654912009
+    ],
+    "pooling": "seed_stratified",
+    "auprc_mean": 0.706223180730856,
+    "f1_at_val_threshold": 0.6763683347103285,
+    "acc_at_val_threshold": 0.6241033784153753,
+    "threshold_source": "webphish_val",
+    "thresholds": [
+      0.14266112554679877,
+      0.4926351072037057,
+      0.20538536451917336,
+      0.2544595250994724,
+      0.2393488606069884
+    ],
+    "n_boot": 2000,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "null_permutation": {
+    "auroc_mean": 0.5001500727583916,
+    "ci": [
+      0.48788109906797805,
+      0.5117416957287573
+    ],
+    "ci_upper": 0.5117416957287573,
+    "n_perm": 2000,
+    "n_valid": 2000,
+    "unit": "etld1_group",
+    "method": "group_block_exchange_approx",
+    "note": "정식 순열 검정이 아니라 **그룹 블록 교환 근사**다. 교환 가능성 가정은 'eTLD+1 그룹은 서로 바꿔 놓아도 무방하다'이며, 크기가 다른 그룹 사이에서는 라벨 구성을 순환 복사하므로 양성 총수가 보존되지 않는다. 행 단위 라벨 순열 바닥선은 별도로 `null_row_permutation`에 낸다.",
+    "positives_observed": 91315,
+    "positives_preserved": false,
+    "positives_range": [
+      115465,
+      126680
+    ]
+  },
+  "baselines": {
+    "bytehist_lr": {
+      "auroc": 0.5797079587252837,
+      "auroc_per_seed": [
+        0.588633976203114,
+        0.5745829874810744,
+        0.576610197827757,
+        0.5810093357241393,
+        0.5777032963903342
+      ],
+      "auroc_sd": 0.005505621990680627,
+      "ci": [
+        0.5742189026180216,
+        0.6040365297149453
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 36526,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "charngram_lr": {
+      "auroc": 0.8366486728799931,
+      "auroc_per_seed": [
+        0.8364267461897177,
+        0.8331060488194046,
+        0.841293046413067,
+        0.8357728250670617,
+        0.8366446979107147
+      ],
+      "auroc_sd": 0.0029553666184177437,
+      "ci": [
+        0.8256296283917463,
+        0.8465963028520548
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 36526,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "length_lr": {
+      "auroc": 0.5,
+      "auroc_per_seed": [
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "auroc_sd": 0.0,
+      "ci": [
+        0.5,
+        0.5
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 36526,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "motif_patch3_lr": {
+      "auroc": 0.6112852771740112,
+      "auroc_per_seed": [
+        0.6206453740092757,
+        0.6066722326830087,
+        0.616080488468738,
+        0.6141105610931177,
+        0.5989177296159157
+      ],
+      "auroc_sd": 0.008556052030987867,
+      "ci": [
+        0.6116861365066317,
+        0.6288350048556156
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 36526,
+      "n_fit": 4000,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "motif_pyramid3_lr": {
+      "auroc": 0.5961999824373396,
+      "auroc_per_seed": [
+        0.6111104891581064,
+        0.5971615910069681,
+        0.5862401350537337,
+        0.586733772690863,
+        0.5997539242770271
+      ],
+      "auroc_sd": 0.010303956657276188,
+      "ci": [
+        0.6009809824696477,
+        0.6198406224499867
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 36526,
+      "n_fit": 4000,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "path_lr": {
+      "auroc": 0.35474710766043593,
+      "auroc_per_seed": [
+        0.357485384185173,
+        0.3552251803156607,
+        0.35258203861531245,
+        0.3549145852467195,
+        0.3535283499393137
+      ],
+      "auroc_sd": 0.001865988671217895,
+      "ci": [
+        0.33531190242054276,
+        0.3835566238431042
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 36526,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "version_lr": {
+      "auroc": 0.5,
+      "auroc_per_seed": [
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "auroc_sd": 0.0,
+      "ci": [
+        0.5,
+        0.5
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 36526,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    }
+  },
+  "comparison_to_in_domain": {
+    "in_domain_auroc": 0.8136102834431069,
+    "delta": -0.1132477625271846,
+    "paired": false,
+    "delta_ci": [
+      null,
+      null
+    ],
+    "transfer_gap_to_text": 0.1362861519640708
+  },
+  "verdict": {
+    "label": "reproduced_weak",
+    "gates_passed": {
+      "length_lr_neutral": true,
+      "version_lr_neutral": true,
+      "group_concentration_ok": true
+    },
+    "flags": {
+      "common_direction_bias": true,
+      "path_shortcut_dominant": false,
+      "match": "length_path"
+    },
+    "reason": "drop=0.1132",
+    "is_primary_verdict": true,
+    "criteria_version": "prereg_v2"
+  },
+  "cohort": "fixed",
+  "match": "length_path",
+  "null_row_permutation": {
+    "auroc_mean": 0.5000362116595214,
+    "ci": [
+      0.4973734237556907,
+      0.502614998488138
+    ],
+    "ci_upper": 0.502614998488138,
+    "n_perm": 2000,
+    "n_valid": 2000,
+    "unit": "row",
+    "method": "row_label_permutation",
+    "note": "행 교환 가능성을 가정한 참조 바닥선. 양성 총수는 정확히 보존되지만 그룹 안 라벨 상관을 깨므로 판정 기준으로 쓰지 않는다.",
+    "positives_preserved": true
+  },
+  "comparison_to_baselines": {
+    "bytehist_lr": {
+      "auroc_a": 0.7003625209159223,
+      "auroc_b": 0.5797079587252837,
+      "delta": 0.12065456219063864,
+      "ci": [
+        0.10104116038920735,
+        0.13905876113305035
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "bytehist_lr",
+      "n_seeds": 5,
+      "n_rows": 182630
+    },
+    "charngram_lr": {
+      "auroc_a": 0.7003625209159223,
+      "auroc_b": 0.8366486728799931,
+      "delta": -0.1362861519640708,
+      "ci": [
+        -0.14861769984809037,
+        -0.12250006135418355
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "charngram_lr",
+      "n_seeds": 5,
+      "n_rows": 182630
+    },
+    "length_lr": {
+      "auroc_a": 0.7003625209159223,
+      "auroc_b": 0.5,
+      "delta": 0.20036252091592233,
+      "ci": [
+        0.19334275591582353,
+        0.208029654912009
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "length_lr",
+      "n_seeds": 5,
+      "n_rows": 182630
+    },
+    "motif_patch3_lr": {
+      "auroc_a": 0.7003625209159223,
+      "auroc_b": 0.6112852771740112,
+      "delta": 0.08907724374191117,
+      "ci": [
+        0.07890527205056214,
+        0.09998018565337559
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "motif_patch3_lr",
+      "n_seeds": 5,
+      "n_rows": 182630
+    },
+    "motif_pyramid3_lr": {
+      "auroc_a": 0.7003625209159223,
+      "auroc_b": 0.5961999824373396,
+      "delta": 0.1041625384785827,
+      "ci": [
+        0.09653777191985928,
+        0.11224269584469891
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "motif_pyramid3_lr",
+      "n_seeds": 5,
+      "n_rows": 182630
+    },
+    "path_lr": {
+      "auroc_a": 0.7003625209159223,
+      "auroc_b": 0.35474710766043593,
+      "delta": 0.3456154132554864,
+      "ci": [
+        0.31899665139964645,
+        0.369193371574317
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "path_lr",
+      "n_seeds": 5,
+      "n_rows": 182630
+    },
+    "version_lr": {
+      "auroc_a": 0.7003625209159223,
+      "auroc_b": 0.5,
+      "delta": 0.20036252091592233,
+      "ci": [
+        0.19334275591582353,
+        0.208029654912009
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "version_lr",
+      "n_seeds": 5,
+      "n_rows": 182630
+    }
+  },
+  "motif_replication": {
+    "K": 20,
+    "size": 3,
+    "n_motifs_used": 512,
+    "topk_motifs_webphish": [
+      381,
+      339,
+      15,
+      295,
+      393,
+      179,
+      275,
+      158,
+      301,
+      480,
+      77,
+      369,
+      78,
+      492,
+      248,
+      31,
+      316,
+      317,
+      449,
+      129
+    ],
+    "topk_motifs_external": [
+      248,
+      149,
+      452,
+      375,
+      505,
+      445,
+      469,
+      63,
+      71,
+      280,
+      482,
+      199,
+      135,
+      339,
+      476,
+      216,
+      61,
+      362,
+      249,
+      110
+    ],
+    "spearman_logodds": {
+      "rho": 0.21050610973781486,
+      "ci": [
+        0.1381805840764869,
+        0.2533308089179856
+      ],
+      "n_motifs_used": 512
+    },
+    "sign_match_rate": {
+      "value": 0.75,
+      "ci": [
+        0.55,
+        0.85
+      ],
+      "null": 0.5
+    },
+    "jaccard_topk": {
+      "value": 0.05263157894736842,
+      "null_mean": 0.019336360652150122,
+      "null_ci": [
+        0.0,
+        0.08108108108108109
+      ]
+    },
+    "ablation": null,
+    "verdict": {
+      "label": "partial",
+      "criteria": {
+        "spearman": false,
+        "sign_match": true,
+        "jaccard": false
+      },
+      "n_passed": 1,
+      "criteria_version": "prereg_v1"
+    },
+    "n_rows": 8000,
+    "webphish_enrichment": "/content/drive/MyDrive/qrphish_out_v2/reports/motifs/norm-exact-data_only-fixed/v3/enrichment.json"
+  },
+  "runtime_sec": 1925.8
+}

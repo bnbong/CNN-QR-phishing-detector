@@ -80,9 +80,9 @@
     "reports_dir": "/content/drive/MyDrive/qrphish_out_v2/reports"
   },
   "provenance": {
-    "git_sha": "605278af73b81c797fd134494a5c8650347c61d4",
+    "git_sha": "80e7405149ed16d678eb03a3909f579b0ae2d5f7",
     "qrphish_version": "0.1.0",
-    "timestamp": "2026-09-08T11:23:26.279704+00:00"
+    "timestamp": "2026-09-09T05:11:29.942554+00:00"
   },
   "data": {
     "n_total": 12118,
@@ -891,5 +891,5 @@
       }
     }
   ],
-  "runtime_sec": 575.7
+  "runtime_sec": 605.1
 }

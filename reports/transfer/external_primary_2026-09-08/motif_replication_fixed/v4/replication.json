@@ -29,28 +29,28 @@
     436,
     388,
     488,
-    200,
     190,
-    249,
-    22,
-    404,
-    472,
-    217,
-    469,
     405,
-    202,
-    219,
+    22,
+    249,
+    404,
+    200,
     139,
+    202,
+    422,
+    172,
+    469,
     255,
     473,
-    422,
-    251
+    472,
+    506,
+    439
   ],
   "spearman_logodds": {
-    "rho": 0.09729223031922143,
+    "rho": 0.07280008279117119,
     "ci": [
-      -0.009706781580091783,
-      0.14889218310116042
+      -0.018089583253410577,
+      0.14195050477483326
     ],
     "n_motifs_used": 512
   },
@@ -81,6 +81,6 @@
     "n_passed": 0,
     "criteria_version": "prereg_v1"
   },
-  "n_rows": 5062,
+  "n_rows": 4462,
   "webphish_enrichment": "/content/drive/MyDrive/qrphish_out_v2/reports/motifs/norm-exact-data_only-fixed/v4/enrichment.json"
 }

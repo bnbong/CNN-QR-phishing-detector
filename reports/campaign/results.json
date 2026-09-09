@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "created_at": "2026-09-08T12:47:59.417298+00:00",
-  "git_sha": "605278af73b81c797fd134494a5c8650347c61d4",
+  "created_at": "2026-09-09T14:02:17.059246+00:00",
+  "git_sha": "80e7405149ed16d678eb03a3909f579b0ae2d5f7",
   "condition_id": "norm-exact-data_only-fixed-small_cnn-campaign",
   "sibling_frac": 0.5,
   "seeds": [
@@ -1695,13 +1695,7 @@
           "n_rows": 8440,
           "model_a": "A_sm",
           "model_b": "B",
-          "verdict": {
-            "code": "negligible",
-            "label": "무시 가능 — 쌍체 95% CI 상한 < SESOI(0.02). 누출 이득이 실질적으로 무시할 수 있는 크기임을 등가성 형태로 보였다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": true
+          "verdict": "누출 무시 가능 (CI가 0을 포함하거나 하한이 0 이하)"
         },
         "cnn_sm_leaky_vs_contrast": {
           "delta_auroc": 0.01689229771838474,
@@ -1724,25 +1718,7 @@
           "n_perm": 2000,
           "n_rows": 189,
           "model_a": "A_sm",
-          "model_b": "B",
-          "verdict": {
-            "code": "not_detected",
-            "label": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false,
-          "sample_size_warning": {
-            "n_leaky_rows_per_seed": [
-              43,
-              49,
-              30,
-              19,
-              48
-            ],
-            "n_leaky_rows_mean": 37.8,
-            "warning": "누출 기회가 있는 T 행은 시드당 평균 38개뿐이다(시드별 [43, 49, 30, 19, 48]). 이 부집합의 CI는 구조적으로 넓어 등가성(negligible) 판정이 사실상 불가능하며, 'phishing kit 암기 가능성을 배제했다'는 결론의 근거로 쓸 수 없다. 표본 구성이 다르므로 전체 T의 Δ와 크기를 직접 비교해서도 안 된다."
-          }
+          "model_b": "B"
         },
         "cnn": {
           "delta_auroc": -0.011203491975000502,
@@ -1765,14 +1741,7 @@
           "n_perm": 2000,
           "n_rows": 8440,
           "model_a": "A",
-          "model_b": "B",
-          "verdict": {
-            "code": "negative",
-            "label": "역방향 — CI 상한 < 0. 누출을 허용한 모델이 오히려 더 나쁘다(검정력·교란 점검 필요).",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false
+          "model_b": "B"
         },
         "cnn_leaky_vs_contrast": {
           "delta_auroc": -0.00683412280151412,
@@ -1795,25 +1764,7 @@
           "n_perm": 2000,
           "n_rows": 189,
           "model_a": "A",
-          "model_b": "B",
-          "verdict": {
-            "code": "not_detected",
-            "label": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false,
-          "sample_size_warning": {
-            "n_leaky_rows_per_seed": [
-              43,
-              49,
-              30,
-              19,
-              48
-            ],
-            "n_leaky_rows_mean": 37.8,
-            "warning": "누출 기회가 있는 T 행은 시드당 평균 38개뿐이다(시드별 [43, 49, 30, 19, 48]). 이 부집합의 CI는 구조적으로 넓어 등가성(negligible) 판정이 사실상 불가능하며, 'phishing kit 암기 가능성을 배제했다'는 결론의 근거로 쓸 수 없다. 표본 구성이 다르므로 전체 T의 Δ와 크기를 직접 비교해서도 안 된다."
-          }
+          "model_b": "B"
         },
         "charngram_lr_sm": {
           "delta_auroc": -0.0002491547163607333,
@@ -1906,19 +1857,6 @@
           "n_rows": 8440,
           "model_a": "A",
           "model_b": "B"
-        },
-        "verdict_rule": {
-          "sesoi": 0.02,
-          "major_threshold": 0.05,
-          "primary_tag": "cnn_sm",
-          "definitions": {
-            "negligible": "무시 가능 — 쌍체 95% CI 상한 < SESOI(0.02). 누출 이득이 실질적으로 무시할 수 있는 크기임을 등가성 형태로 보였다.",
-            "not_detected": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "detected_minor": "이득 검출, 크기 작음 — CI 하한 > 0이고 |Δ| < 0.05.",
-            "detected_major": "결론 수정 필요 — CI 하한 > 0이고 |Δ| ≥ 0.05.",
-            "negative": "역방향 — CI 상한 < 0. 누출을 허용한 모델이 오히려 더 나쁘다(검정력·교란 점검 필요).",
-            "undetermined": "판정 불가 — CI가 유한하지 않다."
-          }
         }
       }
     },
@@ -3605,13 +3543,7 @@
           "n_rows": 6366,
           "model_a": "A_sm",
           "model_b": "B",
-          "verdict": {
-            "code": "negligible",
-            "label": "무시 가능 — 쌍체 95% CI 상한 < SESOI(0.02). 누출 이득이 실질적으로 무시할 수 있는 크기임을 등가성 형태로 보였다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": true
+          "verdict": "누출 무시 가능 (CI가 0을 포함하거나 하한이 0 이하)"
         },
         "cnn_sm_leaky_vs_contrast": {
           "delta_auroc": 0.06364464190779981,
@@ -3634,25 +3566,7 @@
           "n_perm": 2000,
           "n_rows": 174,
           "model_a": "A_sm",
-          "model_b": "B",
-          "verdict": {
-            "code": "not_detected",
-            "label": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false,
-          "sample_size_warning": {
-            "n_leaky_rows_per_seed": [
-              25,
-              13,
-              21,
-              90,
-              25
-            ],
-            "n_leaky_rows_mean": 34.8,
-            "warning": "누출 기회가 있는 T 행은 시드당 평균 35개뿐이다(시드별 [25, 13, 21, 90, 25]). 이 부집합의 CI는 구조적으로 넓어 등가성(negligible) 판정이 사실상 불가능하며, 'phishing kit 암기 가능성을 배제했다'는 결론의 근거로 쓸 수 없다. 표본 구성이 다르므로 전체 T의 Δ와 크기를 직접 비교해서도 안 된다."
-          }
+          "model_b": "B"
         },
         "cnn": {
           "delta_auroc": 0.013560763662590292,
@@ -3675,14 +3589,7 @@
           "n_perm": 2000,
           "n_rows": 6366,
           "model_a": "A",
-          "model_b": "B",
-          "verdict": {
-            "code": "detected_minor",
-            "label": "이득 검출, 크기 작음 — CI 하한 > 0이고 |Δ| < 0.05.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false
+          "model_b": "B"
         },
         "cnn_leaky_vs_contrast": {
           "delta_auroc": -0.005155958077010747,
@@ -3705,25 +3612,7 @@
           "n_perm": 2000,
           "n_rows": 174,
           "model_a": "A",
-          "model_b": "B",
-          "verdict": {
-            "code": "not_detected",
-            "label": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false,
-          "sample_size_warning": {
-            "n_leaky_rows_per_seed": [
-              25,
-              13,
-              21,
-              90,
-              25
-            ],
-            "n_leaky_rows_mean": 34.8,
-            "warning": "누출 기회가 있는 T 행은 시드당 평균 35개뿐이다(시드별 [25, 13, 21, 90, 25]). 이 부집합의 CI는 구조적으로 넓어 등가성(negligible) 판정이 사실상 불가능하며, 'phishing kit 암기 가능성을 배제했다'는 결론의 근거로 쓸 수 없다. 표본 구성이 다르므로 전체 T의 Δ와 크기를 직접 비교해서도 안 된다."
-          }
+          "model_b": "B"
         },
         "charngram_lr_sm": {
           "delta_auroc": 0.0007687730665586034,
@@ -3816,19 +3705,6 @@
           "n_rows": 6366,
           "model_a": "A",
           "model_b": "B"
-        },
-        "verdict_rule": {
-          "sesoi": 0.02,
-          "major_threshold": 0.05,
-          "primary_tag": "cnn_sm",
-          "definitions": {
-            "negligible": "무시 가능 — 쌍체 95% CI 상한 < SESOI(0.02). 누출 이득이 실질적으로 무시할 수 있는 크기임을 등가성 형태로 보였다.",
-            "not_detected": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "detected_minor": "이득 검출, 크기 작음 — CI 하한 > 0이고 |Δ| < 0.05.",
-            "detected_major": "결론 수정 필요 — CI 하한 > 0이고 |Δ| ≥ 0.05.",
-            "negative": "역방향 — CI 상한 < 0. 누출을 허용한 모델이 오히려 더 나쁘다(검정력·교란 점검 필요).",
-            "undetermined": "판정 불가 — CI가 유한하지 않다."
-          }
         }
       }
     },
@@ -5515,13 +5391,7 @@
           "n_rows": 1892,
           "model_a": "A_sm",
           "model_b": "B",
-          "verdict": {
-            "code": "negligible",
-            "label": "무시 가능 — 쌍체 95% CI 상한 < SESOI(0.02). 누출 이득이 실질적으로 무시할 수 있는 크기임을 등가성 형태로 보였다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": true
+          "verdict": "누출 무시 가능 (CI가 0을 포함하거나 하한이 0 이하)"
         },
         "cnn_sm_leaky_vs_contrast": {
           "delta_auroc": 0.027957845716645214,
@@ -5544,25 +5414,7 @@
           "n_perm": 2000,
           "n_rows": 1019,
           "model_a": "A_sm",
-          "model_b": "B",
-          "verdict": {
-            "code": "not_detected",
-            "label": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false,
-          "sample_size_warning": {
-            "n_leaky_rows_per_seed": [
-              4,
-              28,
-              7,
-              13,
-              21
-            ],
-            "n_leaky_rows_mean": 14.6,
-            "warning": "누출 기회가 있는 T 행은 시드당 평균 15개뿐이다(시드별 [4, 28, 7, 13, 21]). 이 부집합의 CI는 구조적으로 넓어 등가성(negligible) 판정이 사실상 불가능하며, 'phishing kit 암기 가능성을 배제했다'는 결론의 근거로 쓸 수 없다. 표본 구성이 다르므로 전체 T의 Δ와 크기를 직접 비교해서도 안 된다."
-          }
+          "model_b": "B"
         },
         "cnn": {
           "delta_auroc": 0.009358221522824728,
@@ -5585,14 +5437,7 @@
           "n_perm": 2000,
           "n_rows": 1892,
           "model_a": "A",
-          "model_b": "B",
-          "verdict": {
-            "code": "not_detected",
-            "label": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false
+          "model_b": "B"
         },
         "cnn_leaky_vs_contrast": {
           "delta_auroc": 0.03324016942939527,
@@ -5615,25 +5460,7 @@
           "n_perm": 2000,
           "n_rows": 1019,
           "model_a": "A",
-          "model_b": "B",
-          "verdict": {
-            "code": "not_detected",
-            "label": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "sesoi": 0.02,
-            "major_threshold": 0.05
-          },
-          "primary": false,
-          "sample_size_warning": {
-            "n_leaky_rows_per_seed": [
-              4,
-              28,
-              7,
-              13,
-              21
-            ],
-            "n_leaky_rows_mean": 14.6,
-            "warning": "누출 기회가 있는 T 행은 시드당 평균 15개뿐이다(시드별 [4, 28, 7, 13, 21]). 이 부집합의 CI는 구조적으로 넓어 등가성(negligible) 판정이 사실상 불가능하며, 'phishing kit 암기 가능성을 배제했다'는 결론의 근거로 쓸 수 없다. 표본 구성이 다르므로 전체 T의 Δ와 크기를 직접 비교해서도 안 된다."
-          }
+          "model_b": "B"
         },
         "charngram_lr_sm": {
           "delta_auroc": -0.00025266266519237136,
@@ -5726,19 +5553,6 @@
           "n_rows": 1892,
           "model_a": "A",
           "model_b": "B"
-        },
-        "verdict_rule": {
-          "sesoi": 0.02,
-          "major_threshold": 0.05,
-          "primary_tag": "cnn_sm",
-          "definitions": {
-            "negligible": "무시 가능 — 쌍체 95% CI 상한 < SESOI(0.02). 누출 이득이 실질적으로 무시할 수 있는 크기임을 등가성 형태로 보였다.",
-            "not_detected": "검출 실패 — CI가 0을 포함하지만 상한 ≥ SESOI(0.02). 누출 허용에 따른 AUROC 상승을 검출하지 못했으나, 실질적으로 의미 있는 상승을 배제하지도 못했다.",
-            "detected_minor": "이득 검출, 크기 작음 — CI 하한 > 0이고 |Δ| < 0.05.",
-            "detected_major": "결론 수정 필요 — CI 하한 > 0이고 |Δ| ≥ 0.05.",
-            "negative": "역방향 — CI 상한 < 0. 누출을 허용한 모델이 오히려 더 나쁘다(검정력·교란 점검 필요).",
-            "undetermined": "판정 불가 — CI가 유한하지 않다."
-          }
         }
       }
     }

@@ -5,9 +5,9 @@
   "source_tag": "external_primary_2026-09-08",
   "condition_id": "norm-exact-data_only-fixed-small_cnn",
   "stratum": "v3",
-  "git_sha": "605278af73b81c797fd134494a5c8650347c61d4",
+  "git_sha": "80e7405149ed16d678eb03a3909f579b0ae2d5f7",
   "qrphish_version": "0.1.0",
-  "created_at": "2026-09-08T11:56:10.875614+00:00",
+  "created_at": "2026-09-09T07:02:35.236190+00:00",
   "config": {
     "seed_list": [
       0,
@@ -105,17 +105,42 @@
         "benign": 0.9973850512094138,
         "phishing": 0.7932011331444759
       },
-      "ok": true,
-      "checked": true
+      "diff_external": 0.39329850936425026,
+      "sign_external": 1,
+      "eps": 0.02,
+      "rule": "두 데이터셋의 (benign - phishing) 경로 보유율 차이의 부호가 같으면 공통 편향으로 보고 게이트 실패",
+      "rule_version": "common_sign_v2",
+      "diff_webphish": 0.20418391806493785,
+      "sign_webphish": 1,
+      "same_direction": true,
+      "common_direction_bias": true,
+      "ok": false,
+      "checked": true,
+      "note": "두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.393, WebPhish +0.204) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다"
     },
-    "baseline_seed": 0,
+    "baseline_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "match": "length",
+    "path_match": null,
     "bias_gate": {
       "source": "collection",
-      "gate_passed": true,
+      "common_direction_bias": true,
       "path": "reports/external/bias_diagnostics.json",
       "block": "main",
-      "note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-      "recomputed_transfer_stage": true
+      "note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.480, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 플래그 ON — path_lr AUROC=0.8148 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "recomputed_transfer_stage": true,
+      "blocking": false
+    },
+    "path_shortcut": {
+      "path_lr_auroc": 0.6378043109060222,
+      "threshold": 0.8,
+      "path_shortcut_dominant": false,
+      "note": "path_lr AUROC=0.6378 < 0.8 — 경로 지름길이 지배적이지 않다."
     },
     "gate_notes": {}
   },
@@ -156,70 +181,171 @@
     ]
   },
   "null_permutation": {
-    "auroc_mean": 0.4871734821681048,
+    "auroc_mean": 0.49488522149705216,
     "ci": [
-      0.42558041457052537,
-      0.581884463710309
+      0.4315681147263043,
+      0.587260915445842
     ],
-    "ci_upper": 0.581884463710309,
-    "n_perm": 200,
-    "n_valid": 200,
-    "unit": "etld1_group"
+    "ci_upper": 0.587260915445842,
+    "n_perm": 2000,
+    "n_valid": 2000,
+    "unit": "etld1_group",
+    "method": "group_block_exchange_approx",
+    "note": "정식 순열 검정이 아니라 **그룹 블록 교환 근사**다. 교환 가능성 가정은 'eTLD+1 그룹은 서로 바꿔 놓아도 무방하다'이며, 크기가 다른 그룹 사이에서는 라벨 구성을 순환 복사하므로 양성 총수가 보존되지 않는다. 행 단위 라벨 순열 바닥선은 별도로 `null_row_permutation`에 낸다.",
+    "positives_observed": 39237,
+    "positives_preserved": false,
+    "positives_range": [
+      14103,
+      31312
+    ]
   },
   "baselines": {
-    "charngram_lr": {
-      "auroc": 0.8685634399357953,
-      "ci": [
-        0.8354131951531268,
-        0.8874610266418985
-      ],
-      "fit_on": "webphish_train",
-      "n": 15698
-    },
     "bytehist_lr": {
-      "auroc": 0.7363463491636257,
+      "auroc": 0.7254392811339823,
+      "auroc_per_seed": [
+        0.7363463491636257,
+        0.7246697526030526,
+        0.722317224914865,
+        0.722789652282851,
+        0.721073426705517
+      ],
+      "auroc_sd": 0.006232671179715226,
       "ci": [
         0.6312317214815232,
         0.8064081646969364
       ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
       "fit_on": "webphish_train",
-      "n": 15698
+      "n": 15698,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "charngram_lr": {
+      "auroc": 0.8641901899695643,
+      "auroc_per_seed": [
+        0.8685634399357953,
+        0.8675161333550758,
+        0.8621806291941838,
+        0.8656334456994449,
+        0.8570573016633214
+      ],
+      "auroc_sd": 0.004668689105945194,
+      "ci": [
+        0.8354131951531268,
+        0.8874610266418985
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 15698,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
     },
     "length_lr": {
       "auroc": 0.5,
+      "auroc_per_seed": [
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "auroc_sd": 0.0,
       "ci": [
         0.5,
         0.5
       ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
       "fit_on": "webphish_train",
-      "n": 15698
+      "n": 15698,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "motif_patch3_lr": {
+      "auroc": 0.6120271793220634,
+      "auroc_per_seed": [
+        0.6179450382434237,
+        0.588122443971203,
+        0.618294851902309,
+        0.6194951504135733,
+        0.6162784120798079
+      ],
+      "auroc_sd": 0.013412538146871307,
+      "ci": [
+        0.5775885258670915,
+        0.6435914004307222
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 15698,
+      "n_fit": 4000,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "motif_pyramid3_lr": {
+      "auroc": 0.6008322384859184,
+      "auroc_per_seed": [
+        0.6176737370278323,
+        0.6189040701100637,
+        0.5768769250092125,
+        0.5861655564335719,
+        0.6045409038489115
+      ],
+      "auroc_sd": 0.01879461343281154,
+      "ci": [
+        0.5903271931562587,
+        0.635176122369541
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 15698,
+      "n_fit": 4000,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
+    },
+    "path_lr": {
+      "auroc": 0.6378043109060222,
+      "auroc_per_seed": [
+        0.6394131712828264,
+        0.638105289415518,
+        0.6366126026833434,
+        0.6359256850604238,
+        0.6389648060879995
+      ],
+      "auroc_sd": 0.0014979296043516205,
+      "ci": [
+        0.46811602733116636,
+        0.7442550790988435
+      ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
+      "fit_on": "webphish_train",
+      "n": 15698,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
     },
     "version_lr": {
       "auroc": 0.5,
+      "auroc_per_seed": [
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5
+      ],
+      "auroc_sd": 0.0,
       "ci": [
         0.5,
         0.5
       ],
+      "ci_note": "첫 시드의 그룹 클러스터 CI. 시드 층화 불확실성은 쌍체 Δ를 볼 것",
       "fit_on": "webphish_train",
-      "n": 15698
-    },
-    "motif_patch3_lr": {
-      "auroc": 0.6185660735714154,
-      "ci": [
-        0.5804675835996653,
-        0.645227370454548
-      ],
-      "fit_on": "webphish_train",
-      "n": 8000
-    },
-    "motif_pyramid3_lr": {
-      "auroc": 0.6137081258256318,
-      "ci": [
-        0.5816359730299879,
-        0.6326627938710266
-      ],
-      "fit_on": "webphish_train",
-      "n": 8000
+      "n": 15698,
+      "n_fit": 6496,
+      "n_seeds": 5,
+      "eval_rows_same_as_cnn": true
     }
   },
   "comparison_to_in_domain": {
@@ -230,19 +356,154 @@
       null,
       null
     ],
-    "transfer_gap_to_text": 0.1679385017287125
+    "transfer_gap_to_text": 0.1635652517624815
   },
   "verdict": {
-    "label": "reproduced_weak",
+    "label": "reported_unmatched_path",
     "gates_passed": {
       "length_lr_neutral": true,
       "version_lr_neutral": true,
-      "bias_direction_ok": true,
       "group_concentration_ok": true
     },
-    "criteria_version": "prereg_v1"
+    "flags": {
+      "common_direction_bias": true,
+      "path_shortcut_dominant": false,
+      "match": "length"
+    },
+    "reason": "common_direction_bias_without_path_matching",
+    "is_primary_verdict": false,
+    "criteria_version": "prereg_v2"
   },
   "cohort": "per_seed",
+  "match": "length",
+  "null_row_permutation": {
+    "auroc_mean": 0.4999452657560902,
+    "ci": [
+      0.495897713900675,
+      0.5039741556149304
+    ],
+    "ci_upper": 0.5039741556149304,
+    "n_perm": 2000,
+    "n_valid": 2000,
+    "unit": "row",
+    "method": "row_label_permutation",
+    "note": "행 교환 가능성을 가정한 참조 바닥선. 양성 총수는 정확히 보존되지만 그룹 안 라벨 상관을 깨므로 판정 기준으로 쓰지 않는다.",
+    "positives_preserved": true
+  },
+  "comparison_to_baselines": {
+    "bytehist_lr": {
+      "auroc_a": 0.7006249382070828,
+      "auroc_b": 0.7254392811339823,
+      "delta": -0.024814342926899435,
+      "ci": [
+        -0.07635881929334216,
+        0.047135115480725416
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "bytehist_lr",
+      "n_seeds": 5,
+      "n_rows": 78474
+    },
+    "charngram_lr": {
+      "auroc_a": 0.7006249382070828,
+      "auroc_b": 0.8641901899695643,
+      "delta": -0.1635652517624815,
+      "ci": [
+        -0.21031177394452305,
+        -0.1269767838687886
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "charngram_lr",
+      "n_seeds": 5,
+      "n_rows": 78474
+    },
+    "length_lr": {
+      "auroc_a": 0.7006249382070828,
+      "auroc_b": 0.5,
+      "delta": 0.20062493820708283,
+      "ci": [
+        0.14950921437928974,
+        0.23528743465488502
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "length_lr",
+      "n_seeds": 5,
+      "n_rows": 78474
+    },
+    "motif_patch3_lr": {
+      "auroc_a": 0.7006249382070828,
+      "auroc_b": 0.6120271793220634,
+      "delta": 0.08859775888501942,
+      "ci": [
+        0.07062645845133318,
+        0.10349635386274944
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "motif_patch3_lr",
+      "n_seeds": 5,
+      "n_rows": 78474
+    },
+    "motif_pyramid3_lr": {
+      "auroc_a": 0.7006249382070828,
+      "auroc_b": 0.6008322384859184,
+      "delta": 0.09979269972116445,
+      "ci": [
+        0.06840817005922883,
+        0.12238319886376513
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "motif_pyramid3_lr",
+      "n_seeds": 5,
+      "n_rows": 78474
+    },
+    "path_lr": {
+      "auroc_a": 0.7006249382070828,
+      "auroc_b": 0.6378043109060222,
+      "delta": 0.06282062730106064,
+      "ci": [
+        -0.018374183272396993,
+        0.18093416456757452
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "path_lr",
+      "n_seeds": 5,
+      "n_rows": 78474
+    },
+    "version_lr": {
+      "auroc_a": 0.7006249382070828,
+      "auroc_b": 0.5,
+      "delta": 0.20062493820708283,
+      "ci": [
+        0.14950921437928974,
+        0.23528743465488502
+      ],
+      "n_boot": 2000,
+      "n_valid": 2000,
+      "paired": true,
+      "pooling": "seed_stratified_group_cluster_bootstrap",
+      "baseline": "version_lr",
+      "n_seeds": 5,
+      "n_rows": 78474
+    }
+  },
   "motif_replication": {
     "K": 20,
     "size": 3,
@@ -329,5 +590,5 @@
     "n_rows": 8000,
     "webphish_enrichment": "/content/drive/MyDrive/qrphish_out_v2/reports/motifs/norm-exact-data_only-fixed/v3/enrichment.json"
   },
-  "runtime_sec": 208.2
+  "runtime_sec": 1064.7
 }

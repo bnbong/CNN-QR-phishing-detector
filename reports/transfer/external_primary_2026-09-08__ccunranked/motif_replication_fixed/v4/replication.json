@@ -26,36 +26,36 @@
   ],
   "topk_motifs_external": [
     281,
+    436,
     388,
     249,
-    436,
     139,
-    439,
-    404,
     488,
-    200,
+    404,
     190,
-    71,
+    439,
     219,
-    472,
-    61,
     255,
-    438,
+    61,
+    71,
     22,
+    405,
+    200,
     221,
     23,
-    473
+    472,
+    438
   ],
   "spearman_logodds": {
-    "rho": 0.08584479229652293,
+    "rho": 0.06054260580103226,
     "ci": [
-      -0.009333604416291873,
-      0.1371607797318639
+      -0.026493620609743536,
+      0.12221244553306783
     ],
     "n_motifs_used": 512
   },
   "sign_match_rate": {
-    "value": 0.7,
+    "value": 0.75,
     "ci": [
       0.5,
       0.85
@@ -81,6 +81,6 @@
     "n_passed": 0,
     "criteria_version": "prereg_v1"
   },
-  "n_rows": 5062,
+  "n_rows": 4456,
   "webphish_enrichment": "/content/drive/MyDrive/qrphish_out_v2/reports/motifs/norm-exact-data_only-fixed/v4/enrichment.json"
 }

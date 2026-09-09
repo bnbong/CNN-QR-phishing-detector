@@ -5,9 +5,9 @@
   "source_tag": "external_primary_2026-09-08",
   "condition_id": "norm-exact-data_only-fixed-small_cnn",
   "stratum": "v4",
-  "git_sha": "605278af73b81c797fd134494a5c8650347c61d4",
+  "git_sha": "80e7405149ed16d678eb03a3909f579b0ae2d5f7",
   "qrphish_version": "0.1.0",
-  "created_at": "2026-09-08T12:05:24.808576+00:00",
+  "created_at": "2026-09-09T07:23:29.180313+00:00",
   "config": {
     "seed_list": [
       0,
@@ -91,11 +91,18 @@
     "n_train": 5062,
     "bias_gate": {
       "source": "collection",
-      "gate_passed": true,
+      "common_direction_bias": true,
       "path": "reports/external/bias_diagnostics.json",
       "block": "main",
-      "note": "benign 경로 보유율이 phishing 이상 — WebPhish와 같은 방향의 편향이 아니다",
-      "recomputed_transfer_stage": true
+      "note": "공통 방향 편향 플래그 ON — 두 데이터셋 모두 benign-phishing 경로 보유율 차이가 양수다 (외부 +0.480, WebPhish +0.304) — 공통 편향. 길이+경로 동시 매칭 cohort의 결과를 주 판정으로 쓴다 / 경로 지름길 플래그 ON — path_lr AUROC=0.8148 >= 0.8 — 경로 모양만으로 거의 갈리는 세트다. 전이 검증으로 쓸 수 없다.",
+      "recomputed_transfer_stage": false,
+      "blocking": false
+    },
+    "path_shortcut": {
+      "path_lr_auroc": 0.7556477558753391,
+      "threshold": 0.8,
+      "path_shortcut_dominant": false,
+      "note": "path_lr AUROC=0.7556 < 0.8 — 경로 지름길이 지배적이지 않다."
     },
     "gate_notes": {
       "group_concentration_ok": "top5_test_group_frac이 없어 0으로 본다."
@@ -138,15 +145,23 @@
     ]
   },
   "null_permutation": {
-    "auroc_mean": 0.49382242326602194,
+    "auroc_mean": 0.49298510818071023,
     "ci": [
-      0.3853731731003265,
-      0.6173278018195307
+      0.38922505828128723,
+      0.6166700403430422
     ],
-    "ci_upper": 0.6173278018195307,
-    "n_perm": 200,
-    "n_valid": 200,
-    "unit": "etld1_group"
+    "ci_upper": 0.6166700403430422,
+    "n_perm": 2000,
+    "n_valid": 2000,
+    "unit": "etld1_group",
+    "method": "group_block_exchange_approx",
+    "note": "정식 순열 검정이 아니라 **그룹 블록 교환 근사**다. 교환 가능성 가정은 'eTLD+1 그룹은 서로 바꿔 놓아도 무방하다'이며, 크기가 다른 그룹 사이에서는 라벨 구성을 순환 복사하므로 양성 총수가 보존되지 않는다. 행 단위 라벨 순열 바닥선은 별도로 `null_row_permutation`에 낸다.",
+    "positives_observed": 2626,
+    "positives_preserved": false,
+    "positives_range": [
+      827,
+      1955
+    ]
   },
   "baselines": {
     "charngram_lr": {
@@ -176,6 +191,15 @@
       "fit_on": "external_train",
       "n": 1014
     },
+    "path_lr": {
+      "auroc": 0.7556477558753391,
+      "ci": [
+        0.653884005373553,
+        0.8346123474517458
+      ],
+      "fit_on": "external_train",
+      "n": 1014
+    },
     "version_lr": {
       "auroc": 0.5,
       "ci": [
@@ -201,10 +225,30 @@
     "gates_passed": {
       "length_lr_neutral": true,
       "version_lr_neutral": true,
-      "bias_direction_ok": true,
       "group_concentration_ok": true
     },
-    "criteria_version": "prereg_v1"
+    "flags": {
+      "common_direction_bias": false,
+      "path_shortcut_dominant": false,
+      "match": "length"
+    },
+    "reason": "drop=-0.0630",
+    "is_primary_verdict": true,
+    "criteria_version": "prereg_v2"
+  },
+  "null_row_permutation": {
+    "auroc_mean": 0.5000312800936928,
+    "ci": [
+      0.4845674185701749,
+      0.515344971441573
+    ],
+    "ci_upper": 0.515344971441573,
+    "n_perm": 2000,
+    "n_valid": 2000,
+    "unit": "row",
+    "method": "row_label_permutation",
+    "note": "행 교환 가능성을 가정한 참조 바닥선. 양성 총수는 정확히 보존되지만 그룹 안 라벨 상관을 깨므로 판정 기준으로 쓰지 않는다.",
+    "positives_preserved": true
   },
   "per_seed_train": [
     {
@@ -458,5 +502,5 @@
       }
     }
   ],
-  "runtime_sec": 138.2
+  "runtime_sec": 226.5
 }

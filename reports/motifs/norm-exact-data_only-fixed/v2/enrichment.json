@@ -9044,5 +9044,93 @@
     "top_phishing": [],
     "top_benign": [],
     "stratum": "v2"
+  },
+  "usage": "reporting_only",
+  "note": "여러 시드의 train을 합쳐 고른 '시드 간 안정 motif' 목록이다. 시드마다 train/test 분할이 달라 한 시드의 test URL이 다른 시드의 train에 들어가므로, 절제 평가에는 쓰지 않는다(enrichment_seed{k}.json을 쓴다).",
+  "per_seed_top_overlap": {
+    "n_seeds": 5,
+    "sizes": {
+      "0": 20,
+      "1": 20,
+      "2": 20,
+      "3": 20,
+      "4": 20
+    },
+    "pairwise_jaccard": [
+      {
+        "seeds": [
+          0,
+          1
+        ],
+        "jaccard": 0.5384615384615384
+      },
+      {
+        "seeds": [
+          0,
+          2
+        ],
+        "jaccard": 0.5384615384615384
+      },
+      {
+        "seeds": [
+          0,
+          3
+        ],
+        "jaccard": 0.42857142857142855
+      },
+      {
+        "seeds": [
+          0,
+          4
+        ],
+        "jaccard": 0.6666666666666666
+      },
+      {
+        "seeds": [
+          1,
+          2
+        ],
+        "jaccard": 0.48148148148148145
+      },
+      {
+        "seeds": [
+          1,
+          3
+        ],
+        "jaccard": 0.2903225806451613
+      },
+      {
+        "seeds": [
+          1,
+          4
+        ],
+        "jaccard": 0.5384615384615384
+      },
+      {
+        "seeds": [
+          2,
+          3
+        ],
+        "jaccard": 0.48148148148148145
+      },
+      {
+        "seeds": [
+          2,
+          4
+        ],
+        "jaccard": 0.6
+      },
+      {
+        "seeds": [
+          3,
+          4
+        ],
+        "jaccard": 0.3793103448275862
+      }
+    ],
+    "jaccard_mean": 0.49432185990584204,
+    "jaccard_min": 0.2903225806451613,
+    "n_in_all_seeds": 7,
+    "n_in_any_seed": 35
   }
 }
