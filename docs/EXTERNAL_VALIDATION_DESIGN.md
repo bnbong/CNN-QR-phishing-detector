@@ -8,7 +8,7 @@
 |---|---|---|
 | phishing 주(primary) | **OpenPhish `public_feed` 최근 90일 커밋 이력 누적** (고유 URL 43,990건) | 수집 시점과 시차가 작아 진짜 temporal/domain-shift 검증이 된다. 외부 test는 크기보다 독립성, 신선도, 출처 명확성이 중요하다 |
 | phishing 보조(secondary robustness) | **Phishing.Database `phishing-links-ACTIVE.txt`** (GitHub raw, MIT) | 무키로 789,054줄, 경로 보유율 91%. 규모는 크지만 파일 자체의 최종 갱신이 2025-12-22인 **역사적 아카이브**이고 다수가 다른 피드의 재집계라 독립 표본이 아니다 |
-| benign 주 | **Common Crawl `CC-MAIN-2026-34` columnar index parquet × Tranco `GQJ9K` 조인** | 경로 보유율 99%대. 인기도 축을 Tranco로 통제 |
+| benign 주 | **Common Crawl `CC-MAIN-2026-34` columnar index parquet × Tranco `GQJ9K` 조인** | 경로 보유율 99%대. 정상 표본을 인기 도메인으로 제한. 잔여 인기도 편향은 Tranco 조인을 끈 민감도 분석으로 점검 |
 | benign 민감도(필수) | **Tranco 조인을 끈 unranked/general Common Crawl 표본**(EXT-B3) | benign=인기 웹사이트라는 축이 남아 있는지 검사한다. 오염 위험이 올라가는 것은 한계로 명시 |
 | benign 대조 | **Tranco 상위 5만 도메인**(경로 없음, EXT-B2) | "그럼 Tranco benign에서는?"에 같은 파이프라인으로 답하는 대조군 |
 | 제외 | PhishTank, URLhaus | 각각 Cloudflare 403(앱 키 발급 중단), malware 전용이라 라벨 정의 불일치 |
@@ -975,11 +975,13 @@ template:
 
 ## 9. 결정 요약
 
+이 표는 현재 규칙을 요약한다. 같은 방향의 편향이면 평가를 중단하던 규칙과 서로 다른 test 집합을 쓰던 G의 비쌍체 비교는 폐기했다. 초기 계획은 변경 이력으로만 해석한다.
+
 | # | 쟁점 | 결정 | 등급 |
 |---|---|---|---|
 | 1 | phishing 외부 소스 | OpenPhish public_feed(GitHub 이력 누적)가 주, Phishing.Database가 증량. PhishTank는 키 있을 때만 | 필수 |
-| 2 | benign 외부 소스 | **Common Crawl URL 인덱스 무작위 표본**이 주. Tranco는 대조군(EXT-B2)일 뿐 주 benign이 아니다 | 필수 |
-| 3 | benign 경로 편향 | benign에 경로 있는 URL이 충분해야 한다. `path_depth_ge1_frac`이 WebPhish와 같은 방향이면 **F 실행 중단** | 필수 |
+| 2 | benign 외부 소스 | **Common Crawl × Tranco 조인**이 주 세트다. Tranco 조인을 끈 unranked 표본은 인기도 편향의 민감도 조건이며, Tranco 도메인만 쓰는 EXT-B2와 구분한다 | 필수 |
+| 3 | benign 경로 편향 | **초기 중단 규칙 폐기.** 공유 편향은 경고로 기록하고 길이와 경로 유무를 함께 맞춘 평가 집합을 주 분석으로 사용한다. [6.1절](#61-f-a-zero-shot-transfer) 참조 | 필수 |
 | 4 | URLhaus / APWG | 제외 (라벨 정의 불일치 / 접근성) | 확정 |
 | 5 | 정규화, 스킴 | `normalize_url(mode="norm")` 그대로. 스킴 정책은 WebPhish에 맞춰 자동 판정하고 메타에 기록 | 필수 |
 | 6 | 중복 제거 | 정확 URL + **eTLD+1** 양방향, 주 결과는 `dedup=etld1` | 필수 |
@@ -987,14 +989,14 @@ template:
 | 8 | 외부 평가의 길이 매칭 | **적용한다.** 안 하면 길이 분포의 우연한 일치를 신호로 오독 | 필수 |
 | 9 | 층 소멸 | 사전 지정 규칙 유지. `comparable_strata` 교집합에서만 결론. 공집합이면 `L-none` 폴백 + descriptive | 필수 |
 | 10 | zero-shot 임계값 | WebPhish val 임계값 재사용. 외부에서 재선택 금지 | 필수 |
-| 11 | 바닥선 | 재학습 없는 **그룹 단위 라벨 순열** 검정 | 필수 |
+| 11 | 바닥선 | 재학습 없는 그룹 블록 교환 근사로 대조 기준값을 계산하고 행 순열 결과를 함께 보고한다. 정식 순열 검정으로 해석하지 않는다 | 필수 |
 | 12 | 베이스라인 전이 | char n-gram LR, byte-hist LR을 WebPhish train에서 fit → 외부에 apply. `baselines.py`에 fit/apply 분리 추가 | 필수 |
 | 13 | motif 재현 주 지표 | 512종 log OR의 **Spearman ρ**. 부호 일치율, Jaccard, 외부 절제는 보조 | 권장 |
 | 14 | 템플릿 키 | 경로 골격(숫자→#, 16진→H, 난수→R) + 쿼리 키 집합. 호스트 미포함 | 필수 |
 | 15 | 템플릿 클러스터링 | 정확 골격 일치 union → 토큰 3-shingle → MinHash(64) → LSH(0.7) → 연결 요소. `min_template_tokens=3` 게이트로 체이닝 방어 (파라미터는 2026-09-08 결정으로 초안에서 변경) | 권장 |
 | 16 | `path_depth==0` 행 | 템플릿 클러스터링에서 제외, 각자 단독 클러스터 | 필수 |
 | 17 | campaign 그룹 | eTLD+1 ∪ template의 union-find 연결 요소. `splits.py`는 수정하지 않는다 | 필수 |
-| 18 | G의 비교 | 표본 집합이 달라 **비쌍체**. `unpaired_delta_bootstrap_by_seed` | 필수 |
+| 18 | G의 비교 | **초기 비쌍체 비교 폐기.** 캠페인 test 집합 T를 고정하고 학습 표본 수를 맞춘 A_sm과 B를 쌍체 비교한다. [현재 비교 설계](PAPER_DRAFT.md#48-캠페인-및-템플릿-누출)와 [6.4절](#64-g-템플릿-분할) 참조 | 필수 |
 | 19 | 산출 경로 | `reports/{phase}/{source_tag}/{mode}/{condition_id}/{stratum}/`, 아티팩트는 `artifacts/external/...`. 1차 체크포인트 경로 침범 금지 | 필수 |
 | 20 | 다중 비교 | H-F1, H-G1만 Holm family. 나머지 탐색적 | 권장 |
 
