@@ -6,7 +6,7 @@
   "pooling": "seed_stratified",
   "p_definition": "bootstrap-tail pseudo-p (CI inversion); not a formal null-distribution p-value",
   "decision_rule": "판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. pseudo_p는 그 CI를 역전시켜 정의했고(가장 작은 alpha에서 CI가 0을 배제), Holm 보정(pseudo_p_holm)은 이 값에 건다. descriptive_only 항목은 family에서 제외한다. 쌍체 예측이 있는 비교(H1·H4)에는 그룹 단위 교환 순열 검정의 정식 p값을 perm_p로 함께 싣는다.",
-  "generated_at": "2026-09-08T11:06:15.610011+00:00",
+  "generated_at": "2026-09-10T04:08:03.967972+00:00",
   "tests": [
     {
       "hypothesis": "H1",
