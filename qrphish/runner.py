@@ -1449,6 +1449,16 @@ def compare_conditions(
     return out
 
 
+# 순열 검정이 만드는 null이 무엇인지 한 줄로 못 박는다. "엄밀한 순열 검정을
+# 통과했다"가 아니라 "정의한 그룹 블록 null 기준을 넘었다"가 맞는 서술이다 —
+# 반복 수를 늘려도 교환 가능성 가정 자체가 검증되지는 않는다(review_04).
+PERM_NULL_NOTE = (
+    "정의한 그룹 블록 null 기준. 같은 group(도메인 클러스터) 안의 행을 한 블록으로 묶어 "
+    "두 조건 라벨을 교환해 만든 영가설 분포이며, 블록 단위 교환 가능성을 가정한다. "
+    "반복 수를 늘리면 몬테카를로 오차만 줄고 그 가정이 검증되지는 않는다."
+)
+
+
 # H1~H4. matrix 항목 이름으로 조건을 지목한다(조건 id 문자열을 박지 않는다).
 HYPOTHESES: tuple[dict[str, Any], ...] = (
     {
@@ -1546,6 +1556,39 @@ def run_hypothesis_tests(
             and np.isfinite(ci[1])
             and (ci[0] > 0 or ci[1] < 0)
         )
+
+    # 정식 검정과 기술 추정을 필드로 갈라 둔다. 정식 = 영가설 분포를 실제로 만든
+    # 클러스터 순열 검정(perm_p)뿐이고, pseudo_p는 부트스트랩 CI를 역전시킨 기술
+    # 통계다(review_04 "통계 표 정리"). 표·본문이 둘을 섞어 쓰지 못하게 한다.
+    for t in tests:
+        if "error" in t:
+            t["formal_test"] = None
+            t["descriptive"] = None
+        elif t.get("perm_p") is not None:
+            t["formal_test"] = {
+                "method": "paired_cluster_permutation",
+                "p": float(t["perm_p"]),
+                "null": PERM_NULL_NOTE,
+                "alternative": "greater",
+            }
+            t["descriptive"] = None
+        else:
+            t["formal_test"] = None
+            t["descriptive"] = {
+                "method": (
+                    "paired_cluster_bootstrap_by_seed"
+                    if t.get("paired")
+                    else "unpaired_cluster_bootstrap_by_seed"
+                ),
+                "estimate": t.get("estimate"),
+                "ci": t.get("ci"),
+                "pseudo_p": t.get("pseudo_p"),
+                "note": (
+                    "정식 검정 없음 — 효과 추정치와 95% CI만 보고한다. pseudo_p는 CI를 "
+                    "역전시켜 정의한 값이지 영가설 분포에서 나온 p값이 아니다."
+                ),
+            }
+
     runnable = [
         t
         for t in tests
@@ -1572,12 +1615,15 @@ def run_hypothesis_tests(
             "bootstrap-tail pseudo-p (CI inversion); not a formal null-distribution p-value"
         ),
         "decision_rule": (
-            "판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. "
-            "pseudo_p는 그 CI를 역전시켜 정의했고(가장 작은 alpha에서 CI가 0을 배제), "
-            "Holm 보정(pseudo_p_holm)은 이 값에 건다. descriptive_only 항목은 family에서 "
-            "제외한다. 쌍체 예측이 있는 비교(H1·H4)에는 그룹 단위 교환 순열 검정의 정식 "
-            "p값을 perm_p로 함께 싣는다."
+            "정식 가설 검정은 쌍체 예측이 있는 비교(H1·H4)의 클러스터 순열 검정 하나뿐이며 "
+            "formal_test 필드에 담는다 — 귀무가설은 'ΔAUROC ≤ 0'이고, 그룹 단위로 두 조건 "
+            "라벨을 교환해 영가설 분포를 직접 만든다. 나머지(H2·H3)는 descriptive 필드에 "
+            "효과 추정치와 95% 클러스터 부트스트랩 CI만 싣는 기술 추정이다. pseudo_p와 "
+            "Holm 보정값(pseudo_p_holm)은 CI를 역전시켜 정의한 참고 수치이므로 정식 표에 "
+            "싣지 않고 부록으로만 보고한다. H3는 L-none과 L-exact의 평가 표본이 달라 쌍체 "
+            "해석이 성립하지 않는다."
         ),
+        "permutation_null": PERM_NULL_NOTE,
         "generated_at": datetime.now(UTC).isoformat(),
         "tests": tests,
     }
@@ -2411,6 +2457,8 @@ PROBE_NOTES = (
     "목록이 그 구분을 보여준다.",
     "셔플 기준선은 그룹 단위로 목표를 갈아끼운다(행 단위 셔플은 기준선을 부풀린다).",
     "프로브 입력은 GAP **이후** 128차원 벡터(분류 헤드의 입력)다. 'GAP 직전'이 아니다.",
+    "targets[*].per_seed에 시드별 점수·CI·두 판정을 그대로 싣는다. 이 블록이 있어야 "
+    "나중에 판정 규약이 바뀌어도 재학습 없이 전 시드 판정을 정확히 재집계할 수 있다.",
 )
 # 요약에 싣는 세 질문의 키. ``used_in_decision``은 판정 자체가 불가능하므로 뺀다.
 PROBE_QUESTIONS = ("accessible", "learned_gain", "accessible_and_gained")
@@ -2431,6 +2479,12 @@ def _probe_top(lex: dict, names, k: int = 10) -> list[dict]:
     ]
 
 
+def _probe_n(summary: dict, question: str) -> str:
+    """요약 블록의 통과 목표 수. 미집계면 개수 대신 그렇게 적는다."""
+    blk = summary.get(question)
+    return str(blk["n"]) if isinstance(blk, dict) else "미집계"
+
+
 def _probe_summary(lex: dict) -> dict:
     """목표별 집계 -> 세 질문 요약 (review_03 6절).
 
@@ -2442,6 +2496,12 @@ def _probe_summary(lex: dict) -> dict:
     n_targets = len(lex)
     out: dict[str, Any] = {"n_targets": n_targets}
     for q in PROBE_QUESTIONS:
+        # 어떤 목표라도 그 질문의 판정이 미정(None)이면 **개수 자체를 내지 않는다**.
+        # 미정을 거짓으로 접어 세면 "0개 통과"와 "재집계 못 함"이 같은 수로 보인다 —
+        # review_04가 지적한 오류가 정확히 그 종류였다.
+        if any(v.get(q) is None for v in lex.values()):
+            out[q] = None
+            continue
         names = [k for k, v in lex.items() if v.get(q)]
         out[q] = {
             "n": len(names),
@@ -2449,21 +2509,46 @@ def _probe_summary(lex: dict) -> dict:
             "targets": sorted(names),
             "top10": _probe_top(lex, names),
         }
-    only = [k for k, v in lex.items() if v.get("accessible") and not v.get("learned_gain")]
-    out["accessible_only"] = {
-        "n": len(only),
-        "note": (
-            "셔플 기준선은 CI 수준에서 넘지만 무작위 초기화 CNN 기준선은 넘지 못한 목표. "
-            "정보는 선형으로 접근 가능하되 '학습이 접근성을 높였다'고는 말할 수 없다."
-        ),
-        "top10": _probe_top(lex, only),
-    }
+    if out["accessible"] is None or out["learned_gain"] is None:
+        out["accessible_only"] = None
+    else:
+        only = [k for k, v in lex.items() if v.get("accessible") and not v.get("learned_gain")]
+        out["accessible_only"] = {
+            "n": len(only),
+            "note": (
+                "셔플 기준선은 CI 수준에서 넘지만 무작위 초기화 CNN 기준선은 넘지 못한 목표. "
+                "정보는 선형으로 접근 가능하되 '학습이 접근성을 높였다'고는 말할 수 없다."
+            ),
+            "top10": _probe_top(lex, only),
+        }
     out["used_in_decision"] = None
-    # 하위 호환 별칭(표·옛 스크립트가 읽던 키).
-    out["n_significant"] = out["accessible_and_gained"]["n"]
-    out["frac_significant"] = out["accessible_and_gained"]["frac"]
-    out["top10"] = out["accessible_and_gained"]["top10"]
+    # 하위 호환 별칭(표·옛 스크립트가 읽던 키). 미집계면 옛 키도 만들지 않는다.
+    both = out["accessible_and_gained"]
+    if isinstance(both, dict):
+        out["n_significant"] = both["n"]
+        out["frac_significant"] = both["frac"]
+        out["top10"] = both["top10"]
     return out
+
+
+# results.json의 ``targets[name].per_seed``에 싣는 시드별 원값. 표·재집계에 필요한
+# 최소 집합이며, 여기에 CI가 남아야 ``accessible``의 전 시드 판정을 재실행 없이
+# 정확히 복원할 수 있다.
+PROBE_SEED_FIELDS = ("score", "ci", "shuffle", "shuffle_ci", "random_init", "random_init_ci")
+
+
+def _probe_seed_record(seed: int, row: dict) -> dict:
+    """시드 한 개의 프로브 원값 + 그 시드에서의 두 판정."""
+    rec: dict[str, Any] = {"seed": int(seed)}
+    for f in PROBE_SEED_FIELDS:
+        v = row.get(f)
+        if isinstance(v, list | tuple):
+            rec[f] = [float(x) for x in v]
+        elif v is not None:
+            rec[f] = float(v)
+    rec["accessible"] = _seed_accessible(row)
+    rec["learned_gain"] = bool(row.get("above_random_init", row.get("learned_gain")))
+    return rec
 
 
 def _probe_aggregate(per_seed: list[dict], n_seeds: int) -> dict:
@@ -2483,8 +2568,14 @@ def _probe_aggregate(per_seed: list[dict], n_seeds: int) -> dict:
         names |= set(d["targets"])
     out: dict[str, Any] = {}
     for name in sorted(names):
-        rows = [d["targets"][name] for d in per_seed if name in d["targets"]]
-        usable = [r for r in rows if "skipped" not in r]
+        pairs = [
+            (int(d.get("seed", i)), d["targets"][name])
+            for i, d in enumerate(per_seed)
+            if name in d["targets"]
+        ]
+        rows = [r for _, r in pairs]
+        usable_pairs = [(sd, r) for sd, r in pairs if "skipped" not in r]
+        usable = [r for _, r in usable_pairs]
         if not usable:
             out[name] = {"skipped": rows[0].get("skipped", "unknown"), "n_seeds": 0}
             continue
@@ -2510,6 +2601,11 @@ def _probe_aggregate(per_seed: list[dict], n_seeds: int) -> dict:
                 float(np.nanmean([r["random_init_ci"][0] for r in usable])),
                 float(np.nanmean([r["random_init_ci"][1] for r in usable])),
             ],
+            # 시드별 원값. 이게 results.json에 남아야 나중에 규약이 바뀌어도 재학습 없이
+            # **정확히** 재집계할 수 있다. 이전 스키마에는 이 블록이 없어서 목표별·시드별
+            # CI가 사라졌고, 그 결과 accessible의 전 시드 판정을 복원할 수 없었다
+            # (review_04 "가장 중요한 문제").
+            "per_seed": [_probe_seed_record(sd, r) for sd, r in usable_pairs],
             # 옛 결과(accessible 필드가 없는 seed json)도 읽을 수 있게 fallback을 둔다.
             # accessible의 fallback은 저장된 CI로 직접 재검산한다.
             "n_seeds_accessible": int(sum(_seed_accessible(r) for r in usable)),
@@ -2635,7 +2731,6 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
         # 라벨 프로브는 어휘 증거가 아니라 상한 참고선이므로 요약 카운트에서 뺀다.
         lex = {k: v for k, v in agg.items() if v.get("family") not in (None, "label")}
         summary = _probe_summary(lex)
-        sig = summary["accessible_and_gained"]["targets"]
 
         res = {
             "schema_version": SCHEMA_VERSION,
@@ -2666,9 +2761,9 @@ def run_probes(cfg: Any, strata: list[str] | None = None) -> dict:
         out[stratum] = res
         print(
             f"[probes] {stratum} 종료 ({res['runtime_sec']}s) — "
-            f"접근 가능 {summary['accessible']['n']}/{summary['n_targets']}, "
-            f"학습 이득 {summary['learned_gain']['n']}/{summary['n_targets']}, "
-            f"둘 다 {len(sig)}/{summary['n_targets']}",
+            f"접근 가능 {_probe_n(summary, 'accessible')}/{summary['n_targets']}, "
+            f"학습 이득 {_probe_n(summary, 'learned_gain')}/{summary['n_targets']}, "
+            f"둘 다 {_probe_n(summary, 'accessible_and_gained')}/{summary['n_targets']}",
             flush=True,
         )
     return out
@@ -4710,24 +4805,71 @@ def recompute_campaign_verdicts(
 
 
 # 저장된 프로브 results.json에서 세 질문을 다시 만들 때, **정확히** 복원되는 것과
-# 근사만 가능한 것을 구분해 적는다. seed{k}.json 캐시가 남아 있지 않은 결과에는
-# 시드별 CI가 없어 accessible의 "전 시드 일치"를 정확히 재현할 수 없다.
+# 아예 복원할 수 없는 것을 구분해 적는다. 근사(시드 평균 CI) 경로는 두지 않는다 —
+# 평균 CI로는 "전 시드에서 성립"을 판정할 수 없는데도 그 값이 정확한 집계인 양
+# 표와 본문에 실렸던 것이 review_04가 지적한 오류다.
 PROBE_RECOMPUTE_BASIS = {
     "learned_gain": "exact:above_random_init (전 시드 AND가 그대로 저장돼 있다)",
     "accessible_and_gained": "exact:significant (전 시드 AND가 그대로 저장돼 있다)",
     "accessible": (
-        "approx:mean_ci — 시드별 CI가 없어 '전 시드에서 CI 하한 > 셔플 CI 상한'을 "
-        "정확히 재현할 수 없다. 시드 평균 CI로 판정하고, accessible_and_gained가 참인 "
-        "목표는 논리적으로 accessible이므로 OR로 덮는다."
+        "exact:per_seed — seed{k}.json 캐시 또는 targets[*].per_seed가 있을 때만 "
+        "'전 시드에서 CI 하한 > 셔플 CI 상한'을 판정한다. 둘 다 없으면 미집계(None)로 "
+        "남기고 재실행이 필요하다고 표시한다. 시드 평균 CI로 근사하지 않는다."
     ),
 }
-# 정확 재계산에 필요한데 results.json에는 없는 필드(= seed{k}.json 캐시에만 있던 것).
+# 정확 재계산에 필요한데 옛 results.json에는 없는 필드.
 PROBE_MISSING_FIELDS = (
-    "per_seed targets[*].ci / shuffle_ci — 시드별 CI. reports/probes/{cid}/{stratum}/"
-    "seed{k}.json 캐시가 남아 있으면 정확 재계산이 가능하지만, 현재 저장소에는 층 "
-    "results.json만 남아 있다(run_probes가 층 완료 후 캐시를 지우지는 않으나, "
-    "지금 커밋된 결과에는 포함돼 있지 않다).",
+    "targets[*].per_seed[*].ci / shuffle_ci — 목표별·시드별 CI. "
+    "reports/probes/{cid}/{stratum}/seed{k}.json 캐시가 남아 있으면 재학습 없이 정확 "
+    "재집계가 가능하지만, 커밋된 결과에는 층 results.json만 있고 그 안에도 시드별 CI가 "
+    "없다. 이 경우 저장된 CNN 체크포인트에서 프로브만 다시 돌려야 한다(노트북 [11]).",
 )
+PROBE_RERUN_NOTE = (
+    "accessible(질문 ①)은 미집계다. 저장된 자료에 목표별·시드별 CI가 없어 전 시드 판정을 "
+    "복원할 수 없다. 옛 표는 이 칸에 accessible_and_gained(옛 n_significant)를 대신 "
+    "채웠는데, 그건 서로 다른 질문의 답이다."
+)
+
+
+def _probe_seed_blocks(sdir: Path, data: dict) -> tuple[list[dict], str] | None:
+    """정확 재집계에 쓸 시드별 블록을 찾는다. 없으면 ``None``.
+
+    두 출처를 본다. (1) ``seed{k}.json`` 캐시 — ``_probe_one_seed``의 원출력이라 목표별
+    시드 CI가 모두 들어 있다. (2) 새 스키마의 ``targets[*].per_seed`` — 층 results.json
+    안에 시드별 점수·CI·판정을 되심은 블록. 근사 경로는 없다.
+    """
+    caches = []
+    for cpath in sorted(sdir.glob("seed*.json")):
+        try:
+            blk = json.loads(cpath.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(blk, dict) and isinstance(blk.get("targets"), dict):
+            caches.append(blk)
+    if caches:
+        return caches, "exact:seed_cache"
+
+    targets = data.get("targets") or {}
+    by_seed: dict[int, dict[str, dict]] = {}
+    found = False
+    for name, row in targets.items():
+        if not isinstance(row, dict):
+            continue
+        for rec in row.get("per_seed") or []:
+            if not isinstance(rec, dict) or "ci" not in rec:
+                continue
+            found = True
+            by_seed.setdefault(int(rec["seed"]), {})[name] = {
+                "kind": row.get("kind"),
+                "family": row.get("family"),
+                **{k: v for k, v in rec.items() if k != "seed"},
+                "above_random_init": bool(rec.get("learned_gain")),
+                "significant": bool(rec.get("accessible") and rec.get("learned_gain")),
+            }
+    if found:
+        blocks = [{"seed": sd, "targets": t} for sd, t in sorted(by_seed.items())]
+        return blocks, "exact:results_per_seed"
+    return None
 
 
 def recompute_probe_summaries(
@@ -4736,25 +4878,27 @@ def recompute_probe_summaries(
     """저장된 프로브 결과에 **세 질문 분리 보고**를 적용한다 (재학습 없음).
 
     ``run_probes``는 ``results.json``이 있으면 층을 건너뛰므로, 보고 규약이 바뀌어도
-    재실행으로는 새 요약이 나오지 않는다. 이 함수는 저장된 목표별 집계만 읽어
+    재실행으로는 새 요약이 나오지 않는다. 이 함수는 저장된 결과만 읽어
     ``accessible`` / ``learned_gain`` / ``accessible_and_gained`` / ``used_in_decision``을
     채우고 요약을 다시 만든다.
 
-    **정확도 주의.** ``learned_gain``과 ``accessible_and_gained``는 저장된 전 시드 AND
-    (``above_random_init`` / ``significant``)에서 정확히 복원된다. ``accessible``은 시드별
-    CI가 남아 있지 않으면 시드 평균 CI로만 판정할 수 있다 — 그 경우 목표마다
-    ``accessible_basis``에 근거를 적고, 반환값의 ``missing_fields``로 무엇이 부족한지 알린다.
+    **정확 재집계만 한다.** ``learned_gain``과 ``accessible_and_gained``는 저장된 전 시드
+    AND(``above_random_init`` / ``significant``)에서 정확히 복원된다. ``accessible``은
+    ``seed{k}.json`` 캐시나 새 스키마의 ``targets[*].per_seed``가 있을 때만 전 시드로
+    판정하고, 없으면 ``None``(미집계)으로 남긴 뒤 그 층을 ``needs_rerun``에 넣는다.
+    시드 평균 CI로 근사하던 옛 경로는 제거했다 — 평균 CI는 전 시드 일치 여부를 담지
+    못하는데도 정확한 집계처럼 보고돼 결론을 틀리게 만들었다(review_04).
 
     Returns:
-        ``{"strata": {stratum: {요약}}, "basis": ..., "missing_fields": [...],
-        "updated": [경로]}``
+        ``{"strata": {stratum: {요약}}, "basis": ..., "needs_rerun": [...],
+        "missing_fields": [...], "updated": [경로]}``
     """
     cid = condition_id_ or MAIN_CONDITION
     root = _reports_dir(cfg) / "probes" / cid
     want = set(strata) if strata else None
     per_stratum: dict[str, Any] = {}
     updated: list[str] = []
-    approximated = False
+    needs_rerun: list[str] = []
     for rpath in sorted(root.glob("*/results.json")):
         stratum = rpath.parent.name
         if want and stratum not in want:
@@ -4763,25 +4907,28 @@ def recompute_probe_summaries(
         targets = data.get("targets")
         if not isinstance(targets, dict):
             continue
-        for row in targets.values():
-            if not isinstance(row, dict) or "ci" not in row:
-                continue
-            gained = bool(row.get("above_random_init"))
-            both = bool(row.get("significant"))
-            if "accessible" in row:
-                basis = row.get("accessible_basis", "exact:per_seed")
-                acc = bool(row["accessible"])
-            else:
-                lo = float(row["ci"][0])
-                hi = float(row["shuffle_ci"][1])
-                acc = bool(np.isfinite(lo) and np.isfinite(hi) and lo > hi) or both
-                basis = "approx:mean_ci"
-                approximated = True
-            row["accessible"] = acc
-            row["accessible_basis"] = basis
-            row["learned_gain"] = gained
-            row["accessible_and_gained"] = both
-            row["used_in_decision"] = None
+
+        exact = _probe_seed_blocks(rpath.parent, data)
+        if exact is not None:
+            blocks, basis = exact
+            n_seeds = len(data.get("seeds") or blocks)
+            targets = _probe_aggregate(blocks, n_seeds)
+            for row in targets.values():
+                if isinstance(row, dict) and "ci" in row:
+                    row["accessible_basis"] = basis
+            data["targets"] = targets
+        else:
+            basis = "unrecomputable:no_per_seed_ci"
+            needs_rerun.append(stratum)
+            for row in targets.values():
+                if not isinstance(row, dict) or "ci" not in row:
+                    continue
+                row["accessible"] = None
+                row["accessible_basis"] = basis
+                row["learned_gain"] = bool(row.get("above_random_init"))
+                row["accessible_and_gained"] = bool(row.get("significant"))
+                row["used_in_decision"] = None
+
         lex = {
             k: v
             for k, v in targets.items()
@@ -4790,30 +4937,38 @@ def recompute_probe_summaries(
         summary = _probe_summary(lex)
         summary["label_probe"] = targets.get("label:phishing")
         summary["recompute_basis"] = dict(PROBE_RECOMPUTE_BASIS)
+        summary["accessible_basis"] = basis
+        if exact is None:
+            summary["needs_rerun"] = PROBE_RERUN_NOTE
+            summary["missing_fields"] = list(PROBE_MISSING_FIELDS)
         data["summary"] = summary
         data["notes"] = list(PROBE_NOTES)
         rpath.write_text(
             json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
         )
         updated.append(str(rpath))
-        per_stratum[stratum] = {
-            q: {"n": summary[q]["n"], "frac": summary[q]["frac"]} for q in PROBE_QUESTIONS
-        } | {
+        per_stratum[stratum] = {q: summary[q] for q in PROBE_QUESTIONS} | {
             "n_targets": summary["n_targets"],
-            "accessible_only": summary["accessible_only"]["n"],
+            "accessible_only": (
+                summary["accessible_only"]["n"]
+                if isinstance(summary["accessible_only"], dict)
+                else None
+            ),
+            "accessible_basis": basis,
             "used_in_decision": None,
         }
         print(
-            f"[probes] {stratum} 재요약 — accessible {summary['accessible']['n']}/"
-            f"{summary['n_targets']}, learned_gain {summary['learned_gain']['n']}/"
-            f"{summary['n_targets']}, 둘 다 {summary['accessible_and_gained']['n']}/"
-            f"{summary['n_targets']} (accessible만 {summary['accessible_only']['n']})",
+            f"[probes] {stratum} 재요약({basis}) — "
+            f"accessible {_probe_n(summary, 'accessible')}/{summary['n_targets']}, "
+            f"learned_gain {_probe_n(summary, 'learned_gain')}/{summary['n_targets']}, "
+            f"둘 다 {_probe_n(summary, 'accessible_and_gained')}/{summary['n_targets']}",
             flush=True,
         )
     return {
         "condition_id": cid,
         "strata": per_stratum,
         "basis": dict(PROBE_RECOMPUTE_BASIS),
-        "missing_fields": list(PROBE_MISSING_FIELDS) if approximated else [],
+        "needs_rerun": needs_rerun,
+        "missing_fields": list(PROBE_MISSING_FIELDS) if needs_rerun else [],
         "updated": updated,
     }

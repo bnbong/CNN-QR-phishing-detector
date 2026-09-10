@@ -7,10 +7,10 @@
 
 ## 0. 연구 명제와 논증 구조
 
-QR은 URL의 무손실·결정적 인코딩이다. 따라서 "QR 이미지에서 피싱을 분류할 수 있는가"는 정보이론적으로 자명하게 참이고(디코딩 후 텍스트 분류기를 쓰면 됨), 논문의 실제 질문은 아래 셋이다. 이 **RQ1 ~ RQ3가 유일한 canonical 연구 질문**이며 14.1절, `docs/RESULTS.md`, `README.md`가 모두 같은 정의를 쓴다.
+QR은 URL의 무손실·결정적 인코딩이다. 다만 인코딩이 문자열 정보를 보존한다는 사실만으로 "QR 이미지에서 피싱을 분류할 수 있는가"가 자동으로 풀리지는 않는다. 그 정보의 라벨 예측력과 제한된 CNN의 학습 가능성은 실험 문제다. 논문의 실제 질문은 아래 셋이다. 이 **RQ1 ~ RQ3가 유일한 canonical 연구 질문**이며 14.1절, `docs/RESULTS.md`, `README.md`가 모두 같은 정의를 쓴다.
 
 - **RQ1 (shortcut 통제 후 신호 존재)** 길이·QR 버전·패딩 경계 같은 shortcut을 모두 통제한 뒤에도 QR 모듈 격자에 phishing-discriminative signal이 남는가. 검증은 그 조건에서 성능이 라벨 셔플 바닥을 유의하게 넘는지로만 한다.
-- **RQ2 (디코딩 없는 신호 접근)** CNN이 명시적 QR 디코딩 없이 QR의 공간 배치를 이용해 **URL 유래 내용·순서 신호(URL-derived content/order signal)**에 접근·활용(exploit)하는가. 정량 지표는 **디코딩 텍스트 참조 기준 대비 갭**이다. 문자·n-gram을 실제로 복원(recover)했다는 주장은 하지 않는다. 선형 프로브는 개별 n-gram·키워드가 표현에서 선형으로 복원된다는 증거를 찾지 못했다(14.2 D항, `RESULTS.md` 5-B절).
+- **RQ2 (디코딩 없는 신호 접근)** CNN이 명시적 QR 디코딩 없이 QR의 공간 배치를 이용해 **URL 유래 내용·순서 신호(URL-derived content/order signal)**에 접근·활용(exploit)하는가. 정량 지표는 **디코딩 텍스트 참조 기준 대비 갭**이다. 문자·n-gram을 실제로 복원(recover)했다는 주장은 하지 않는다. 선형 프로브는 개별 n-gram·키워드가 표현에서 선형으로 복원된다는 증거를 찾지 못했다. 학습에 의한 접근성 향상은 경로 구조 두 목표(`has_path`, `path_depth`)에서만 확인되었으며, 어휘 접근성 자체의 전 시드 판정은 재집계가 필요하다(14.2 D항, `RESULTS.md` 5-B절).
 - **RQ3 (국소 motif)** 그 신호가 여러 피싱 QR에서 반복되는 국소 motif로 나타나며 새 도메인·데이터셋에서도 재현되는가.
 
 논문은 3층 구조로 쓴다.
@@ -601,7 +601,7 @@ reports_dir: "reports"    # P0 카운트 표, 진단 json, 집계 csv (러너에
 | 원래 QR 공간 배치가 CNN의 분류에 도움이 된다 | 강하게 지지 |
 | 클래스와 연관된 국소 패치 빈도 분포(class-associated local patch-frequency distribution)가 존재한다 | 지지 (`RESULTS.md` 7절) |
 | marginal bit/byte composition으로 설명되지 않는 국소 공간 의존성이 존재한다 | 미검증 — within-QR 셔플 null 대기 |
-| CNN 내부에서 URL 문자/n-gram 자체가 복원된다 | **기각** — 선형 프로브에서 유의 목표가 거의 없다 (`RESULTS.md` 5-B절) |
+| CNN 내부에서 URL 문자/n-gram 자체가 복원된다 | 사용한 선형 프로브와 판정 기준으로는 복원 증거를 확보하지 못했다. 학습에 의한 접근성 향상은 경로 구조 두 목표(`has_path`, `path_depth`)에서만 확인되었으며, 어휘 접근성 자체의 전 시드 판정은 재집계가 필요하다 (`RESULTS.md` 5-B절) |
 | 이 패턴이 다른 피싱 데이터에서도 일반화된다 | 미검증 |
 
 **용어 한정.** 이 연구에서 "visual"은 raw-image의 시각 패턴이 아니라 **정규화된 QR 모듈 격자의 공간 패턴**을 가리킨다. 입력은 완벽히 정렬된 `(2, n, n)` 비트 격자이고 두 번째 채널로 데이터 모듈 마스크까지 준다. 촬영·인쇄·회전이 개입하는 실제 QR 이미지에 대한 주장은 이 실험 범위 밖이다.
@@ -624,7 +624,7 @@ motif enrichment는 motif별 존재율 오즈비(Haldane-Anscombe +0.5 보정)�
 
 **Grad-CAM 보조화.** Grad-CAM을 RQ 증명의 주 분석에서 보조 시각화로 내린다. 표본은 첫 시드의 앞쪽 128개가 아니라 5시드 전부 × test 클래스별 균형 무작위 표본(기본 클래스당 64)이다. 타깃은 부호를 준다. phishing은 `+logit`, benign은 `−logit`이라야 benign CAM이 "benign의 근거"가 된다. 질량 자체가 아니라 **enrichment = CAM 질량 분수 / 영역 면적 분수**를 보고하고, 균일 난수 attribution 기준선(기대값 1)을 나란히 싣는다. 영역 크기로 정규화하지 않으면 char 영역에 60%가 몰린 것이 많이 본 것인지 덜 본 것인지 알 수 없다. 여기에 모델 파라미터 무작위화 sanity check(무작위화 모델의 CAM과 상관이 낮아야 한다)와 옵션으로 signed Integrated Gradients를 붙인다. 인과 주장은 Grad-CAM이 아니라 C의 절제 결과로만 한다.
 
-**유의성 규칙 요약.** 주 가설 H1 ~ H4의 판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. p값은 그 CI를 역전시켜 정의하고(CI가 0을 배제하는 가장 작은 α) Holm 보정을 걸되, 이름은 `bootstrap-tail pseudo-p (Holm)`으로 쓴다. 영가설 아래에서 재표집한 정식 p값이 아니므로 주 결과는 ΔAUROC와 CI로 두고 pseudo-p는 보조로만 읽는다. 쌍체 가설에는 클러스터 순열 검정 p가 추가될 예정이다. motif enrichment는 5시드 부호 일치 + held-out test 부호 일치 + 풀링 CI 0 배제 + 최소 출현율. 프로브는 전 시드에서 두 기준선 CI 상한 초과. 절제는 쌍체 CI가 0을 제외하는 시드 수로 보고한다.
+**유의성 규칙 요약.** 주 가설 H1 ~ H4의 판정은 쌍체 ΔAUROC의 95% 양측 백분위 CI가 0을 배제하는지로 한다. p값은 그 CI를 역전시켜 정의하고(CI가 0을 배제하는 가장 작은 α) Holm 보정을 걸되, 이름은 `bootstrap-tail pseudo-p (Holm)`으로 쓴다. 영가설 아래에서 재표집한 정식 p값이 아니므로 정식 가설 검정 표에서 빼고 부록 성격의 참고값으로만 둔다. H1·H4는 클러스터 순열 p를, H2는 효과 추정치와 CI를 주 보고 지표로 삼는다. 쌍체 가설에는 클러스터 순열 검정 p가 추가될 예정이다. motif enrichment는 5시드 부호 일치 + held-out test 부호 일치 + 풀링 CI 0 배제 + 최소 출현율. 프로브는 전 시드에서 두 기준선 CI 상한 초과. 절제는 쌍체 CI가 0을 제외하는 시드 수로 보고한다.
 
 **H2의 쌍체화.** 참조 기준(char n-gram LR)의 test 예측을 `preds_test_charngram.npz`로 함께 저장해 H2를 CNN 대 참조의 쌍체 부트스트랩으로 검정한다. 예측이 저장되지 않은 옛 산출물에서는 참조 AUROC를 상수로 두는 옛 방식으로 되돌아가되 `descriptive_only=True`로 표시해 Holm family에서 제외한다. 참조 기준 자체의 표본 변동이 빠져 CI가 좁게 나오므로 검정으로 쓸 수 없다.
 

@@ -520,6 +520,9 @@ def _load_phase(name: str, condition: str = BASE) -> dict[str, dict]:
     return out
 
 
+# 새 필드가 없을 때 쓰는 표시. 옛 값을 대신 채우지 않는다.
+UNAGGREGATED = "미집계"
+
 # 어휘 프로브가 답하는(또는 답하지 못하는) 세 질문. review_03 6절.
 PROBE_QUESTION_ROWS = (
     ("① 선형으로 접근 가능한가 (`accessible`)", "accessible"),
@@ -540,6 +543,7 @@ def table_probes() -> str:
     if not probes:
         return ""
     rows: list[tuple[str, list[str]]] = []
+    missing = False
     for label, key in PROBE_QUESTION_ROWS:
         cells = []
         for s in STRATA:
@@ -549,14 +553,22 @@ def table_probes() -> str:
                 cells.append("—")
             elif isinstance(blk, dict):
                 cells.append(f"{blk['n']} / {summ['n_targets']} ({blk['frac'] * 100:.1f}%)")
-            else:  # 재요약 전의 옛 결과
-                cells.append(f"{summ.get('n_significant', '—')} / {summ['n_targets']}")
+            else:
+                # 옛 폴백은 여기서 `n_significant`(= 질문 ③의 답)를 세 질문 칸에 모두
+                # 넣었다. 그래서 "접근성 2/91"처럼 서로 다른 질문의 답이 같은 수로
+                # 보고됐다(review_04). 이제 대신 넣지 않고 미집계로 남긴다.
+                cells.append(UNAGGREGATED)
+                missing = True
         rows.append((label, cells))
     only = []
     for s in STRATA:
         summ = (probes.get(s) or {}).get("summary")
         blk = (summ or {}).get("accessible_only")
-        only.append(str(blk["n"]) if isinstance(blk, dict) else "—")
+        if isinstance(blk, dict):
+            only.append(str(blk["n"]))
+        else:
+            only.append(UNAGGREGATED if summ else "—")
+            missing = missing or bool(summ)
     rows.append(("①만 만족 (②는 아님)", only))
     rows.append(
         ("④ 실제 분류 결정에 쓰이는가 (`used_in_decision`)",
@@ -576,6 +588,18 @@ def table_probes() -> str:
         "표현을 읽을 뿐 결정 경로에 개입하지 않는다.",
         "",
     ]
+    if missing:
+        out.insert(2, "")
+        out.insert(
+            2,
+            f"각주: **{UNAGGREGATED}**는 저장된 프로브 결과에 목표별·시드별 CI가 없어 "
+            "'전 시드에서 성립'을 판정할 수 없다는 뜻이다(값이 0이라는 뜻이 아니다). "
+            "`reports/probes/{cid}/{stratum}/seed{k}.json` 캐시가 있으면 "
+            "`recompute_probe_summaries`로 정확히 재집계되고, 없으면 저장된 CNN "
+            "체크포인트에서 프로브만 다시 돌려야 한다(노트북 [11]). "
+            "이전 문서의 \"접근성 2/91\"은 이 칸에 질문 ③의 답(옛 `n_significant`)을 "
+            "대신 채운 폴백의 산물이며, 접근성의 집계 결과가 아니다.",
+        )
 
     for s in STRATA:
         summ = (probes.get(s) or {}).get("summary")
@@ -727,55 +751,164 @@ H_LABEL = {
     "H4": "정상 배치 > shuffle-pos",
 }
 
+# 각 가설의 귀무가설. "기각"만 적으면 무엇을 기각했는지 알 수 없어서 판정 문구에
+# 그대로 넣는다(review_04 "통계 표 정리").
+H_NULL = {
+    "H1": "H0: ΔAUROC ≤ 0 (CNN이 라벨 셔플 바닥보다 높지 않다)",
+    "H2": "H0: ΔAUROC ≤ 0 (참조 기준이 CNN보다 높지 않다)",
+    "H3": "H0: ΔAUROC ≤ 0 (L-none이 L-exact보다 높지 않다)",
+    "H4": "H0: ΔAUROC ≤ 0 (정상 배치가 shuffle-pos보다 유리하지 않다)",
+}
+
+# 정식 검정이 있는 가설과 기술 추정만 있는 가설. 정식 = 영가설 분포를 실제로 만든
+# 클러스터 순열 검정(H1·H4)뿐이다. H2는 쌍체 효과 추정치와 CI만, H3는 평가 표본이
+# 달라 비쌍체 추정치와 CI만 싣는다.
+H_FORMAL = ("H1", "H4")
+
 
 def _p(value: float) -> str:
-    """pseudo-p(Holm 보정) / 순열 p 표기. 2000회 재표집 해상도(1/2001) 아래는 부등호로 쓴다."""
+    """순열 p / pseudo-p 표기. 2000회 재표집 해상도(1/2001) 아래는 부등호로 쓴다."""
     v = float(value)
     if v < 0.001:
         return "<0.001"
     return f"{v:.3f}"
 
 
-def hypotheses_table() -> str:
-    """H1 ~ H4 판정 표 — 층별 추정치·95% CI·Holm 보정 pseudo-p·순열 p·판정.
+def _est_ci(t: dict) -> tuple[str, str]:
+    lo, hi = t["ci"][:2]
+    return f"{float(t['estimate']):+.3f}", f"[{float(lo):+.3f}, {float(hi):+.3f}]"
 
-    pseudo-p는 부트스트랩 백분위 CI를 역전시켜 정의한 값이지 영가설 분포에서 나온 정식
-    p값이 아니다(``hypotheses.json``의 ``p_definition`` 참고). 쌍체 예측이 있는 H1·H4에는
-    그룹 단위 교환 순열 검정의 정식 p값을 "순열 p" 열에 함께 싣는다.
 
-    ``reports/hypotheses.json``은 시드 층화 클러스터 부트스트랩(``pooling:
-    seed_stratified``)으로 만든 값이다. 시드별로 AUROC를 계산해 평균하므로
-    시드 간 점수 척도 차이가 통합 추정치를 끌고 가지 않는다.
-    """
+def _verdict(h: str, t: dict) -> str:
+    """귀무가설을 명시한 판정 문구. '기각' 한 단어로 뭉뚱그리지 않는다."""
+    ci = t.get("ci")
+    excludes = bool(ci and (float(ci[0]) > 0 or float(ci[1]) < 0))
+    if h in H_FORMAL:
+        pp = t.get("perm_p")
+        if pp is None:
+            return f"{H_NULL[h]} — 순열 검정 미산출"
+        verdict = "우세 근거 있음" if float(pp) < 0.05 else "우세 근거 부족"
+        return f"{H_NULL[h]} — 순열 p {_p(pp)}, {verdict}"
+    if h == "H2":
+        base = "참조 기준이 더 높다는 근거" if excludes else "참조 기준 우세 근거 부족"
+        return f"검정 없음 — 쌍체 ΔAUROC의 95% CI가 0을 {'배제' if excludes else '포함'}, {base}"
+    tail = "0을 배제" if excludes else "0을 포함"
+    return f"검정 없음 — 비쌍체 ΔAUROC의 95% CI가 {tail} (쌍체 해석 불가)"
+
+
+def _hyp_tests() -> dict[tuple[str, str], dict]:
     path = REPORTS / "hypotheses.json"
     if not path.exists():
-        return ""
+        return {}
     data = json.loads(path.read_text(encoding="utf-8"))
-    tests = {(t["hypothesis"], t["stratum"]): t for t in data.get("tests", [])}
+    return {(t["hypothesis"], t["stratum"]): t for t in data.get("tests", [])}
+
+
+def hypotheses_table() -> str:
+    """H1 ~ H4 정식 판정 표.
+
+    이전 표는 네 가설을 한 줄 규격으로 찍어내면서 `pseudo-p (Holm)`을 함께 싣고 판정을
+    "기각"으로만 적었다. pseudo-p는 부트스트랩 백분위 CI를 역전시켜 정의한 값이지 영가설
+    분포에서 나온 정식 p값이 아니므로(``hypotheses.json``의 ``p_definition``), 정식 검정
+    표에 같이 실으면 "정식 p값이 아니다"라고 적어 둔 한계와 "Holm 보정 후에도 기각"이라는
+    결론이 한 표 안에서 충돌한다(review_04). 이제 이 표에는 근거의 종류를 열로 밝히고,
+    pseudo-p는 :func:`pseudo_p_table` 부록으로 뺀다.
+
+    * H1·H4 — 클러스터 순열 검정의 정식 p값이 중심. 쌍체 ΔAUROC와 CI를 함께 싣는다.
+    * H2 — 정식 검정이 없다. 쌍체 효과 추정치와 CI만으로 "참조 기준이 더 높다는 근거"를
+      서술한다.
+    * H3 — L-none과 L-exact는 평가 표본이 다르다. 비쌍체 추정치와 CI만 싣는다.
+
+    ``reports/hypotheses.json``은 시드 층화 클러스터 부트스트랩(``pooling:
+    seed_stratified``)으로 만든 값이다. 시드별로 AUROC를 계산해 평균하므로 시드 간 점수
+    척도 차이가 통합 추정치를 끌고 가지 않는다.
+    """
+    tests = _hyp_tests()
     if not tests:
         return ""
     rows = []
     for h in ("H1", "H2", "H3", "H4"):
-        for s in STRATA:
-            t = tests.get((h, s))
-            if t is None:
+        for st in STRATA:
+            t = tests.get((h, st))
+            if t is None or "ci" not in t:
                 continue
-            lo, hi = t["ci"][:2]
+            est, ci = _est_ci(t)
+            if h in H_FORMAL:
+                basis = "정식 (클러스터 순열)"
+                pcell = _p(t["perm_p"]) if t.get("perm_p") is not None else "—"
+            elif h == "H2":
+                basis = "기술 추정 (쌍체 부트스트랩)"
+                pcell = "—"
+            else:
+                basis = "기술 추정 (비쌍체 부트스트랩)"
+                pcell = "—"
+            rows.append([f"{h}. {H_LABEL[h]}", st, basis, est, ci, pcell, _verdict(h, t)])
+    if not rows:
+        return ""
+    out = [
+        table(
+            ["가설", "층", "근거 종류", "ΔAUROC 추정치", "95% CI", "순열 p", "판정"],
+            rows,
+        ),
+        "",
+        "정식 가설 검정은 쌍체 예측이 있는 H1·H4의 클러스터 순열 검정뿐이다. 순열 null은 "
+        "같은 group(도메인 클러스터) 안의 행을 한 블록으로 묶어 두 조건 라벨을 교환해 만든 "
+        "**정의한 그룹 블록 null 기준**이며, 블록 단위 교환 가능성을 가정한다 — 반복 수를 "
+        "늘리면 몬테카를로 오차만 줄고 그 가정이 검증되지는 않는다.",
+        "",
+        'H2에는 정식 검정을 붙이지 않았다. 쌍체 ΔAUROC와 95% CI를 "참조 기준이 더 높다는 '
+        '근거"로만 읽는다.',
+        "",
+        "H3의 L-none과 L-exact는 길이 매칭 여부가 달라 **평가 표본 자체가 다르다**. "
+        "쌍체 ΔAUROC로 해석할 수 없으므로 비쌍체 추정치와 CI만 싣는다.",
+        "",
+        "부트스트랩 CI는 저장된 모델들의 예측에 조건부인 평가 불확실성이다. 학습 데이터와 "
+        "학습 과정 전체의 불확실성까지 포함하지 않는다.",
+    ]
+    return "\n".join(out)
+
+
+def pseudo_p_table() -> str:
+    """부록 — pseudo-p와 Holm 보정값.
+
+    정식 표에서 뺀 값을 투명하게 남기기 위한 부록이다. pseudo-p는 부트스트랩 백분위 CI를
+    역전시켜 정의한 수치(가장 작은 alpha에서 CI가 0을 배제)이지 영가설 분포에서 나온 p값이
+    아니다. 가설 채택·기각의 근거로 쓰지 않는다.
+    """
+    tests = _hyp_tests()
+    if not tests:
+        return ""
+    rows = []
+    for h in ("H1", "H2", "H3", "H4"):
+        for st in STRATA:
+            t = tests.get((h, st))
+            if t is None or t.get("pseudo_p") is None:
+                continue
+            pp = t["pseudo_p"]
+            if isinstance(pp, float) and pp != pp:  # NaN — Holm family에서 뺀 항목
+                continue
+            holm = t.get("pseudo_p_holm")
             rows.append(
                 [
                     f"{h}. {H_LABEL[h]}",
-                    s,
-                    f"{float(t['estimate']):+.3f}",
-                    f"[{float(lo):+.3f}, {float(hi):+.3f}]",
-                    _p(t["pseudo_p_holm"]) if t.get("pseudo_p_holm") is not None else "—",
-                    _p(t["perm_p"]) if t.get("perm_p") is not None else "—",
-                    "기각" if t.get("reject") else "비기각",
+                    st,
+                    _p(pp),
+                    _p(holm) if holm is not None else "—",
+                    "예" if t.get("ci_excludes_null") else "아니오",
                 ]
             )
-    return table(
-        ["가설", "층", "ΔAUROC 추정치", "95% CI", "pseudo-p (Holm)", "순열 p", "판정"],
-        rows,
+    if not rows:
+        return ""
+    return "\n".join(
+        [
+            table(["가설", "층", "pseudo-p", "pseudo-p (Holm)", "CI가 0을 배제"], rows),
+            "",
+            "pseudo-p는 부트스트랩 백분위 CI를 역전시켜 정의한 값이지 영가설 분포에서 나온 "
+            '정식 p값이 아니다. Holm 보정도 그 값에 건 것이므로 "보정 후에도 유의"라는 '
+            "표현은 쓰지 않는다. 정식 판정은 위 가설 검정 표를 본다.",
+        ]
     )
+
 
 
 # --------------------------------------------------------------------------- 전이(F)
@@ -1041,6 +1174,7 @@ SECTIONS = [
     ("어휘 프로브 (RQ2 · D안)", table_probes),
     ("인과 motif 절제 (RQ3 · C안)", table_occlusion),
     ("가설 검정 판정 (H1 ~ H4)", hypotheses_table),
+    ("부록 · pseudo-p와 Holm 보정 (정식 검정 아님)", pseudo_p_table),
     ("외부 검증 전이 (F) · motif 재현성", transfer_table),
     ("템플릿 누출 쌍체 비교 (G 재설계 · 고정 캠페인 T)", campaign_table),
 ]

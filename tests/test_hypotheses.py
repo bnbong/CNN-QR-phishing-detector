@@ -163,6 +163,51 @@ def test_run_hypothesis_tests_smoke(synthetic) -> None:
     assert out["correction"] == "holm"
     assert json.loads(Path(out["path"]).read_text(encoding="utf-8"))["tests"]
 
+    # 정식 검정(순열)과 기술 추정(부트스트랩)이 필드로 갈려 있어야 한다 — 표·본문이
+    # pseudo-p를 정식 p값처럼 쓰지 못하게 하는 장치다(review_04 "통계 표 정리").
+    for h in ("H1", "H4"):
+        ft = by_id[h]["formal_test"]
+        assert ft["method"] == "paired_cluster_permutation"
+        assert 0.0 < ft["p"] <= 1.0
+        assert "그룹 블록 null" in ft["null"]
+        assert by_id[h]["descriptive"] is None
+    for h in ("H2", "H3"):
+        assert by_id[h]["formal_test"] is None
+        assert by_id[h]["descriptive"]["ci"] == by_id[h]["ci"]
+        assert "정식 검정 없음" in by_id[h]["descriptive"]["note"]
+    assert "그룹 블록 null" in out["permutation_null"]
+    assert "pseudo_p" in out["decision_rule"] and "부록" in out["decision_rule"]
+
+
+def test_hypotheses_table_separates_formal_and_descriptive(synthetic) -> None:
+    """정식 표에는 pseudo-p 열이 없고, 판정 문구가 귀무가설을 밝힌다."""
+    import importlib.util
+
+    run_hypothesis_tests(
+        synthetic["cfg"], strata=["v2"], matrix_path=synthetic["matrix"], n_boot=200
+    )
+    path = Path(__file__).resolve().parents[1] / "scripts" / "make_results_tables.py"
+    spec = importlib.util.spec_from_file_location("make_results_tables", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.REPORTS = Path(synthetic["cfg"]["reports_dir"])
+    mod.STRATA = ["v2"]
+
+    formal = mod.hypotheses_table()
+    header = formal.splitlines()[0]
+    assert "pseudo-p" not in header
+    assert "순열 p" in header and "근거 종류" in header
+    assert "H0: ΔAUROC ≤ 0" in formal
+    assert "기각" not in formal
+    assert "쌍체 해석" in formal  # H3 각주
+    assert "그룹 블록 null" in formal
+
+    appendix = mod.pseudo_p_table()
+    assert "pseudo-p (Holm)" in appendix.splitlines()[0]
+    assert "정식 p값이 아니다" in appendix
+
+
 
 def test_h2_is_paired_when_reference_predictions_exist(synthetic, tmp_path) -> None:
     """참조 기준의 test 예측이 있으면 H2가 쌍체 검정으로 승격된다 (코덱스 리뷰 1)."""

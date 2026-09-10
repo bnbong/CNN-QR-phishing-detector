@@ -351,48 +351,249 @@ def test_probe_aggregate_recovers_accessible_from_old_rows() -> None:
     assert agg["ngram:jp."]["learned_gain"] is False
 
 
-def test_recompute_probe_summaries_from_stored_results(tmp_path) -> None:
-    """저장된 층 results.json만으로 세 질문 보고를 다시 만든다(재학습 없음)."""
+def test_ngram_jp_case_is_accessible_but_no_learned_gain() -> None:
+    """review_04의 ``ngram:jp.`` 사례가 "접근 가능하나 학습 이득 없음"으로 분류된다.
+
+    저장값은 학습 0.909(CI 하한 0.865), 셔플 상한 0.587, 미학습 상한 0.908이다. CI 하한이
+    셔플 상한을 크게 넘으므로 ① accessible은 참이고, 미학습 상한은 넘지 못하므로 ②
+    learned_gain은 거짓이다. 옛 표는 이 목표의 ①을 ③의 답으로 대신 채워 "접근성 통과
+    시드 0개"로 보고했다 — 두 판정은 다른 질문의 답이다.
+    """
+    from qrphish.runner import _probe_aggregate, _probe_summary
+
+    seed_row = {
+        "kind": "binary",
+        "family": "ngram",
+        "score": 0.909,
+        "ci": [0.865, 0.947],
+        "shuffle": 0.497,
+        "shuffle_ci": [0.418, 0.587],
+        "random_init": 0.849,
+        "random_init_ci": [0.780, 0.908],
+        "accessible": True,
+        "learned_gain": False,
+        "accessible_and_gained": False,
+        "above_random_init": False,
+        "significant": False,
+        "used_in_decision": None,
+    }
+    per_seed = [{"seed": k, "targets": {"ngram:jp.": dict(seed_row)}} for k in range(5)]
+    agg = _probe_aggregate(per_seed, n_seeds=5)
+    row = agg["ngram:jp."]
+    assert row["accessible"] is True
+    assert row["learned_gain"] is False
+    assert row["accessible_and_gained"] is False
+    assert row["n_seeds_accessible"] == 5
+    assert row["n_seeds_learned_gain"] == 0
+    # 시드별 원값이 결과에 남아야 나중에 정확 재집계가 가능하다.
+    assert [r["seed"] for r in row["per_seed"]] == [0, 1, 2, 3, 4]
+    assert row["per_seed"][0]["shuffle_ci"] == [0.418, 0.587]
+    assert row["per_seed"][0]["accessible"] is True
+
+    summ = _probe_summary(agg)
+    assert summ["accessible"]["n"] == 1
+    assert summ["learned_gain"]["n"] == 0
+    assert summ["accessible_and_gained"]["n"] == 0
+    assert summ["accessible_only"]["n"] == 1
+
+
+def _stored_results(with_per_seed: bool) -> dict:
+    """층 results.json 한 벌. ``with_per_seed``면 새 스키마(목표별 시드 CI 포함)."""
+    jp = {
+        "kind": "binary",
+        "metric": "auroc",
+        "family": "ngram",
+        "score": 0.909,
+        "ci": [0.865, 0.947],
+        "shuffle": 0.497,
+        "shuffle_ci": [0.418, 0.587],
+        "random_init": 0.849,
+        "random_init_ci": [0.780, 0.908],
+        "significant": False,
+        "above_random_init": False,
+    }
+    label = {
+        "kind": "binary",
+        "metric": "auroc",
+        "family": "label",
+        "score": 0.99,
+        "ci": [0.98, 1.0],
+        "shuffle": 0.5,
+        "shuffle_ci": [0.4, 0.6],
+        "random_init": 0.6,
+        "random_init_ci": [0.5, 0.7],
+        "significant": True,
+        "above_random_init": True,
+    }
+    if with_per_seed:
+        for row in (jp, label):
+            row["per_seed"] = [
+                {
+                    "seed": k,
+                    "score": row["score"],
+                    "ci": list(row["ci"]),
+                    "shuffle": row["shuffle"],
+                    "shuffle_ci": list(row["shuffle_ci"]),
+                    "random_init": row["random_init"],
+                    "random_init_ci": list(row["random_init_ci"]),
+                    "accessible": row["ci"][0] > row["shuffle_ci"][1],
+                    "learned_gain": row["above_random_init"],
+                }
+                for k in range(2)
+            ]
+    return {"stratum": "v2", "seeds": [0, 1], "targets": {"ngram:jp.": jp, "label:phishing": label}}
+
+
+def _write_probe_results(tmp_path, payload: dict):
+    import json
+
+    from qrphish.runner import MAIN_CONDITION
+
+    d = tmp_path / "reports" / "probes" / MAIN_CONDITION / "v2"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "results.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return d
+
+
+def test_recompute_probe_summaries_marks_accessible_unaggregated(tmp_path) -> None:
+    """시드별 CI가 없으면 ``accessible``을 **근사하지 않고** 미집계로 남긴다.
+
+    옛 구현은 시드 평균 CI로 판정해 근사값을 냈다. 평균 CI는 "전 시드에서 성립"을
+    담지 못하는데도 그 수가 정확한 집계처럼 보고돼 결론을 틀리게 만들었다(review_04).
+    """
     import json
 
     from qrphish.config import from_dict
-    from qrphish.runner import MAIN_CONDITION, recompute_probe_summaries
+    from qrphish.runner import recompute_probe_summaries
 
-    d = tmp_path / "reports" / "probes" / MAIN_CONDITION / "v2"
+    d = _write_probe_results(tmp_path, _stored_results(with_per_seed=False))
+    cfg = from_dict({"reports_dir": str(tmp_path / "reports")})
+    res = recompute_probe_summaries(cfg)
+
+    assert res["strata"]["v2"]["accessible"] is None
+    assert res["strata"]["v2"]["learned_gain"]["n"] == 0
+    assert res["needs_rerun"] == ["v2"]
+    assert res["missing_fields"]
+    written = json.loads((d / "results.json").read_text(encoding="utf-8"))
+    assert written["targets"]["ngram:jp."]["accessible"] is None
+    assert written["targets"]["ngram:jp."]["accessible_basis"] == "unrecomputable:no_per_seed_ci"
+    assert written["summary"]["accessible"] is None
+    assert written["summary"]["accessible_only"] is None
+    assert written["summary"]["needs_rerun"]
+    # 미집계일 때는 옛 별칭 키도 만들지 않는다(표가 그 값을 대신 채우지 못하게).
+    assert written["summary"]["used_in_decision"] is None
+    assert written["summary"]["n_targets"] == 1
+    assert "approx" not in json.dumps(written["summary"], ensure_ascii=False)
+
+
+def test_recompute_probe_summaries_exact_from_per_seed(tmp_path) -> None:
+    """``targets[*].per_seed``가 있으면 전 시드 판정으로 정확히 재집계한다."""
+    import json
+
+    from qrphish.config import from_dict
+    from qrphish.runner import recompute_probe_summaries
+
+    d = _write_probe_results(tmp_path, _stored_results(with_per_seed=True))
+    cfg = from_dict({"reports_dir": str(tmp_path / "reports")})
+    res = recompute_probe_summaries(cfg)
+
+    assert res["needs_rerun"] == []
+    assert res["strata"]["v2"]["accessible"]["n"] == 1
+    assert res["strata"]["v2"]["learned_gain"]["n"] == 0
+    assert res["strata"]["v2"]["accessible_basis"] == "exact:results_per_seed"
+    written = json.loads((d / "results.json").read_text(encoding="utf-8"))
+    assert written["targets"]["ngram:jp."]["accessible"] is True
+    assert written["summary"]["accessible_only"]["n"] == 1
+
+
+def test_recompute_probe_summaries_exact_from_seed_cache(tmp_path) -> None:
+    """``seed{k}.json`` 캐시가 남아 있으면 그걸로 정확 재집계한다."""
+    import json
+
+    from qrphish.config import from_dict
+    from qrphish.runner import recompute_probe_summaries
+
+    d = _write_probe_results(tmp_path, _stored_results(with_per_seed=False))
+    seed_row = {
+        "kind": "binary",
+        "family": "ngram",
+        "score": 0.909,
+        "ci": [0.865, 0.947],
+        "shuffle": 0.497,
+        "shuffle_ci": [0.418, 0.587],
+        "random_init": 0.849,
+        "random_init_ci": [0.780, 0.908],
+        "accessible": True,
+        "learned_gain": False,
+        "accessible_and_gained": False,
+        "above_random_init": False,
+        "significant": False,
+    }
+    for k in range(2):
+        (d / f"seed{k}.json").write_text(
+            json.dumps({"seed": k, "targets": {"ngram:jp.": seed_row}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    cfg = from_dict({"reports_dir": str(tmp_path / "reports")})
+    res = recompute_probe_summaries(cfg)
+
+    assert res["needs_rerun"] == []
+    assert res["strata"]["v2"]["accessible_basis"] == "exact:seed_cache"
+    assert res["strata"]["v2"]["accessible"]["n"] == 1
+    assert res["strata"]["v2"]["accessible_and_gained"]["n"] == 0
+
+
+def test_table_probes_never_substitutes_n_significant(tmp_path, monkeypatch) -> None:
+    """표 생성기가 미집계 칸에 옛 ``n_significant``를 대신 넣지 않는다.
+
+    review_04가 지적한 "접근성 2/91"은 이 폴백의 산물이었다.
+    """
+    import json
+
+    from qrphish.runner import MAIN_CONDITION
+
+    mod = _load_tables_module()
+    d = tmp_path / "probes" / MAIN_CONDITION / "v2"
     d.mkdir(parents=True)
     (d / "results.json").write_text(
         json.dumps(
             {
                 "stratum": "v2",
-                "targets": {
-                    "ngram:jp.": {
-                        "kind": "binary", "metric": "auroc", "family": "ngram",
-                        "score": 0.909, "ci": [0.865, 0.947],
-                        "shuffle": 0.497, "shuffle_ci": [0.418, 0.587],
-                        "random_init": 0.849, "random_init_ci": [0.780, 0.908],
-                        "significant": False, "above_random_init": False,
+                "summary": {
+                    "n_targets": 91,
+                    "accessible": None,
+                    "learned_gain": {"n": 2, "frac": 2 / 91, "targets": [], "top10": []},
+                    "accessible_and_gained": {
+                        "n": 2,
+                        "frac": 2 / 91,
+                        "targets": [],
+                        "top10": [],
                     },
-                    "label:phishing": {
-                        "kind": "binary", "metric": "auroc", "family": "label",
-                        "score": 0.99, "ci": [0.98, 1.0],
-                        "shuffle": 0.5, "shuffle_ci": [0.4, 0.6],
-                        "random_init": 0.6, "random_init_ci": [0.5, 0.7],
-                        "significant": True, "above_random_init": True,
-                    },
+                    "accessible_only": None,
+                    "n_significant": 2,
                 },
             },
             ensure_ascii=False,
         ),
         encoding="utf-8",
     )
-    cfg = from_dict({"reports_dir": str(tmp_path / "reports")})
-    res = recompute_probe_summaries(cfg)
-    assert res["strata"]["v2"]["accessible"]["n"] == 1
-    assert res["strata"]["v2"]["learned_gain"]["n"] == 0
-    # 시드별 CI가 없으므로 accessible은 근사다 — 그 사실을 반환값이 알린다.
-    assert res["missing_fields"]
-    written = json.loads((d / "results.json").read_text(encoding="utf-8"))
-    assert written["targets"]["ngram:jp."]["accessible_basis"] == "approx:mean_ci"
-    assert written["summary"]["used_in_decision"] is None
-    # 라벨 프로브는 어휘 카운트에서 빠진다(참고 상한선일 뿐).
-    assert written["summary"]["n_targets"] == 1
+    monkeypatch.setattr(mod, "REPORTS", tmp_path)
+    out = mod.table_probes()
+    line = next(ln for ln in out.splitlines() if "`accessible`" in ln and "|" in ln)
+    assert "2 / 91" not in line
+    assert mod.UNAGGREGATED in line
+    assert "미집계" in out
+    assert "폴백" in out  # 각주가 옛 폴백의 산물임을 밝힌다
+
+
+def _load_tables_module():
+    """``scripts/make_results_tables.py``를 모듈로 불러온다(패키지가 아니다)."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "make_results_tables.py"
+    spec = importlib.util.spec_from_file_location("make_results_tables", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
