@@ -1,11 +1,13 @@
-# CNN QR-Code Phshing detection
+# 초기 CNN QR 피싱 분류 프로젝트
 
 QR 코드 이미지를 분석하여 해당 QR 코드에 링크된 사이트의 피싱 사이트 여부를 판단하는 CNN 모델 프로젝트
 
-## 프로젝트 목표
+이 문서는 이전 구현과 실행 환경의 보관 기록이다. 아래 명령과 경로는 당시 저장소 구조를 기준으로 하며, 현재 실행 절차는 [RUNBOOK](../docs/RUNBOOK.md)을 참조한다. 당시 가설을 현재 실험에서 입증한 결론으로 해석하지 않는다.
 
-- 이미지 학습 모델로 CNN을 사용하여 피싱 사이트들에 자주 나타나는 QR 코드 패턴이 존재하고 이를 분석 가능하다는 것을 증명
-- 상기 가설이 타당한 것으로 증명될 시, QR 코드 이미지를 바탕으로 빠르게 피싱 사이트를 판단하는 모델 구현
+## 당시 프로젝트 목표
+
+- CNN으로 QR 이미지를 분류하고, 피싱 URL에서 반복되는 패턴이 있는지 검토한다.
+- 가설이 충분히 뒷받침되면 QR 이미지 기반 피싱 분류 모델로 확장한다.
 
 ## 프로젝트 구조
 
@@ -58,9 +60,9 @@ QR 코드 이미지를 분석하여 해당 QR 코드에 링크된 사이트의 �
 
 프로젝트 루트에 `data` 폴더를 생성합니다.
 
-### 0. 모델 딥러닝
+### 0. 모델 학습
 
-[링크](https://drive.google.com/file/d/1ufRmh9VVLdZafiXUiMFFzjg8870W9gdV/view?usp=sharing)에서 파싱된 이미지를 `data` 폴더 내에 압축해제 합니다.
+[링크](https://drive.google.com/file/d/1ufRmh9VVLdZafiXUiMFFzjg8870W9gdV/view?usp=sharing)에서 생성된 QR 이미지를 `data` 폴더 내에 압축을 해제합니다.
 
 압축해제 후 다음 명령어를 실행하여 학습을 수행합니다.
 
@@ -71,9 +73,7 @@ python main.py
 학습된 모델은 프로젝트 루트에 `*.h5` 파일로 저장됩니다.
 
 
-<details>
-<summary><b>주피터 노트북 모듈 사용법</b></summary>
-<div markdown="1">
+<details> <summary><b>주피터 노트북 모듈 사용법</b></summary> <div markdown="1">
 
 ### 1. notebooks/urls-to-qr.ipynb
 
@@ -99,12 +99,11 @@ python main.py
 
 주석으로 `change me` 표시가 되어 있는 옵션을 변경하여 사용합니다.
 
-</div>
-</details>
+</div> </details>
 
 ## 학습된 모델 평가
 
-학습 데이터 양 : 45,373개 이미지 (피싱 : 22,686 / 정상 : 22,687)
+당시 기록의 데이터 수: 45,373개 이미지 (피싱 : 22,686 / 정상 : 22,687)
 
 - 정확도 (Accuracy) : 0.8710
 - 정밀도 (Precision) : 0.8552

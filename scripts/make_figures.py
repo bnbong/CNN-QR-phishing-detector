@@ -307,13 +307,13 @@ def figure_f1() -> str:
     legend(fig, handles, [s[0] for s in series], 5)
     save(fig, "F1")
     return t(
-        "F1. 길이·버전을 통제한 주 조건에서 층별(v2/v3/v4) AUROC. 막대는 시드 층화 "
-        "풀링 추정값, 오차막대는 95% CI다. char n-gram LR과 byte-hist LR은 단일 "
-        "적합값이라 CI를 싣지 않는다. 파선은 라벨 셔플 바닥이 놓이는 0.50이다.",
+        'F1. 길이와 버전을 통제한 주 조건에서 층별(v2/v3/v4) AUROC. CNN, BitMLP, 라벨 셔플 막대는 시드별 AUROC의 평균, 오차막대는 95% CI다. char n-gram LR과 byte-hist LR은 시드마다 같은 split의 train에서 적합해 test에서 평가한 뒤 다섯 시드의 AUROC를 평균한 값이다. 집계 표에 CI가 없어 오차막대는 싣지 않는다. 파선은 라벨 셔플 대조군이 놓이는 0.50이다.',
         "F1. AUROC by stratum (v2/v3/v4) in the length/version-controlled main "
-        "condition. Bars are seed-stratified pooled estimates with 95% CI error "
-        "bars; the two LR references are single fits without CI. The dashed line "
-        "marks 0.50.",
+        "condition. CNN, BitMLP and label-shuffle bars are seed-stratified pooled "
+        "estimates with 95% CI error bars. The two LR references are fit on each "
+        "seed's train split, evaluated on its test split and averaged over the five "
+        "seeds; the aggregate table carries no CI for them, so no error bars are "
+        "drawn. The dashed line marks 0.50.",
     )
 
 
@@ -396,9 +396,7 @@ def figure_f2() -> str:
     legend(fig, handles, [a[0] for a in arms], 2, y=-0.02)
     save(fig, "F2")
     return t(
-        "F2. 모델(SmallCNN·BitMLP) × 배치(정상·위치 셔플)의 2×2 대비를 층별로 나눈 "
-        "그림. 막대는 시드 층화 풀링 AUROC, 오차막대는 95% CI다. CNN에서만 셔플 시 "
-        "성능이 크게 떨어진다.",
+        'F2. 모델(SmallCNN, BitMLP) × 배치(정상, 위치 셔플)의 2×2 대비를 층별로 나눈 그림. 막대는 시드별 AUROC의 평균, 오차막대는 95% CI다. CNN에서만 셔플 시 성능이 크게 떨어진다.',
         "F2. The 2x2 contrast of model (SmallCNN / BitMLP) by layout (original / "
         "position shuffle), panelled by stratum. Bars are seed-stratified pooled "
         "AUROC with 95% CI.",
@@ -481,9 +479,7 @@ def figure_f3() -> str:
     legend(fig, handles, [r[1] for r in reps], 5)
     save(fig, "F3")
     return t(
-        "F3. 패치 가방 표현의 층별 AUROC와 within-QR null. 모듈 셔플과 코드워드 "
-        "셔플은 격자 안에서 패턴을 흩뜨린 대조, 라벨 셔플은 바닥선이다. 막대는 시드 "
-        "층화 풀링 추정값, 오차막대는 95% CI, 파선은 0.50이다.",
+        'F3. 패치 히스토그램 표현의 층별 AUROC와 QR 내부 셔플 대조. 모듈 셔플과 코드워드 셔플은 각 격자의 내부 배치를 바꾼 대조이며, 라벨 셔플은 무작위 라벨 학습의 음성 대조군이다. 막대는 시드별 추정값의 평균, 오차막대는 95% CI, 파선은 0.50이다.',
         "F3. AUROC of bag-of-patches representations by stratum with within-QR "
         "nulls. Module and codeword shuffles scramble patterns inside the grid; "
         "label shuffle is the floor. Bars are seed-stratified pooled estimates "
@@ -563,14 +559,15 @@ def figure_f4() -> str:
     )
     save(fig, "F4")
     return t(
-        "F4. motif 폐색 개입에서 표적 motif와 무작위 대조의 ΔAUROC 차이(ΔΔAUROC)를 "
-        "네 대비로 나눈 그림. 점은 시드 층화 풀링 추정값, 가로선은 95% CI, 세로 "
-        "기준선은 0이다. 대부분의 대비에서 CI가 0을 포함하고, 0을 배제하는 경우도 "
-        "추정값이 음수라 표적 motif 폐색이 무작위 대조보다 성능을 더 떨어뜨린다는 "
-        "방향의 근거는 없다.",
+        'F4. motif 중심 비트 개입에서 표적 motif와 무작위 대조의 ΔAUROC 차이(ΔΔAUROC)를 네 대비로 나눈 그림. 점은 시드별 추정값의 평균, 가로선은 95% CI, 세로 기준선은 0이다. 음수는 표적 개입이 무작위 대조보다 AUROC를 더 낮췄음을 뜻한다. v3의 피싱 motif와 개수 대조 비교, v4의 정상 motif와 두 무작위 대조 비교에서는 CI가 0을 배제한다. 그러나 phishing motif의 topology 대조에서는 세 층 모두 CI가 0을 포함한다.',
         "F4. Difference in ΔAUROC between targeted motif occlusion and its random "
         "control (ΔΔAUROC) across four contrasts. Points are seed-stratified "
-        "pooled estimates with 95% CI; the vertical reference line is zero.",
+        "pooled estimates with 95% CI; the vertical reference line is zero. A "
+        "negative value means the targeted intervention lowered AUROC more than the "
+        "random control. Some contrasts (v3 phishing minus count-matched random; v4 "
+        "benign minus count- and topology-matched random) exclude zero, while the "
+        "topology-matched contrast for phishing motifs includes zero in all three "
+        "strata.",
     )
 
 
@@ -715,13 +712,12 @@ def figure_f5() -> str:
     legend(fig, handles, labels, 3, y=-0.09)
     save(fig, "F5")
     return t(
-        "F5. primary 외부 세트로의 전이 성능. 막대는 길이만 매칭한 cohort와 길이·경로를 "
-        "함께 매칭한 cohort의 CNN AUROC(95% CI)이고, 점 표시는 같은 cohort에서 적합한 "
-        "텍스트·바이트·경로 기준선이다. 짧은 파선은 그룹 블록 교환 순열 바닥선의 "
-        "97.5% 분위다.",
+        'F7. 선형 프로브의 접근성 기준을 통과한 목표, 학습 이득 기준을 통과한 목표, 두 기준을 모두 통과한 목표의 비율. 정보가 실제 분류 결정에 사용되는지(`used_in_decision`)는 별개의 질문이며 이 실험에서는 측정하지 않았다. 층별 목표 집합과 표본 수가 다르므로 이 비율을 버전 간 정보량 비교로 해석하지 않는다.',
         "F5. Transfer to the primary external set. Bars give CNN AUROC (95% CI) "
         "for the length-matched and the length-plus-path-matched cohorts; markers "
-        "give the text, byte and path-shape baselines fit on the same cohort. The "
+        "give the text, byte and path-shape baselines fit on the WebPhish train "
+        "split of the matching seed and evaluated on the same external cohort (they "
+        "are not fit on the external cohort). The "
         "short dashes mark the 97.5th percentile of the group-block permutation "
         "floor.",
     )
@@ -801,11 +797,11 @@ def figure_f6() -> str:
     )
     save(fig, "F6")
     return t(
-        "F6. 캠페인·템플릿 누출 대비의 층별 ΔAUROC(A_sm − B)와 95% CI. 파선은 사전 "
-        "지정한 최소 관심 효과크기(SESOI) ±0.02다. 세 층 모두 CI가 0을 포함한다.",
+        'F5. primary 외부 세트에 전이한 성능. 막대는 길이만 매칭한 평가 집합와 길이, 경로를 함께 매칭한 평가 집합의 CNN AUROC(95% CI)다. 점 표시는 CNN과 같은 시드의 WebPhish train에서 적합해 같은 외부 평가 집합에서 평가한 텍스트, 바이트, 경로 기준선이다(외부 평가 집합에서 학습한 값이 아니다). 짧은 파선은 그룹 블록 교환으로 얻은 순열 분포의 97.5백분위수다.',
         "F6. ΔAUROC (A_sm - B) with 95% CI for the campaign/template leakage "
-        "contrast, by stratum. Dashed lines mark the pre-specified smallest effect "
-        "size of interest (+/-0.02).",
+        "contrast, by stratum. Dashed lines mark the smallest effect size of "
+        "interest (+/-0.02), a threshold adopted post hoc after the estimates were "
+        "seen.",
     )
 
 
@@ -874,10 +870,7 @@ def figure_f7() -> str:
     legend(fig, handles, [q[1] for q in questions], 3, y=-0.04)
     save(fig, "F7")
     return t(
-        "F7. 어휘 프로브가 던지는 세 질문(표현에서 선형 접근 가능한가, 피싱 학습이 그 "
-        "접근성을 높였는가, 둘 다인가)을 통과한 목표의 비율. 목표 수는 층마다 다르므로 "
-        "절대 개수가 아니라 비율로 그린다. 세 번째 질문인 used_in_decision은 이 "
-        "실험으로 답할 수 없어 그림에 넣지 않았다.",
+        'F6. 캠페인 및 템플릿 누출 대비의 층별 ΔAUROC(A_sm - B)와 95% CI. 파선은 결과를 본 뒤 사후에 도입한 최소 관심 효과크기(SESOI) ±0.02다. 세 층 모두 CI가 0을 포함한다.',
         "F7. Fraction of probe targets passing each of the three questions "
         "(linearly accessible in the representation; accessibility gained through "
         "phishing training; both). Target counts differ by stratum, so the plot "
@@ -912,7 +905,7 @@ def main() -> None:
     lines = [
         "# 그림 캡션",
         "",
-        "`scripts/make_figures.py`가 생성한다. 직접 고치지 말고 스크립트를 고쳐라.",
+        "`scripts/make_figures.py`가 생성한다. 문구를 수정할 때는 이 스크립트에도 반영한다.",
         "",
     ]
     for name, caption in captions:
