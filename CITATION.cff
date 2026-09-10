@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software or its experimental results in your research,
+  please cite this repository using the metadata below and identify the
+  commit used for your experiments.
+type: software
+title: CNN-QR-phishing-detector
+authors:
+  - family-names: bnbong
+    email: bbbong9@gmail.com
+    website: https://github.com/bnbong
+repository-code: https://github.com/bnbong/CNN-QR-phishing-detector
+version: 0.1.0
+license: MIT
+abstract: >-
+  Controlled experiments on phishing URL classification from canonical QR
+  module grids without explicit QR decoding. The project evaluates
+  classification performance, spatial arrangement, local motif interventions,
+  linear probes, cross-dataset transfer, and campaign holdouts.
+keywords:
+  - QR codes
+  - phishing
+  - quishing
+  - convolutional neural networks
+  - controlled experiments
