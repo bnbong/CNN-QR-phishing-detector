@@ -120,3 +120,13 @@ uv run python scripts/preflight_colab.py --out-dir <출력 폴더> [옵션들]
 ```bash
 uv run python scripts/preflight_colab.py --help
 ```
+
+## 8. 논문 초안 PDF 빌드
+
+`docs/PAPER_DRAFT.md`를 PDF로 만든다. 툴체인은 `brew install pandoc tectonic`으로 한 번만 깔면 된다(tectonic은 필요한 LaTeX 패키지를 첫 실행 때 알아서 내려받으므로 MacTeX 전체 설치는 필요 없다).
+
+```bash
+./scripts/build_paper_pdf.sh   # -> build/paper_draft.pdf
+```
+
+한글 본문은 Apple SD Gothic Neo, 라틴 문자는 Times New Roman이 맡는다. 폰트를 바꾸려면 `PAPER_CJKFONT`와 `PAPER_MAINFONT` 환경 변수를 넘긴다. 원본 마크다운은 건드리지 않고 `build/` 안의 복사본으로만 빌드한다.

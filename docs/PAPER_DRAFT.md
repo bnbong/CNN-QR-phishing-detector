@@ -5,7 +5,7 @@
 - A Controlled Evaluation of QR-Based Phishing Classification without Explicit Decoding: Spatial Layout, Local Patterns, and External Generalization
 - Do Phishing URLs Leave Learnable Spatial Signals in QR Module Grids? A Controlled Study of URL-Derived Signal Learning without Explicit Decoding
 
-교수 검토용 논문 초안. 수치는 저장된 실험 결과를 기준으로 작성했으며, `docs/REPORT.md`와 `docs/RESULTS.md`를 함께 대조했다. 상세 집계는 `reports/tables.md`와 `docs/REPORT.md`, 원자료 경로는 부록 A를 참조한다. 이하 세 층의 수치를 나란히 제시할 때는 별도 표기가 없으면 v2 / v3 / v4 순서다.
+수치는 저장된 실험 결과를 기준으로 작성했으며, 실험 소스코드 저장소의 `docs/REPORT.md`와 `docs/RESULTS.md`를 함께 대조했다. 상세 집계는 `reports/tables.md`와 `docs/REPORT.md`, 원자료 경로는 부록 A를 참조한다. 이하 세 층의 수치를 나란히 제시할 때는 별도 표기가 없으면 v2 / v3 / v4 순서다.
 
 ---
 
